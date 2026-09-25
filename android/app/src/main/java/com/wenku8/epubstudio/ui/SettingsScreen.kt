@@ -300,7 +300,7 @@ private fun SettingsScaffold(title: String, onBack: () -> Unit, blocks: List<@Co
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            items(blocks.size) { index -> item(key = "block-$index") { blocks[index]() } }
+            items(blocks.size) { index -> blocks[index]() }
         }
     }
 }

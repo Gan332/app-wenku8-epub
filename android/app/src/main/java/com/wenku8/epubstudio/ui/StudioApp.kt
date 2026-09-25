@@ -127,14 +127,21 @@ class MainActivity : ComponentActivity() {
 private fun StudioApp(viewModel: StudioViewModel, onLogin: () -> Unit, onImportEpub: () -> Unit, onImportFont: () -> Unit) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val settingsTitle = when (state.settingsSection) {
+        SettingsSection.OVERVIEW -> "设置"
+        SettingsSection.APPEARANCE -> "主题与外观"
+        SettingsSection.READER -> "阅读器设置"
+        SettingsSection.STATISTICS -> "阅读统计"
+        SettingsSection.CATALOG -> "书目缓存"
+        SettingsSection.ABOUT -> "关于"
+    }
     Scaffold(
         topBar = {
             TopAppBar(
                 title = when {
                     state.tab == StudioTab.BOOKSHELF -> "我的书架"
                     state.tab == StudioTab.EXPLORE -> "探索"
-                    state.tab == StudioTab.STATS -> "阅读统计"
-                    state.tab == StudioTab.SETTINGS -> "设置"
+                    state.tab == StudioTab.SETTINGS -> settingsTitle
                     state.step == CreateStep.SOURCE -> "文库 EPUB 工坊"
                     state.step == CreateStep.DETAIL -> "书籍详情"
                     state.step == CreateStep.CHAPTERS -> "选择章节"
