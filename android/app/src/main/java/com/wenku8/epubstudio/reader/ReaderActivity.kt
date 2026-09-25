@@ -7,6 +7,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.lifecycle.lifecycleScope
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
 import com.wenku8.epubstudio.file.FontStore
@@ -20,15 +21,17 @@ class ReaderActivity : ComponentActivity() {
         if (uri == null) return@registerForActivityResult
         runCatching { contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
         val id = "local:${uri.toString().hashCode()}"
-        (application as com.wenku8.epubstudio.Wenku8Application).bookshelfRepository.add(
-            com.wenku8.epubstudio.model.BookshelfEntry(
-                id = id,
-                bookId = id,
-                title = uri.lastPathSegment?.substringAfterLast('/') ?: "本地 EPUB",
-                source = com.wenku8.epubstudio.model.BookshelfSource.LOCAL_EPUB,
-                localUri = uri.toString(),
+        lifecycleScope.launch {
+            (application as com.wenku8.epubstudio.Wenku8Application).bookshelfRepository.add(
+                com.wenku8.epubstudio.model.BookshelfEntry(
+                    id = id,
+                    bookId = id,
+                    title = uri.lastPathSegment?.substringAfterLast('/') ?: "本地 EPUB",
+                    source = com.wenku8.epubstudio.model.BookshelfSource.LOCAL_EPUB,
+                    localUri = uri.toString(),
+                )
             )
-        )
+        }
         startActivity(Intent(this, ReaderActivity::class.java).putExtra(EXTRA_URI, uri.toString()).putExtra(EXTRA_BOOK_ID, id))
         finish()
     }

@@ -9,7 +9,7 @@ class Wenku8DataSource(
     override val id = "wenku8"
     override val displayName = "Wenku8 轻小说文库"
 
-    suspend fun explore(page: ExplorePage): List<SearchBook> {
+    override suspend fun explore(page: ExplorePage): List<SearchBook> {
         if (page.requiresAuth && !sessionStore.hasSession()) {
             throw Wenku8Exception("探索该分类需要登录 wenku8。", "AUTH_REQUIRED")
         }
