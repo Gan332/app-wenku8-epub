@@ -36,6 +36,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -57,6 +59,7 @@ import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.theme.ColorSchemeMode
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.theme.ThemeController
+import com.wenku8.epubstudio.R
 import com.wenku8.epubstudio.model.Chapter
 import com.wenku8.epubstudio.model.ExportJob
 import com.wenku8.epubstudio.model.JobStatus
@@ -64,6 +67,8 @@ import com.wenku8.epubstudio.ui.CreateStep
 import com.wenku8.epubstudio.ui.StudioTab
 import com.wenku8.epubstudio.ui.StudioUiState
 import com.wenku8.epubstudio.ui.StudioViewModel
+
+private val MiSansFont = FontFamily(Font(R.font.misansvf))
 
 class MainActivity : ComponentActivity() {
     private val notificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
@@ -76,10 +81,28 @@ class MainActivity : ComponentActivity() {
             notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
         setContent {
+            val baseTextStyles = MiuixTheme.textStyles
+            val textStyles = baseTextStyles.copy(
+                main = baseTextStyles.main.copy(fontFamily = MiSansFont),
+                paragraph = baseTextStyles.paragraph.copy(fontFamily = MiSansFont),
+                body1 = baseTextStyles.body1.copy(fontFamily = MiSansFont),
+                body2 = baseTextStyles.body2.copy(fontFamily = MiSansFont),
+                button = baseTextStyles.button.copy(fontFamily = MiSansFont),
+                footnote1 = baseTextStyles.footnote1.copy(fontFamily = MiSansFont),
+                footnote2 = baseTextStyles.footnote2.copy(fontFamily = MiSansFont),
+                headline1 = baseTextStyles.headline1.copy(fontFamily = MiSansFont),
+                headline2 = baseTextStyles.headline2.copy(fontFamily = MiSansFont),
+                subtitle = baseTextStyles.subtitle.copy(fontFamily = MiSansFont),
+                title1 = baseTextStyles.title1.copy(fontFamily = MiSansFont),
+                title2 = baseTextStyles.title2.copy(fontFamily = MiSansFont),
+                title3 = baseTextStyles.title3.copy(fontFamily = MiSansFont),
+                title4 = baseTextStyles.title4.copy(fontFamily = MiSansFont),
+            )
             MiuixTheme(
                 controller = remember {
                     ThemeController(ColorSchemeMode.MonetSystem, keyColor = Color(0xFFA34B2F))
                 },
+                textStyles = textStyles,
             ) {
                 StudioApp(studioViewModel)
             }
