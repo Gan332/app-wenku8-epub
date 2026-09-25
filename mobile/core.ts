@@ -86,7 +86,8 @@ export interface PublicJob {
   };
 }
 
-interface StoredJob extends Omit<PublicJob, 'file'> {
+interface StoredJob extends Omit<PublicJob, 'file' | 'book'> {
+  book: Book;
   options: { includeCover: boolean };
   outputUri: string | null;
   outputSize: number | null;
@@ -640,15 +641,6 @@ function base64ToBytes(value: string): Uint8Array {
   return bytes;
 }
 
-function bytesToBase64(bytes: Uint8Array): string {
-  let binary = '';
-  const chunkSize = 0x8000;
-  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
-    binary += String.fromCharCode(...bytes.subarray(offset, Math.min(bytes.length, offset + chunkSize)));
-  }
-  return btoa(binary);
-}
-
 function concatBytes(chunks: Uint8Array[]): Uint8Array {
   const total = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
   const result = new Uint8Array(total);
@@ -661,8 +653,9 @@ function concatBytes(chunks: Uint8Array[]): Uint8Array {
 }
 
 async function readLocalFile(path: string): Promise<Uint8Array> {
-  const result = await Filesystem.readFile({ path, encoding: Encoding.Base64 });
-  return base64ToBytes(result.data as string);
+  const result = await Filesystem.readFile({ path });
+  if (typeof result.data === 'string') return base64ToBytes(result.data);
+  return new Uint8Array(await (result.data as Blob).arrayBuffer());
 }
 
 async function buildEpubBytes(book: Book, parsedChapters: ParsedChapter[], images: DownloadedImage[], cover: DownloadedImage | null): Promise<Uint8Array> {
@@ -743,7 +736,7 @@ class MobileJobManager {
       try {
         const path = `jobs/${entry.name}`;
         const result = await Filesystem.readFile({ path, directory: Directory.Data, encoding: Encoding.UTF8 });
-        const job = JSON.parse(result.data) as StoredJob;
+        const job = JSON.parse(result.data as string) as StoredJob;
         job.progress = normalizeStoredProgress(job);
         if (ACTIVE_STATES.has(job.status)) {
           job.status = 'failed';
@@ -796,7 +789,7 @@ class MobileJobManager {
     const temporary = `${target}.${publicId()}.tmp`;
     await Filesystem.writeFile({ path: temporary, data: JSON.stringify(job, null, 2), directory: Directory.Data, encoding: Encoding.UTF8 });
     try {
-      await Filesystem.renameFile({ from: temporary, to: target, directory: Directory.Data });
+      await Filesystem.moveFile({ from: temporary, to: target, directory: Directory.Data });
     } catch {
       await Filesystem.deleteFile({ path: temporary, directory: Directory.Data }).catch(() => undefined);
       throw new MobileError('任务记录保存失败。', 'PERSIST_FAILED', 500);
@@ -976,7 +969,7 @@ class MobileJobManager {
       const epubBytes = await buildEpubBytes(job.book, parsedChapters, images, cover);
       const fileName = `${safeName(job.book.title, '轻小说')}-${job.id}.epub`;
       const relativeOutput = `wenku8/${fileName}`;
-      const written = await Filesystem.writeFile({ path: relativeOutput, data: bytesToBase64(epubBytes), directory: Directory.Cache, encoding: Encoding.Base64 });
+      const written = await Filesystem.writeFile({ path: relativeOutput, data: new Blob([epubBytes.buffer as ArrayBuffer]), directory: Directory.Cache });
       const saved = await NativeEpubFile.save({ jobId: job.id, sourceUri: written.uri, fileName });
       await this.update(job, {
         status: 'completed',
