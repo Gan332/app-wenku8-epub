@@ -27,7 +27,8 @@ import kotlinx.coroutines.withContext
     val error: String? = null,
     val showSettings: Boolean = false,
     val showToc: Boolean = false,
-    val controlsVisible: Boolean = true,
+    val isImmersive: Boolean = true,
+    val controlsVisible: Boolean = false,
 )
 
 class ReaderViewModel(application: Application) : AndroidViewModel(application) {
@@ -39,7 +40,10 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
     private var bookId: String = ""
 
     init {
-        viewModelScope.launch { mutable.update { it.copy(settings = settingsRepository.readerSettings.first()) } }
+        viewModelScope.launch {
+            val settings = settingsRepository.readerSettings.first()
+            mutable.update { it.copy(settings = settings, isImmersive = settings.immersiveMode, controlsVisible = !settings.immersiveMode) }
+        }
     }
 
     fun load(uri: Uri, id: String) {
@@ -66,9 +70,14 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
     fun nextChapter() = selectChapter(state.value.chapterIndex + 1)
     fun previousChapter() = selectChapter(state.value.chapterIndex - 1)
     fun setParagraph(index: Int) { mutable.update { it.copy(paragraphIndex = index.coerceAtLeast(0)) }; persistProgress() }
-    fun toggleControls() = mutable.update { it.copy(controlsVisible = !it.controlsVisible) }
-    fun showSettings(show: Boolean) = mutable.update { it.copy(showSettings = show) }
-    fun showToc(show: Boolean) = mutable.update { it.copy(showToc = show) }
+    fun toggleControls() = mutable.update { current ->
+        val next = !current.isImmersive
+        current.copy(isImmersive = next, controlsVisible = !next)
+    }
+    fun setImmersive(value: Boolean) = mutable.update { it.copy(isImmersive = value, controlsVisible = !value) }
+    fun showSettings(show: Boolean) = mutable.update { it.copy(showSettings = show, isImmersive = false) }
+    fun showToc(show: Boolean) = mutable.update { it.copy(showToc = show, isImmersive = false) }
+    fun closeOverlays() = mutable.update { it.copy(showSettings = false, showToc = false) }
 
     fun updateFontSize(value: Float) { viewModelScope.launch { settingsRepository.setReaderFontSize(value); refreshSettings() } }
     fun updateFontWeight(value: Int) { viewModelScope.launch { settingsRepository.setReaderFontWeight(value); refreshSettings() } }
@@ -80,6 +89,7 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
     fun updateTextColor(value: Int) { viewModelScope.launch { settingsRepository.setReaderTextColor(value); refreshSettings() } }
     fun updatePageMode(value: ReaderPageTurnMode) { viewModelScope.launch { settingsRepository.setReaderPageTurn(value); refreshSettings() } }
     fun updateKeepScreenOn(value: Boolean) { viewModelScope.launch { settingsRepository.setReaderKeepScreenOn(value); refreshSettings() } }
+    fun updateImmersive(value: Boolean) { viewModelScope.launch { settingsRepository.setReaderImmersive(value); setImmersive(value); refreshSettings() } }
     fun updateFontUri(value: String?) { viewModelScope.launch { settingsRepository.setReaderFontUri(value); refreshSettings() } }
 
     private fun refreshSettings() { viewModelScope.launch { mutable.update { it.copy(settings = settingsRepository.readerSettings.first()) } } }

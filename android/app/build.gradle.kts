@@ -48,6 +48,7 @@ dependencies {
     implementation(libs.miuix)
     implementation(libs.miuix.icons)
     implementation(libs.compose.material)
+    implementation(libs.compose.material3)
     implementation(libs.compose.icons.extended)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.core.ktx)

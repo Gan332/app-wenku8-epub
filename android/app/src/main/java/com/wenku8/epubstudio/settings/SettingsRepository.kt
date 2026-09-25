@@ -45,6 +45,7 @@ class SettingsRepository(private val context: Context) {
             textColor = prefs[READER_TEXT_COLOR] ?: default.textColor,
             pageTurnMode = prefs[READER_PAGE_TURN]?.let { name -> runCatching { ReaderPageTurnMode.valueOf(name) }.getOrNull() } ?: default.pageTurnMode,
             keepScreenOn = prefs[READER_KEEP_SCREEN_ON] ?: default.keepScreenOn,
+            immersiveMode = prefs[READER_IMMERSIVE] ?: default.immersiveMode,
             fontUri = prefs[READER_FONT_URI],
         )
     }
@@ -71,6 +72,7 @@ class SettingsRepository(private val context: Context) {
     suspend fun setReaderTextColor(value: Int) = edit { it[READER_TEXT_COLOR] = value }
     suspend fun setReaderPageTurn(value: ReaderPageTurnMode) = edit { it[READER_PAGE_TURN] = value.name }
     suspend fun setReaderKeepScreenOn(value: Boolean) = edit { it[READER_KEEP_SCREEN_ON] = value }
+    suspend fun setReaderImmersive(value: Boolean) = edit { it[READER_IMMERSIVE] = value }
     suspend fun setReaderFontUri(value: String?) = edit { prefs -> if (value == null) prefs.remove(READER_FONT_URI) else prefs[READER_FONT_URI] = value }
 
     suspend fun recordSearch(keyword: String) = edit { prefs ->
@@ -104,6 +106,7 @@ class SettingsRepository(private val context: Context) {
         val READER_TEXT_COLOR = intPreferencesKey("reader_text_color")
         val READER_PAGE_TURN = stringPreferencesKey("reader_page_turn")
         val READER_KEEP_SCREEN_ON = booleanPreferencesKey("reader_keep_screen_on")
+        val READER_IMMERSIVE = booleanPreferencesKey("reader_immersive")
         val READER_FONT_URI = stringPreferencesKey("reader_font_uri")
         val SEARCH_HISTORY = stringPreferencesKey("search_history")
     }

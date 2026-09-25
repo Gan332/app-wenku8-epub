@@ -16,6 +16,12 @@ import top.yukonga.miuix.kmp.theme.ThemeController
 
 class ReaderActivity : ComponentActivity() {
     private val viewModel: ReaderViewModel by viewModels()
+    private val epubPicker = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri == null) return@registerForActivityResult
+        runCatching { contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
+        startActivity(Intent(this, ReaderActivity::class.java).putExtra(EXTRA_URI, uri.toString()).putExtra(EXTRA_BOOK_ID, "import-${uri.toString().hashCode()}"))
+        finish()
+    }
     private val fontPicker = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri == null) return@registerForActivityResult
         runCatching { contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
@@ -36,7 +42,12 @@ class ReaderActivity : ComponentActivity() {
             MiuixTheme(
                 controller = remember { ThemeController(ColorSchemeMode.MonetSystem, keyColor = Color(0xFFA34B2F)) },
             ) {
-                ReaderScreen(viewModel, { fontPicker.launch(arrayOf("font/ttf", "font/otf", "application/x-font-ttf", "application/octet-stream")) }) { finish() }
+                ReaderScreen(
+                    viewModel = viewModel,
+                    onImportFont = { fontPicker.launch(arrayOf("font/ttf", "font/otf", "application/x-font-ttf", "application/octet-stream")) },
+                    onImportEpub = { epubPicker.launch(arrayOf("application/epub+zip", "application/octet-stream", "application/zip", "*/*")) },
+                    onBack = { finish() },
+                )
             }
         }
     }

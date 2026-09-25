@@ -27,6 +27,7 @@ data class ReaderSettings(
     val textColor: Int = 0xFF272522.toInt(),
     val pageTurnMode: ReaderPageTurnMode = ReaderPageTurnMode.HORIZONTAL,
     val keepScreenOn: Boolean = true,
+    val immersiveMode: Boolean = true,
     val fontUri: String? = null,
 ) {
     companion object {

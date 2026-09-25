@@ -83,6 +83,12 @@ private val MiSansFont = FontFamily(Font(R.font.misansvf))
 
 class MainActivity : ComponentActivity() {
     private val notificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    private val epubPicker = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            runCatching { contentResolver.takePersistableUriPermission(uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION) }
+            startActivity(android.content.Intent(this, ReaderActivity::class.java).putExtra(ReaderActivity.EXTRA_URI, uri.toString()).putExtra(ReaderActivity.EXTRA_BOOK_ID, "import-${uri.toString().hashCode()}"))
+        }
+    }
     private val loginLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { studioViewModel.refreshSession() }
     private val studioViewModel: StudioViewModel by viewModels()
 
@@ -134,14 +140,18 @@ class MainActivity : ComponentActivity() {
                 },
                 textStyles = textStyles,
             ) {
-                StudioApp(studioViewModel) { loginLauncher.launch(android.content.Intent(this, LoginActivity::class.java)) }
+                StudioApp(
+                    viewModel = studioViewModel,
+                    onLogin = { loginLauncher.launch(android.content.Intent(this, LoginActivity::class.java)) },
+                    onImportEpub = { epubPicker.launch(arrayOf("application/epub+zip", "application/octet-stream", "application/zip", "*/*")) },
+                )
             }
         }
     }
 }
 
 @Composable
-private fun StudioApp(viewModel: StudioViewModel, onLogin: () -> Unit) {
+private fun StudioApp(viewModel: StudioViewModel, onLogin: () -> Unit, onImportEpub: () -> Unit) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     Scaffold(
         topBar = {
@@ -190,7 +200,7 @@ private fun StudioApp(viewModel: StudioViewModel, onLogin: () -> Unit) {
         Column(Modifier.fillMaxSize().padding(padding).padding(horizontal = 18.dp)) {
             when {
                 state.tab == StudioTab.SEARCH -> SearchScreen(state, viewModel, onLogin)
-                state.tab == StudioTab.SETTINGS -> SettingsScreen(viewModel)
+                state.tab == StudioTab.SETTINGS -> SettingsScreen(viewModel, onImportEpub)
                 state.tab == StudioTab.HISTORY -> HistoryScreen(state.jobs, viewModel)
                 state.step == CreateStep.SOURCE -> SourceScreen(state, viewModel)
                 state.step == CreateStep.DETAIL -> state.book?.let { BookDetailScreen(it, state.index?.chapters?.size ?: 0, viewModel) } ?: SourceScreen(state, viewModel)

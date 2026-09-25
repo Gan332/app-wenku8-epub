@@ -29,7 +29,7 @@ import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 @Composable
-fun SettingsScreen(viewModel: StudioViewModel) {
+fun SettingsScreen(viewModel: StudioViewModel, onImportEpub: () -> Unit) {
     val theme by viewModel.appTheme.collectAsStateWithLifecycle(initialValue = com.wenku8.epubstudio.settings.AppThemeSettings())
     Column(Modifier.fillMaxWidth().padding(top = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("设置", fontSize = 25.sp, fontWeight = FontWeight.Bold)
@@ -58,5 +58,6 @@ fun SettingsScreen(viewModel: StudioViewModel) {
             ColorPicker(color = Color(theme.accentColor), onColorChanged = { viewModel.setAccentColor(it.toArgb()) }, modifier = Modifier.fillMaxWidth().height(180.dp))
         }
         Text("阅读器设置在 EPUB 阅读界面中提供：背景、字体、字号、字重、行距和翻页模式。", color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f), fontSize = 13.sp)
+        TextButton(text = "导入 EPUB 文件", onClick = onImportEpub, modifier = Modifier.fillMaxWidth())
     }
 }
