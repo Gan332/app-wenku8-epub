@@ -37,7 +37,7 @@ class CoreSmokeTest {
 
     @Test
     fun epubStartsWithUncompressedMimetype() {
-        val directory = createTempDir("wenku8-epub-test")
+        val directory = File(System.getProperty("java.io.tmpdir"), "wenku8-epub-test-${System.nanoTime()}").apply { mkdirs() }
         try {
             val output = File(directory, "book.epub")
             val builder = EpubBuilder()
