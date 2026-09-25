@@ -24,5 +24,16 @@ object Wenku8Urls {
     }
 
     fun toplist(sort: String = "lastupdate") = "$TOP_LIST?sort=$sort"
-    fun tag(tag: String) = "$TAGS?t=${runCatching { URLEncoder.encode(tag, Charset.forName("GBK")) }.getOrElse { URLEncoder.encode(tag, Charsets.UTF_8) }}"
+    fun tag(tag: String) = "$TAGS?t=${gbk(tag)}"
+
+    /** 公开年度精选榜，无需登录。 */
+    fun sugoi(year: Int): String = "$BASE/zt/sugoi/$year.php"
+
+    /** 公开月度新书榜，无需登录。 */
+    fun booklist(yearMonth: String): String = "$BASE/zt/booklist/$yearMonth.php"
+
+    /** 公开的按作者作品列表，无需登录；author 需 GBK 编码。 */
+    fun authorArticle(author: String, page: Int = 1): String = "$BASE/modules/article/authorarticle.php?author=${gbk(author)}&page=$page"
+
+    private fun gbk(value: String): String = runCatching { URLEncoder.encode(value, Charset.forName("GBK")) }.getOrElse { URLEncoder.encode(value, Charsets.UTF_8) }
 }

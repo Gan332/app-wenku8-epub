@@ -1,5 +1,9 @@
 package com.wenku8.epubstudio
 
+import com.wenku8.epubstudio.core.CatalogEntry
+import com.wenku8.epubstudio.core.CatalogIndex
+import com.wenku8.epubstudio.core.CatalogSearchField
+import com.wenku8.epubstudio.core.CatalogStats
 import com.wenku8.epubstudio.core.Wenku8Parser
 import com.wenku8.epubstudio.core.Wenku8Url
 import com.wenku8.epubstudio.core.Wenku8Urls
@@ -72,6 +76,78 @@ class CoreSmokeTest {
         val stats = ReadingStats(totalSeconds = 7200, todaySeconds = 600, currentStreak = 3, longestStreak = 8, totalSessions = 4, lastReadAt = 10L, dailySeconds = mapOf("2026-09-25" to 600L), bookSeconds = mapOf("b1" to 700L), bookTitles = mapOf("b1" to "测试书"))
         val encoded = Json.encodeToString(ReadingStats.serializer(), stats)
         assertEquals(stats, Json.decodeFromString(ReadingStats.serializer(), encoded))
+    }
+
+    @Test
+    fun publicCatalogParsersSkipPlaceholdersAndNavNoise() {
+        val html = """
+            <html><body>
+            <a href="/modules/article/toplist.php?sort=allvisit">热门轻小说</a>
+            <a href="/book/3988.htm" title="あちき volt">あちき volt</a>
+            <a href="//www.wenku8.net/book/2580.htm">标题文字</a>
+            <a href="#"><img src="x.jpg"></a>
+            <a href="/book/3988.htm">重复</a>
+            <a href="/novel/2/1/index.htm">目录</a>
+            <a href="/modules/article/authorarticle.php?author=%BE%FD%B4%A8">同作者作品</a>
+            </body></html>
+        """.trimIndent()
+        val links = Wenku8Parser.parseBookLinks(html, "https://www.wenku8.net/zt/sugoi/2026.php")
+        assertEquals(listOf("3988", "2580"), links.map { it.id })
+        assertEquals("あちき volt", links.first().title)
+
+        val author = Wenku8Parser.parseAuthorLink(html, "https://www.wenku8.net/book/2835.htm")
+        assertEquals("https://www.wenku8.net/modules/article/authorarticle.php?author=%BE%FD%B4%A8", author)
+
+        val seed = Wenku8Parser.parseSeedList(html, "https://www.wenku8.net/zt/sugoi/2026.php", "2026 年度精选")
+        assertEquals(2, seed.size)
+        assertEquals("2026 年度精选", seed.first().listName)
+    }
+
+    @Test
+    fun publicCatalogUrlsAreAnonymousSafe() {
+        assertEquals("https://www.wenku8.net/zt/sugoi/2026.php", Wenku8Urls.sugoi(2026))
+        assertEquals("https://www.wenku8.net/zt/booklist/202609.php", Wenku8Urls.booklist("202609"))
+        val author = Wenku8Urls.authorArticle("君川优树")
+        assertTrue(author.startsWith("https://www.wenku8.net/modules/article/authorarticle.php?author="))
+        // 登录门禁接口保持原样，代码不得试图规避
+        assertTrue(Wenku8Urls.search("x", com.wenku8.epubstudio.model.SearchField.TITLE).contains("search.php"))
+        assertTrue(Wenku8Urls.toplist("allvisit").contains("toplist.php"))
+    }
+
+    @Test
+    fun localCatalogSearchRanksAndNormalizes() {
+        val entries = listOf(
+            CatalogEntry(id = "1", title = "关于我转生变成史莱姆这档事", author = "伏濑", wordCount = 900_000, updatedAt = "2026-01-01", sourceUrl = "u1", tags = listOf("异世界")),
+            CatalogEntry(id = "2", title = "史莱姆", author = "伏濑", wordCount = 100, updatedAt = "2026-02-01", sourceUrl = "u2", tags = listOf("短篇")),
+            CatalogEntry(id = "3", title = "ＳＬＩＭ　ＴＥＳＴ", author = "别人", wordCount = 50, updatedAt = "2026-03-01", sourceUrl = "u3", tags = listOf("异世界")),
+        )
+        val index = CatalogIndex(entries)
+        assertEquals(3, index.size)
+
+        // 全角 -> 半角 + 大小写归一
+        val byTitle = index.search("slim test", CatalogSearchField.TITLE)
+        assertEquals(listOf("3"), byTitle.map { it.id })
+
+        // 完全匹配优先于包含匹配
+        val ranked = index.search("史莱姆", CatalogSearchField.TITLE).map { it.id }
+        assertEquals("2", ranked.first())
+        assertTrue(ranked.contains("1"))
+
+        // 作者搜索
+        assertTrue(index.search("伏濑", CatalogSearchField.AUTHOR).map { it.id }.containsAll(listOf("1", "2")))
+
+        // 标签检索
+        assertTrue(index.searchTag("异世界").map { it.id }.containsAll(listOf("1", "3")))
+
+        // 空白查询返回空
+        assertTrue(index.search("   ", CatalogSearchField.TITLE).isEmpty())
+    }
+
+    @Test
+    fun catalogStatsRoundTrip() {
+        val stats = CatalogStats(count = 12, lastUpdatedAt = 99L, totalFetched = 30, skipped = 2)
+        val encoded = Json.encodeToString(CatalogStats.serializer(), stats)
+        assertEquals(stats, Json.decodeFromString(CatalogStats.serializer(), encoded))
     }
 
     @Test

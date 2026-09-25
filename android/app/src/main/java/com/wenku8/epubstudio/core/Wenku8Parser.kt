@@ -160,6 +160,63 @@ object Wenku8Parser {
 
     private fun parseWordCount(document: org.jsoup.nodes.Document): Long? = Regex("全文长度\\s*[：:]\\s*([\\d,，]+)\\s*字").find(document.text())?.groupValues?.get(1)?.replace(",", "")?.replace("，", "")?.toLongOrNull()
 
+    // ---- 公开书目索引（免登录）----
+
+    /**
+     * 从任意公开页面提取书籍链接。只接受形如 /book/{id}.htm 的真实链接，
+     * 自动跳过导航、占位（href="#"）与重复项。
+     */
+    fun parseBookLinks(html: String, baseUrl: String): List<BookLink> {
+        if (looksLikeChallenge(html)) throw Wenku8Exception("源站要求浏览器验证。", "UPSTREAM_CHALLENGE")
+        val document = Jsoup.parse(html, baseUrl)
+        val seen = mutableSetOf<String>()
+        val links = mutableListOf<BookLink>()
+        for (anchor in document.select("a[href*=/book/]")) {
+            val href = anchor.attr("href")
+            if (href == "#" || href.isBlank()) continue
+            val id = Regex("/book/(\\d+)\\.htm", RegexOption.IGNORE_CASE).find(href)?.groupValues?.get(1) ?: continue
+            if (!seen.add(id)) continue
+            val title = cleanInline(anchor.attr("title")).ifBlank { cleanInline(anchor.text()) }
+            links += BookLink(id, title)
+        }
+        return links
+    }
+
+    /** 提取页面的「同作者作品」公开链接；不存在时返回 null。 */
+    fun parseAuthorLink(html: String, baseUrl: String): String? {
+        if (looksLikeChallenge(html)) throw Wenku8Exception("源站要求浏览器验证。", "UPSTREAM_CHALLENGE")
+        val document = Jsoup.parse(html, baseUrl)
+        return document.selectFirst("a[href*=authorarticle.php]")
+            ?.let { Wenku8Url.resolve(baseUrl, it.attr("href")) }
+    }
+
+    /** 解析年度精选榜 / 月度新书榜，返回书籍引用列表。 */
+    fun parseSeedList(html: String, baseUrl: String, listName: String): List<CatalogSeedRef> {
+        return parseBookLinks(html, baseUrl).map { CatalogSeedRef(it.id, it.title, listName) }
+    }
+
+    /** 解析单本详情页为索引条目；复用 parseBook 的字段抽取。 */
+    fun parseCatalogEntry(html: String, bookUrl: String, firstSeenAt: Long = System.currentTimeMillis()): CatalogEntry {
+        val book = parseBook(html, bookUrl)
+        val id = book.id ?: Regex("/book/(\\d+)\\.htm", RegexOption.IGNORE_CASE)
+            .find(java.net.URI(bookUrl).path.orEmpty())?.groupValues?.get(1)
+            ?: throw Wenku8Exception("未能识别书籍 ID。", "BOOK_PARSE_FAILED")
+        return CatalogEntry(
+            id = id,
+            title = book.title,
+            author = book.author,
+            category = book.category,
+            status = book.status,
+            wordCount = book.wordCount,
+            updatedAt = book.updatedAt,
+            tags = book.tags,
+            summary = book.summary,
+            coverUrl = book.coverUrl,
+            sourceUrl = book.sourceUrl,
+            firstSeenAt = firstSeenAt,
+        )
+    }
+
     private fun fieldValue(document: org.jsoup.nodes.Document, vararg labels: String): String {
         for (label in labels) {
             val cell = document.select("td").firstOrNull { cleanInline(it.text()).startsWith(label) } ?: continue
