@@ -661,8 +661,8 @@ function concatBytes(chunks: Uint8Array[]): Uint8Array {
 }
 
 async function readLocalFile(path: string): Promise<Uint8Array> {
-  const result = await Filesystem.readFile({ path });
-  return base64ToBytes(result.data);
+  const result = await Filesystem.readFile({ path, encoding: Encoding.Base64 });
+  return base64ToBytes(result.data as string);
 }
 
 async function buildEpubBytes(book: Book, parsedChapters: ParsedChapter[], images: DownloadedImage[], cover: DownloadedImage | null): Promise<Uint8Array> {
@@ -683,7 +683,7 @@ async function buildEpubBytes(book: Book, parsedChapters: ParsedChapter[], image
     manifest.push({ id: image.manifestId, href: `images/${image.fileName}`, mediaType: image.mime, properties: image.isCover ? 'cover-image' : undefined });
   }
 
-  const zip = new Zip();
+  const zip = new Zip() as any;
   const chunks: Uint8Array[] = [];
   let resolveDone: (value: Uint8Array) => void = () => {};
   let rejectDone: (reason?: unknown) => void = () => {};
@@ -691,7 +691,7 @@ async function buildEpubBytes(book: Book, parsedChapters: ParsedChapter[], image
     resolveDone = resolve;
     rejectDone = reject;
   });
-  zip.on('data', (chunk) => chunks.push(chunk));
+  zip.on('data', (chunk: Uint8Array) => chunks.push(chunk));
   zip.on('end', () => resolveDone(concatBytes(chunks)));
   zip.on('error', rejectDone);
   zip.add(strToU8('application/epub+zip'), new ZipPassThrough('mimetype'));
