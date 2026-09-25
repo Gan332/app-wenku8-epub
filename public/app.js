@@ -152,10 +152,10 @@ function escapeHtml(value) {
 
 function renderChapters() {
   chapterList.replaceChildren();
-  const lastVolume = Symbol('none');
+  let lastVolume;
   for (const chapter of state.index.chapters) {
-    if (chapter.volume !== lastVolume.value) {
-      lastVolume.value = chapter.volume;
+    if (chapter.volume !== lastVolume) {
+      lastVolume = chapter.volume;
       const heading = document.createElement('h3');
       heading.className = 'volume-heading';
       heading.textContent = chapter.volume;

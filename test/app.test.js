@@ -57,3 +57,13 @@ test('serves the local UI and basic API responses', async () => {
     await fsp.rm(temporaryDirectory, { recursive: true, force: true });
   }
 });
+
+test('frontend source never assigns properties to the volume sentinel', async () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const source = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
+  assert.doesNotMatch(source, /Symbol\(['"]none['"]\)/);
+  assert.doesNotMatch(source, /lastVolume\.value\s*=/);
+  assert.match(source, /let lastVolume;/);
+  assert.match(source, /lastVolume\s*=\s*chapter\.volume;/);
+});
