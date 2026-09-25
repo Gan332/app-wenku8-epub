@@ -89,7 +89,7 @@ class CatalogIndex(entries: Collection<CatalogEntry>) {
         fun normalize(value: String): String = Normalizer.normalize(value, Normalizer.Form.NFKC)
             .lowercase(Locale.ROOT)
             .replace(Regex("\\s+"), "")
-            .replace(Regex("[！-～]")) { m -> (m.value[0].code - 0xFEE0).toChar() }
+            .replace(Regex("[！-～]")) { m -> ((m.value[0].code - 0xFEE0).toChar()).toString() }
     }
 }
 
