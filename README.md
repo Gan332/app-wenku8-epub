@@ -83,24 +83,21 @@ output/       生成的 EPUB 文件
 
 ## Android 独立应用源码
 
-Android 版本使用 Capacitor WebView 加本地 TypeScript 核心和 Kotlin 原生插件，不需要启动 Node.js 服务：
+Android 版本已迁移为纯 Kotlin + Jetpack Compose + MiuiX 原生应用，不需要启动 Node.js 服务，也不加载 WebView。网页版仍使用原有 HTML/CSS/JavaScript。
 
 ```text
-mobile/core.ts       移动端解析、任务、进度、持久化和 EPUB 打包
-android/             Android 工程、HTTP 限流、文件保存和前台任务服务
-public/mobile-core.js 构建后生成的单文件核心（不手工编辑）
+android/             原生 Kotlin 业务层、MiuiX Compose UI、前台通知和文件分享
+.github/workflows/   GitHub Actions 原生 APK 构建与 Release 流程
 ```
 
-源码准备完成后，构建环境需要另行准备：
+本地需要 JDK 21、Android SDK Platform 36 和 Build Tools 36.1.0：
 
 ```powershell
-npm install
-npm run mobile:check
-npm run android:sync
-npm run android:apk
+cd android
+.\\gradlew.bat testDebugUnitTest assembleDebug
 ```
 
-本轮只提交源码和构建配置，不自动安装 Android SDK/JDK，也不执行 Gradle 编译。Android 任务历史保存在应用私有数据目录，EPUB 可保存到 `Download/EPUB`。
+Android 任务历史保存在应用私有数据目录，EPUB 可保存到 `Download/EPUB`。正式发布前请使用自有 keystore；当前源码不包含签名密钥。
 
 ### GitHub Actions APK
 
