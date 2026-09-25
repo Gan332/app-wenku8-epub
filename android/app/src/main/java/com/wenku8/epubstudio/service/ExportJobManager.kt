@@ -33,7 +33,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import kotlin.text.normalize
 import java.io.File
 import java.text.Normalizer
 import java.time.Instant
@@ -219,7 +218,7 @@ class ExportJobManager(private val context: Context) {
         }
     }
 
-    private fun bookSafeName(value: String): String = value.normalize(Normalizer.Form.NFKC).replace(Regex("[<>:\"/\\\\|?*\\u0000-\\u001f]"), "_").trim().take(90).ifBlank { "轻小说" }
+    private fun bookSafeName(value: String): String = Normalizer.normalize(value, Normalizer.Form.NFKC).replace(Regex("[<>:\"/\\\\|?*\\u0000-\\u001f]"), "_").trim().take(90).ifBlank { "轻小说" }
 
     private suspend fun update(job: ExportJob) {
         val next = job.copy(updatedAt = Instant.now().toString())
