@@ -2,6 +2,7 @@ package com.wenku8.epubstudio.service
 
 import android.content.Context
 import android.net.Uri
+import com.wenku8.epubstudio.core.SourceKind
 import com.wenku8.epubstudio.core.Wenku8Exception
 import com.wenku8.epubstudio.core.Wenku8HttpClient
 import com.wenku8.epubstudio.core.Wenku8Parser
@@ -32,6 +33,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlin.text.normalize
 import java.io.File
 import java.text.Normalizer
 import java.time.Instant
@@ -64,9 +66,9 @@ class ExportJobManager(private val context: Context) {
     suspend fun parseBook(input: String): Book {
         val requested = Wenku8Url.normalizeSource(input)
         val ids = Wenku8Url.sourceIds(requested)
-        val url = if (ids.kind == Wenku8Url.SourceKind.index) "https://www.wenku8.net/book/${ids.bookId}.htm" else requested.toString()
+        val url = if (ids.kind == SourceKind.index) "https://www.wenku8.net/book/${ids.bookId}.htm" else requested.toString()
         val page = http.fetchText(url, "parse-${UUID.randomUUID()}")
-        return Wenku8Url.validateBook(Wenku8Parser.parseBook(page.html, page.finalUrl, if (ids.kind == Wenku8Url.SourceKind.index) requested.toString() else null))
+        return Wenku8Url.validateBook(Wenku8Parser.parseBook(page.html, page.finalUrl, if (ids.kind == SourceKind.index) requested.toString() else null))
     }
 
     suspend fun parseSource(input: String): Pair<Book, BookIndex> {
@@ -80,7 +82,7 @@ class ExportJobManager(private val context: Context) {
     suspend fun parseIndex(input: String): BookIndex {
         var url = Wenku8Url.normalizeSource(input)
         var ids = Wenku8Url.sourceIds(url)
-        if (ids.kind != Wenku8Url.SourceKind.index) {
+        if (ids.kind != SourceKind.index) {
             val book = parseBook(input)
             url = Wenku8Url.assertAllowed(book.directoryUrl ?: throw Wenku8Exception("书籍页没有目录链接。", "INDEX_URL_REQUIRED"))
             ids = Wenku8Url.sourceIds(url)
@@ -181,11 +183,12 @@ class ExportJobManager(private val context: Context) {
                 update(job)
             }
             if (parsed.isEmpty()) throw Wenku8Exception("所有章节都未能成功读取。", "NO_CHAPTERS_PARSED")
-            if (job.options.includeCover && job.book.coverUrl != null) {
+            val coverUrl = job.book.coverUrl
+            if (job.options.includeCover && coverUrl != null) {
                 job = job.copy(progress = job.progress.copy(phase = JobPhase.cover, percent = 94, message = "正在下载书籍封面…"))
                 update(job)
                 runCatching {
-                    val downloaded = http.downloadImage(job.book.coverUrl, job.book.bookUrl, job.id, "cover")
+                    val downloaded = http.downloadImage(coverUrl, job.book.bookUrl, job.id, "cover")
                     cover = DownloadedImage("", "", 0, 0, "cover.${downloaded.ext}", "cover-image", downloaded.mime, downloaded.path, downloaded.ext, downloaded.bytes, true)
                 }.onFailure { warnings += "封面：${it.message ?: "下载失败"}" }
             }

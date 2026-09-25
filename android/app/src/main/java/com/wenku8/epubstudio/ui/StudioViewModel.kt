@@ -41,7 +41,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch {
             manager.jobs.collect { jobs ->
                 mutable.update { current ->
-                    val active = current.activeJobId?.let { id -> jobs.firstOrNull { it.id == id } }
+                    val active = current.activeJobId?.let { id -> jobs.values.firstOrNull { it.id == id } }
                     current.copy(jobs = jobs.values.sortedByDescending { it.createdAt }, step = if (active != null && current.step == CreateStep.PROGRESS) CreateStep.PROGRESS else current.step)
                 }
             }

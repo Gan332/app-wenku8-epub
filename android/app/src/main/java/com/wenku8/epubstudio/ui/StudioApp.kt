@@ -135,7 +135,7 @@ private fun StudioApp(viewModel: StudioViewModel) {
 private fun SourceScreen(state: StudioUiState, viewModel: StudioViewModel) {
     Column(Modifier.fillMaxWidth().padding(top = 18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Text("把公开轻小说整理成可离线阅读的 EPUB。", fontSize = 24.sp, fontWeight = FontWeight.Bold)
-        Text("支持 wenku8 书籍页、目录页或纯书籍 ID。请求会遵守源站限流。", color = MiuixTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
+        Text("支持 wenku8 书籍页、目录页或纯书籍 ID。请求会遵守源站限流。", color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.72f), fontSize = 14.sp)
         Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(16.dp)) {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 TextField(
@@ -204,7 +204,7 @@ private fun ExportScreen(state: StudioUiState, viewModel: StudioViewModel) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text("包含书籍封面", fontWeight = FontWeight.Bold)
-                        Text("封面下载失败不会阻止正文导出", fontSize = 12.sp, color = MiuixTheme.colorScheme.onSurfaceVariant)
+                        Text("封面下载失败不会阻止正文导出", fontSize = 12.sp, color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.72f))
                     }
                     Switch(checked = state.includeCover, onCheckedChange = viewModel::setCover)
                 }
@@ -229,7 +229,7 @@ private fun ProgressContent(job: ExportJob, viewModel: StudioViewModel) {
         Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(18.dp)) {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(job.book.title, fontSize = 24.sp, fontWeight = FontWeight.Bold)
-                Text(job.progress.message, color = MiuixTheme.colorScheme.onSurfaceVariant)
+                Text(job.progress.message, color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.72f))
                 LinearProgressIndicator(progress = progress, modifier = Modifier.fillMaxWidth())
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text("${job.progress.percent}%", fontWeight = FontWeight.Bold, color = MiuixTheme.colorScheme.primary)
@@ -247,7 +247,7 @@ private fun ProgressContent(job: ExportJob, viewModel: StudioViewModel) {
                     Button(onClick = { viewModel.save(job.id) }, modifier = Modifier.weight(1f)) { Icon(Icons.Default.Download, "保存") }
                     Button(onClick = { viewModel.share(job.id) }, modifier = Modifier.weight(1f)) { Icon(Icons.Default.Share, "分享") }
                 }
-                Text("已保存到 Download/EPUB，可随时再次保存。", color = MiuixTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
+                Text("已保存到 Download/EPUB，可随时再次保存。", color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.72f), fontSize = 13.sp)
             }
             JobStatus.failed -> MessageCard(job.error?.message ?: "任务失败")
             JobStatus.canceled -> MessageCard("任务已取消。")
@@ -267,14 +267,14 @@ private fun ProgressContent(job: ExportJob, viewModel: StudioViewModel) {
 
 @Composable
 private fun HistoryScreen(jobs: List<ExportJob>, viewModel: StudioViewModel) {
-    if (jobs.isEmpty()) { Text("还没有导出任务。", Modifier.padding(top = 20.dp), color = MiuixTheme.colorScheme.onSurfaceVariant); return }
+    if (jobs.isEmpty()) { Text("还没有导出任务。", Modifier.padding(top = 20.dp), color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.72f)); return }
     LazyColumn(Modifier.fillMaxWidth().padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         items(jobs, key = { it.id }) { job ->
             Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(16.dp)) {
                 Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
                     Text(job.book.title, fontWeight = FontWeight.Bold, maxLines = 2)
                     Text(statusText(job), color = MiuixTheme.colorScheme.primary, fontSize = 13.sp)
-                    Text("${job.chapterCount} 章 · ${job.progress.percent}% · ${job.createdAt.take(10)}", fontSize = 12.sp, color = MiuixTheme.colorScheme.onSurfaceVariant)
+                    Text("${job.chapterCount} 章 · ${job.progress.percent}% · ${job.createdAt.take(10)}", fontSize = 12.sp, color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.72f))
                     if (job.status == JobStatus.completed) {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             TextButton(text = "保存", onClick = { viewModel.save(job.id) })
@@ -293,7 +293,7 @@ private fun BookHeader(title: String, author: String, category: String, total: I
         Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
             Text(category, color = MiuixTheme.colorScheme.primary, fontSize = 12.sp, fontWeight = FontWeight.Bold)
             Text(title, fontSize = 21.sp, fontWeight = FontWeight.Bold, maxLines = 2)
-            Text("$author · $total 章 · 已选 $selected", color = MiuixTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
+            Text("$author · $total 章 · 已选 $selected", color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.72f), fontSize = 13.sp)
         }
     }
 }
@@ -305,7 +305,7 @@ private fun ChapterRow(chapter: Chapter, selected: Boolean, onToggle: () -> Unit
             Checkbox(checked = selected, onCheckedChange = { onToggle() })
             Column(Modifier.weight(1f).padding(vertical = 6.dp)) {
                 Text(chapter.title, maxLines = 2, fontSize = 15.sp)
-                Text(chapter.volume + if (chapter.isIllustration) " · 插图章节" else "", color = MiuixTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
+                Text(chapter.volume + if (chapter.isIllustration) " · 插图章节" else "", color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.72f), fontSize = 11.sp)
             }
         }
     }

@@ -1,5 +1,6 @@
 package com.wenku8.epubstudio.core
 
+import com.wenku8.epubstudio.http.HttpRateLimiter
 import com.wenku8.epubstudio.model.DownloadedImage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
