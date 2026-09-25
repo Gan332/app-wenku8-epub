@@ -11,7 +11,7 @@
 
 当前主要发版对象是 **Android 原生应用**。Android 版本不需要 Node.js 服务，WebView 仅用于 wenku8 登录。
 
-当前版本：`0.6.0`（versionCode 6）
+当前版本：`0.7.0`（versionCode 7）
 
 仓库地址：`https://github.com/Gan332/app-wenku8-epub`
 
@@ -55,7 +55,7 @@ android/app/src/main/java/com/wenku8/epubstudio/
 └── ui/                          Compose 页面和 ViewModel
 ```
 
-页面：书架、探索、创建流程（源站/详情/章节/导出/进度）、阅读统计、设置。
+页面：书架（含书籍操作二级界面）、探索、创建流程（源站/详情/章节/导出/进度）、设置（二级：主题与外观/阅读器设置/阅读统计/书目缓存/关于）。
 
 ## 4. 关键设计约束
 
@@ -114,6 +114,25 @@ android/app/src/main/java/com/wenku8/epubstudio/
 - 读图/解析类操作放 `Dispatchers.IO`
 - MiuX 组件优先，Material3 仅在需要 BottomSheet/Slider 时使用
 - 主题色从 `MiuixTheme.colorScheme` 获取，不要写死颜色
+
+### 4.5 被动触发（0.7.0 起）
+
+除用户点击外，应用**不发起任何书目网络请求**：
+
+- 「更新书目缓存」只存在于设置 → 书目缓存
+- 探索页只读本地索引，缓存为空时提供跳转入口
+- 打开未缓存书籍必须由用户点击「加载完整详情」后才请求
+- `CatalogRepository.ensureBook` / `expandAuthor` 不得在页面加载路径上自动调用
+
+### 4.6 封面加载
+
+自研 `ui/cover/CoverRepository`，**不引入 Coil/Glide**：第三方图片库会自建
+OkHttp 客户端，从而绕过 `Wenku8HttpClient` 的全局 1 秒限流与 429 退避。
+
+- 内存 LruCache + 磁盘 `cacheDir/covers`
+- 下载走共享的无 Cookie 客户端
+- 按目标宽度下采样，避免 OOM
+- 缩放手势自行实现（`detectTransformGestures`），不引入 panpf
 
 ## 5. 构建与验证
 

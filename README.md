@@ -93,9 +93,11 @@ android/             原生 Kotlin 业务层、MiuiX Compose UI、搜索、阅�
 ### Android 功能
 
 - MiuiX 应用主题：跟随系统、浅色、深色、动态色和自定义强调色
-- 独立书架：在线 Wenku8 书籍和本地 EPUB，可置顶、移除和继续阅读
+- 独立书架：在线 Wenku8 书籍和本地 EPUB，卡片显示封面与书名
+- 书籍详情：封面大图可点击放大，元数据以独立控件展示
 - 免登录搜索与浏览：基于本地书目缓存，断网可用
 - Wenku8 公开榜单探索：年度精选与月度新书
+- 分级设置：主题与外观、阅读器设置、阅读统计、书目缓存、关于
 - 书籍详情：作者、分类、连载状态、更新时间、全文字数、简介、标签和目录
 - 阅读统计：总时长、今日时长、连续天数、每日时长和按书籍统计
 - EPUB 阅读器：章节目录、章节导航、插图、左右章节翻页和上下滚动
@@ -130,11 +132,11 @@ git commit -m "feat: add standalone Android APK source and CI"
 git push -u origin main
 ```
 
-推送 `v0.6.0` 等版本标签会触发 Release APK：
+推送 `v0.7.0` 等版本标签会触发 Release APK：
 
 ```powershell
-git tag v0.6.0
-git push origin v0.6.0
+git tag v0.7.0
+git push origin v0.7.0
 ```
 
 ## 测试与验收
@@ -180,6 +182,7 @@ npm run release:package
 - [`docs/USER_SOP.md`](docs/USER_SOP.md)：用户操作流程
 - [`docs/ENGINEERING_SOP.md`](docs/ENGINEERING_SOP.md)：Git、开发、测试和发布流程
 - [`docs/RELEASE_CHECKLIST.md`](docs/RELEASE_CHECKLIST.md)：发布验收清单
+- [`docs/RELEASE_NOTES_v0.7.0.md`](docs/RELEASE_NOTES_v0.7.0.md)：v0.7.0 封面、详情页、书架与设置二级界面
 - [`docs/RELEASE_NOTES_v0.6.0.md`](docs/RELEASE_NOTES_v0.6.0.md)：v0.6.0 免登录本地书目索引与搜索
 - [`docs/RELEASE_NOTES_v0.5.0.md`](docs/RELEASE_NOTES_v0.5.0.md)：v0.5.0 书架、探索、数据源和阅读统计发布说明
 - [`docs/RELEASE_NOTES_v0.4.0.md`](docs/RELEASE_NOTES_v0.4.0.md)：v0.4.0 阅读器沉浸模式、按钮、EPUB 导入和 BottomSheet 修复

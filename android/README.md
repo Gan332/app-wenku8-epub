@@ -5,7 +5,11 @@
 主要模块：
 
 - `ui/StudioApp.kt`：MiuiX 主题、书架、探索、创建流程、章节选择、导出进度和设置页面
-- `ui/BookshelfScreen.kt`：本地 EPUB/Wenku8 书架、置顶和导出记录
+- `ui/BookshelfScreen.kt`：本地 EPUB/Wenku8 书架（封面 + 书名）
+- `ui/BookActionsDialog.kt`：书籍操作二级界面
+- `ui/BookDetailScreen.kt`：封面大图与独立元数据控件
+- `ui/cover/`：封面加载、缓存与全屏缩放预览
+- `ui/SettingsScreen.kt`：设置总览与五个二级页面
 - `ui/ExploreScreen.kt`：Wenku8 数据源探索和搜索
 - `ui/ReadingStatsScreen.kt`：阅读时长和阅读统计
 - `ui/StudioViewModel.kt`：应用状态、搜索、详情和主题交互

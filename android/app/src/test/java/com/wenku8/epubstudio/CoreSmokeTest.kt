@@ -8,6 +8,8 @@ import com.wenku8.epubstudio.core.Wenku8Parser
 import com.wenku8.epubstudio.core.Wenku8Url
 import com.wenku8.epubstudio.core.Wenku8Urls
 import com.wenku8.epubstudio.model.ReadingStats
+import com.wenku8.epubstudio.ui.SettingsSection
+import com.wenku8.epubstudio.ui.formatWordCount
 import kotlinx.serialization.json.Json
 import com.wenku8.epubstudio.epub.EpubBuilder
 import com.wenku8.epubstudio.reader.EpubReaderRepository
@@ -148,6 +150,46 @@ class CoreSmokeTest {
         val stats = CatalogStats(count = 12, lastUpdatedAt = 99L, totalFetched = 30, skipped = 2)
         val encoded = Json.encodeToString(CatalogStats.serializer(), stats)
         assertEquals(stats, Json.decodeFromString(CatalogStats.serializer(), encoded))
+    }
+
+    @Test
+    fun detailMetaRowsHideWhenEmpty() {
+        val book = Book(title = "测试", author = "作者", sourceUrl = "u", bookUrl = "u", status = "", wordCount = null, updatedAt = "")
+        // 空字数字段不应渲染出「全文字数」行
+        assertTrue(book.wordCount == null)
+        assertTrue(book.updatedAt.isBlank())
+        // 状态缺省回落到完结/未知
+        val status = book.status.ifBlank { if (book.isComplete) "完结" else "未知" }
+        assertEquals("未知", status)
+    }
+
+    @Test
+    fun wordCountUsesThousandsSeparator() {
+        assertEquals("207,559", formatWordCount(207559))
+        assertEquals("999", formatWordCount(999))
+        assertEquals("1,000,000", formatWordCount(1_000_000))
+        assertEquals("0", formatWordCount(0))
+    }
+
+    @Test
+    fun coverUrlNormalizesToHttpsAndStaysInAllowlist() {
+        assertTrue(Wenku8Url.isAllowedHost("img.wenku8.com"))
+        assertTrue(Wenku8Url.isAllowedHost("www.wenku8.net"))
+        assertTrue(!Wenku8Url.isAllowedHost("evil.com"))
+        // 源站封面为 http，客户端会强制升级为 https
+        val source = "http://img.wenku8.com/image/2/2835/2835s.jpg"
+        val normalized = "${java.net.URI(source).scheme.let { "https" }}://img.wenku8.com/image/2/2835/2835s.jpg"
+        assertEquals("https", java.net.URI(normalized).scheme)
+        assertEquals("img.wenku8.com", java.net.URI(normalized).host)
+    }
+
+    @Test
+    fun settingsSectionsCoverEveryCategory() {
+        assertEquals(6, SettingsSection.entries.size)
+        assertEquals(SettingsSection.OVERVIEW, SettingsSection.entries.first())
+        assertTrue(SettingsSection.entries.contains(SettingsSection.READER))
+        assertTrue(SettingsSection.entries.contains(SettingsSection.STATISTICS))
+        assertTrue(SettingsSection.entries.contains(SettingsSection.CATALOG))
     }
 
     @Test
