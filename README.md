@@ -83,12 +83,22 @@ output/       生成的 EPUB 文件
 
 ## Android 独立应用源码
 
-Android 版本已迁移为纯 Kotlin + Jetpack Compose + MiuiX 原生应用，不需要启动 Node.js 服务，也不加载 WebView。网页版仍使用原有 HTML/CSS/JavaScript。
+Android 版本已迁移为纯 Kotlin + Jetpack Compose + MiuiX 原生应用，不需要启动 Node.js 服务，也不加载业务 WebView。网页版仍使用原有 HTML/CSS/JavaScript。
 
 ```text
-android/             原生 Kotlin 业务层、MiuiX Compose UI、前台通知和文件分享
+android/             原生 Kotlin 业务层、MiuiX Compose UI、搜索、阅读器和导出服务
 .github/workflows/   GitHub Actions 原生 APK 构建与 Release 流程
 ```
+
+### Android 功能
+
+- MiuiX 应用主题：跟随系统、浅色、深色、动态色和自定义强调色
+- wenku8 登录态搜索：按书名/作者搜索，登录 Cookie 使用 Keystore 加密保存
+- 书籍详情：作者、分类、连载状态、更新时间、全文字数、简介、标签和目录
+- EPUB 阅读器：章节目录、章节导航、插图、左右章节翻页和上下滚动
+- 阅读设置：米黄/白纸/护眼/夜间/OLED/自定义背景，字体、字号、字重、行距、段距和边距
+- 自定义 TTF/OTF 字体导入，阅读进度按章节和段落恢复
+- 导出 EPUB 保存到 `Download/EPUB`、系统分享和历史任务重新阅读
 
 本地需要 JDK 21、Android SDK Platform 36 和 Build Tools 36.1.0：
 
@@ -97,7 +107,7 @@ cd android
 .\\gradlew.bat testDebugUnitTest assembleDebug
 ```
 
-Android 任务历史保存在应用私有数据目录，EPUB 可保存到 `Download/EPUB`。正式发布前请使用自有 keystore；当前源码不包含签名密钥。
+Android 任务历史保存在应用私有数据目录，正式发布前请使用自有 keystore；当前源码不包含签名密钥。
 
 ### GitHub Actions APK
 
@@ -117,11 +127,11 @@ git commit -m "feat: add standalone Android APK source and CI"
 git push -u origin main
 ```
 
-推送 `v0.2.0` 等版本标签会触发 Release APK：
+推送 `v0.3.0` 等版本标签会触发 Release APK：
 
 ```powershell
-git tag v0.2.0
-git push origin v0.2.0
+git tag v0.3.0
+git push origin v0.3.0
 ```
 
 ## 测试与验收
@@ -167,6 +177,7 @@ npm run release:package
 - [`docs/USER_SOP.md`](docs/USER_SOP.md)：用户操作流程
 - [`docs/ENGINEERING_SOP.md`](docs/ENGINEERING_SOP.md)：Git、开发、测试和发布流程
 - [`docs/RELEASE_CHECKLIST.md`](docs/RELEASE_CHECKLIST.md)：发布验收清单
+- [`docs/RELEASE_NOTES_v0.3.0.md`](docs/RELEASE_NOTES_v0.3.0.md)：v0.3.0 主题、搜索与 EPUB 阅读器发布说明
 - [`docs/RELEASE_NOTES_v0.1.0.md`](docs/RELEASE_NOTES_v0.1.0.md)：v0.1.0 发布说明与回滚说明
 - [`CHANGELOG.md`](CHANGELOG.md)：版本记录
 
@@ -174,8 +185,7 @@ npm run release:package
 
 ```text
 public/       本地 Web 界面
-mobile/       Android 单文件 TypeScript 业务核心
-android/      Android 原生工程与 Capacitor 插件
+android/      原生 Kotlin、Compose、MiuiX 搜索与 EPUB 阅读器
 src/          Express 服务、解析器、任务和 EPUB 生成器
 scripts/      离线、真实源站和发布验收脚本
 test/         Node.js 自动化测试与网页样本
