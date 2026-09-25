@@ -1,24 +1,30 @@
 package com.wenku8.epubstudio.ui
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.wenku8.epubstudio.model.BookshelfEntry
 import com.wenku8.epubstudio.model.BookshelfSource
+import com.wenku8.epubstudio.ui.cover.CoverImage
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Text
@@ -34,6 +40,7 @@ fun BookshelfScreen(
     onOpenRemote: (BookshelfEntry) -> Unit,
 ) {
     var showHistory by remember { mutableStateOf(false) }
+    var activeEntry by remember { mutableStateOf<BookshelfEntry?>(null) }
     Column(Modifier.fillMaxWidth().padding(top = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
             TextButton(text = if (showHistory) "返回书架" else "导出记录", onClick = { showHistory = !showHistory })
@@ -68,35 +75,70 @@ fun BookshelfScreen(
             Text("共 ${state.bookshelf.size} 本", color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f), fontSize = 13.sp)
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(state.bookshelf, key = { it.id }) { entry ->
-                    BookshelfCard(entry, viewModel::markShelfRead, viewModel::setPinned, viewModel::removeFromShelf, onOpenLocal, onOpenRemote)
+                    BookshelfCard(entry) { activeEntry = it }
                 }
             }
         }
+    }
+
+    activeEntry?.let { entry ->
+        BookActionsDialog(
+            entry = entry,
+            onDismiss = { activeEntry = null },
+            onRead = {
+                viewModel.markShelfRead(entry.id)
+                onOpenLocal(entry)
+                activeEntry = null
+            },
+            onOpenRemote = {
+                onOpenRemote(entry)
+                activeEntry = null
+            },
+            onTogglePin = {
+                viewModel.setPinned(entry.id, !entry.isPinned)
+                activeEntry = null
+            },
+            onExpandAuthor = {
+                viewModel.expandAuthor(entry.bookId)
+                activeEntry = null
+            },
+            onRemove = {
+                viewModel.removeFromShelf(entry.id)
+                activeEntry = null
+            },
+        )
     }
 }
 
 @Composable
 private fun BookshelfCard(
     entry: BookshelfEntry,
-    onRead: (String) -> Unit,
-    onPin: (String, Boolean) -> Unit,
-    onRemove: (String) -> Unit,
-    onOpenLocal: (BookshelfEntry) -> Unit,
-    onOpenRemote: (BookshelfEntry) -> Unit,
+    onOpen: (BookshelfEntry) -> Unit,
 ) {
-    Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(16.dp)) {
-        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text(entry.title, fontSize = 17.sp, fontWeight = FontWeight.Bold, maxLines = 2)
-            Text("${entry.author} · ${if (entry.source == BookshelfSource.LOCAL_EPUB) "本地 EPUB" else "Wenku8"}", fontSize = 13.sp, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f))
-            if (entry.wordCount != null) Text("${entry.wordCount} 字", fontSize = 12.sp, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f))
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                if (entry.source == BookshelfSource.LOCAL_EPUB) {
-                    TextButton(text = "继续阅读", onClick = { onRead(entry.id); entry.localUri?.let { onOpenLocal(entry) } })
-                } else {
-                    TextButton(text = "打开详情", onClick = { onOpenRemote(entry) })
+    Card(
+        modifier = Modifier.fillMaxWidth().clickable { onOpen(entry) },
+        insideMargin = PaddingValues(12.dp),
+    ) {
+        Row(verticalAlignment = Alignment.Top) {
+            CoverImage(
+                url = entry.coverUrl,
+                contentDescription = entry.title,
+                modifier = Modifier.size(64.dp, 88.dp).clip(RoundedCornerShape(6.dp)),
+                targetWidthDp = 192,
+            )
+            Column(
+                modifier = Modifier.weight(1f).padding(start = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(entry.title, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 2)
+                Text(entry.author, fontSize = 13.sp, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f), maxLines = 1)
+                val meta = buildList {
+                    add(if (entry.source == BookshelfSource.LOCAL_EPUB) "本地 EPUB" else "Wenku8")
+                    entry.wordCount?.let { add("${formatWordCount(it)} 字") }
+                    if (entry.chapterCount > 0) add("${entry.chapterCount} 章")
+                    if (entry.isPinned) add("置顶")
                 }
-                TextButton(text = if (entry.isPinned) "取消置顶" else "置顶", onClick = { onPin(entry.id, !entry.isPinned) })
-                TextButton(text = "移除", onClick = { onRemove(entry.id) })
+                Text(meta.joinToString(" · "), fontSize = 12.sp, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .6f), maxLines = 1)
             }
         }
     }

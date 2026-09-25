@@ -78,6 +78,7 @@ import com.wenku8.epubstudio.settings.AppThemeMode
 import com.wenku8.epubstudio.model.Chapter
 import com.wenku8.epubstudio.model.ExportJob
 import com.wenku8.epubstudio.model.JobStatus
+import com.wenku8.epubstudio.model.SearchField
 import com.wenku8.epubstudio.ui.CreateStep
 import com.wenku8.epubstudio.ui.StudioTab
 import com.wenku8.epubstudio.ui.StudioUiState
@@ -156,7 +157,14 @@ private fun StudioApp(viewModel: StudioViewModel, onLogin: () -> Unit, onImportE
                 state.tab == StudioTab.STATS -> ReadingStatsScreen(state.readingStats, viewModel::clearReadingStats)
                 state.tab == StudioTab.SETTINGS -> SettingsScreen(viewModel, onImportEpub)
                 state.step == CreateStep.SOURCE -> SourceScreen(state, viewModel)
-                state.step == CreateStep.DETAIL -> state.book?.let { BookDetailScreen(it, state.index?.chapters?.size ?: 0, viewModel) } ?: SourceScreen(state, viewModel)
+                state.step == CreateStep.DETAIL -> state.book?.let {
+                    BookDetailScreen(it, state.index?.chapters?.size ?: 0, viewModel) { tag ->
+                        viewModel.setSearchField(SearchField.TITLE)
+                        viewModel.setSearchQuery(tag)
+                        viewModel.setTab(StudioTab.EXPLORE)
+                        viewModel.searchLocal()
+                    }
+                } ?: SourceScreen(state, viewModel)
                 state.step == CreateStep.CHAPTERS -> ChaptersScreen(state, viewModel)
                 state.step == CreateStep.EXPORT -> ExportScreen(state, viewModel)
                 state.step == CreateStep.PROGRESS -> ProgressScreen(state, viewModel)

@@ -114,5 +114,47 @@ class CatalogRepository(private val context: Context) {
         }
     }
 
+    /**
+     * 显式抓取某作者的全部作品。
+     * 仅由用户在「书籍操作」界面点击触发，页面打开时绝不自动调用。
+     */
+    fun expandAuthor(bookId: String, onProgress: (String) -> Unit = {}) {
+        scope.launch {
+            val author = runCatching { http.fetchText(Wenku8Urls.articleInfo(bookId), "catalog-author", Wenku8Urls.BASE) }
+                .map { Wenku8Parser.parseAuthorLink(it.html, it.finalUrl) }
+                .getOrNull() ?: run {
+                    onProgress("未能获取该书的作者页")
+                    return@launch
+                }
+            val collected = mutableSetOf<String>()
+            var pageNo = 1
+            while (pageNo <= MAX_AUTHOR_PAGES) {
+                val target = if (pageNo == 1) author else author.replace(Regex("([?&]page=)\\d+"), "$1$page")
+                val page = runCatching { http.fetchText(target, "catalog-author", Wenku8Urls.BASE) }.getOrNull() ?: break
+                val links = runCatching { Wenku8Parser.parseBookLinks(page.html, page.finalUrl) }.getOrDefault(emptyList())
+                if (links.isEmpty()) break
+                links.forEach { if (it.id != bookId) collected.add(it.id) }
+                if (links.size < AUTHOR_PAGE_SIZE) break
+                pageNo++
+            }
+            onProgress("已获取 ${collected.size} 个同作者条目，正在补全详情…")
+            for (id in collected) {
+                if (index.get(id) != null) continue
+                runCatching {
+                    val detail = http.fetchText(Wenku8Urls.articleInfo(id), "catalog-author", Wenku8Urls.BASE)
+                    Wenku8Parser.parseCatalogEntry(detail.html, detail.finalUrl)
+                }.getOrNull()?.let { entry ->
+                    lock.withLock { entries[entry.id] = entry }
+                }
+            }
+            lock.withLock { index = CatalogIndex(entries.values); mutable.value = mutable.value.copy(stats = crawler.stats(entries, cursor)) }
+        }
+    }
+
+    private companion object {
+        const val AUTHOR_PAGE_SIZE = 20
+        const val MAX_AUTHOR_PAGES = 3
+    }
+
     fun clearMessage() { mutable.value = mutable.value.copy(message = null) }
 }

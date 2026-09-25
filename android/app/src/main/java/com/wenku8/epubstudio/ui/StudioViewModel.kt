@@ -190,6 +190,24 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
 
     fun updateCatalog(budget: Int = 200) = catalogRepository.update(budget)
 
+    /** 由用户在书架操作界面显式触发：抓取该作者的作品。被动触发，不由打开页面自动执行。 */
+    fun expandAuthor(bookId: String) {
+        val before = catalogRepository.cachedSize()
+        viewModelScope.launch {
+            mutable.update { it.copy(exploreMessage = "正在抓取同作者作品…") }
+            catalogRepository.expandAuthor(bookId) { progress ->
+                mutable.update { it.copy(exploreMessage = progress) }
+            }
+            val added = catalogRepository.cachedSize() - before
+            mutable.update { it.copy(exploreMessage = "同作者作品已补充 $added 本") }
+        }
+    }
+
+    /** 显式加载单本完整详情（仅由用户点击触发）。 */
+    fun loadFullDetail(bookId: String, onDone: () -> Unit = {}) = catalogRepository.ensureBook(bookId) {
+        onDone()
+    }
+
     fun catalogTagList(): List<String> = catalogRepository.tagList()
 
     fun addToShelf(book: Book, chapterCount: Int = state.value.index?.chapters?.size ?: 0) {
