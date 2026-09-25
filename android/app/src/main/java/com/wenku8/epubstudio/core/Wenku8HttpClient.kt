@@ -5,6 +5,7 @@ import com.wenku8.epubstudio.model.DownloadedImage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.Call
+import okhttp3.CookieJar
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
@@ -17,9 +18,10 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import kotlin.math.max
 
-class Wenku8HttpClient(private val cacheDirectory: File) {
+class Wenku8HttpClient(private val cacheDirectory: File, sessionCookieJar: CookieJar? = null) {
     private val activeCalls = ConcurrentHashMap<String, MutableSet<Call>>()
     private val client = OkHttpClient.Builder()
+        .apply { sessionCookieJar?.let { cookieJar(it) } }
         .connectTimeout(20, TimeUnit.SECONDS)
         .readTimeout(45, TimeUnit.SECONDS)
         .followRedirects(false)

@@ -5,6 +5,8 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.wenku8.epubstudio.Wenku8Application
 import com.wenku8.epubstudio.model.Book
+import com.wenku8.epubstudio.model.SearchBook
+import com.wenku8.epubstudio.model.SearchField
 import com.wenku8.epubstudio.model.BookIndex
 import com.wenku8.epubstudio.model.ExportJob
 import com.wenku8.epubstudio.model.JobStatus
@@ -14,11 +16,11 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-enum class StudioTab { CREATE, HISTORY }
-enum class CreateStep { SOURCE, CHAPTERS, EXPORT, PROGRESS }
+enum class StudioTab { SEARCH, CREATE, HISTORY, SETTINGS }
+enum class CreateStep { SOURCE, DETAIL, CHAPTERS, EXPORT, PROGRESS }
 
 data class StudioUiState(
-    val tab: StudioTab = StudioTab.CREATE,
+    val tab: StudioTab = StudioTab.SEARCH,
     val step: CreateStep = CreateStep.SOURCE,
     val sourceUrl: String = "https://www.wenku8.net/novel/2/2835/index.htm",
     val book: Book? = null,
@@ -30,12 +32,23 @@ data class StudioUiState(
     val message: String? = null,
     val activeJobId: String? = null,
     val jobs: List<ExportJob> = emptyList(),
+    val searchQuery: String = "",
+    val searchField: SearchField = SearchField.TITLE,
+    val searchResults: List<SearchBook> = emptyList(),
+    val searchHistory: List<String> = emptyList(),
+    val searchBusy: Boolean = false,
+    val searchMessage: String? = null,
+    val loggedIn: Boolean = false,
 )
 
 class StudioViewModel(application: Application) : AndroidViewModel(application) {
-    private val manager = (application as Wenku8Application).jobManager
+    private val app = application as Wenku8Application
+    private val manager = app.jobManager
+    private val searchProvider = app.searchProvider
+    private val settingsRepository = app.settingsRepository
     private val mutable = MutableStateFlow(StudioUiState())
     val state: StateFlow<StudioUiState> = mutable.asStateFlow()
+    val appTheme = settingsRepository.appTheme
 
     init {
         viewModelScope.launch {
@@ -46,6 +59,10 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
                 }
             }
         }
+        mutable.update { it.copy(loggedIn = app.sessionStore.hasSession()) }
+        viewModelScope.launch {
+            settingsRepository.searchHistory.collect { history -> mutable.update { it.copy(searchHistory = history) } }
+        }
     }
 
     fun setTab(tab: StudioTab) = mutable.update { it.copy(tab = tab, message = null) }
@@ -54,18 +71,44 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     fun setCover(value: Boolean) = mutable.update { it.copy(includeCover = value) }
     fun clearMessage() = mutable.update { it.copy(message = null) }
 
+    fun setSearchQuery(value: String) = mutable.update { it.copy(searchQuery = value, searchMessage = null) }
+    fun setSearchField(value: SearchField) = mutable.update { it.copy(searchField = value) }
+    fun refreshSession() = mutable.update { it.copy(loggedIn = app.sessionStore.hasSession()) }
+    fun clearSearchHistory() { viewModelScope.launch { settingsRepository.clearSearchHistory() } }
+    fun searchBooks() {
+        val current = state.value
+        if (current.searchQuery.isBlank()) return
+        viewModelScope.launch {
+            mutable.update { it.copy(searchBusy = true, searchMessage = null) }
+            runCatching { searchProvider.search(current.searchQuery, current.searchField) }
+                .onSuccess { results -> mutable.update { it.copy(searchBusy = false, searchResults = results, loggedIn = app.sessionStore.hasSession()) }; settingsRepository.recordSearch(current.searchQuery) }
+                .onFailure { error -> mutable.update { it.copy(searchBusy = false, searchMessage = error.message ?: "搜索失败。", loggedIn = app.sessionStore.hasSession()) } }
+        }
+    }
+    fun openSearchBook(book: SearchBook) {
+        mutable.update { it.copy(sourceUrl = book.sourceUrl, tab = StudioTab.CREATE, step = CreateStep.SOURCE, book = null, index = null) }
+        parseSource()
+    }
+    fun setThemeMode(mode: com.wenku8.epubstudio.settings.AppThemeMode) { viewModelScope.launch { settingsRepository.setThemeMode(mode) } }
+    fun setDynamicColor(enabled: Boolean) { viewModelScope.launch { settingsRepository.setDynamicColor(enabled) } }
+    fun setAccentColor(color: Int) { viewModelScope.launch { settingsRepository.setAccentColor(color) } }
+
     fun parseSource() {
         val value = state.value.sourceUrl.trim()
         if (value.isEmpty()) { mutable.update { it.copy(message = "请输入书籍或目录网址。") }; return }
         viewModelScope.launch {
             mutable.update { it.copy(busy = true, message = null) }
             runCatching { manager.parseSource(value) }
-                .onSuccess { (book, index) -> mutable.update { it.copy(busy = false, book = book, index = index, selectedIds = index.chapters.map { chapter -> chapter.id }.toSet(), step = CreateStep.CHAPTERS) } }
+                .onSuccess { (book, index) -> mutable.update { it.copy(busy = false, book = book, index = index, selectedIds = index.chapters.map { chapter -> chapter.id }.toSet(), step = CreateStep.DETAIL) } }
                 .onFailure { error -> mutable.update { it.copy(busy = false, message = error.message ?: "解析失败。") } }
         }
     }
 
     fun selectAll() = mutable.update { current -> current.copy(selectedIds = current.index?.chapters?.map { it.id }?.toSet() ?: emptySet()) }
+    fun toChapters() {
+        if (state.value.index?.chapters.isNullOrEmpty()) { mutable.update { it.copy(message = "未找到目录章节。") }; return }
+        mutable.update { it.copy(step = CreateStep.CHAPTERS, message = null) }
+    }
     fun clearSelection() = mutable.update { it.copy(selectedIds = emptySet()) }
     fun toggleChapter(id: String) = mutable.update { current -> current.copy(selectedIds = if (id in current.selectedIds) current.selectedIds - id else current.selectedIds + id) }
     fun backToSource() = mutable.update { it.copy(step = CreateStep.SOURCE, message = null) }

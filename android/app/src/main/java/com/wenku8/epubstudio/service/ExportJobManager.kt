@@ -3,6 +3,7 @@ package com.wenku8.epubstudio.service
 import android.content.Context
 import android.net.Uri
 import com.wenku8.epubstudio.core.SourceKind
+import com.wenku8.epubstudio.core.Wenku8SessionStore
 import com.wenku8.epubstudio.core.Wenku8Exception
 import com.wenku8.epubstudio.core.Wenku8HttpClient
 import com.wenku8.epubstudio.core.Wenku8Parser
@@ -38,10 +39,10 @@ import java.text.Normalizer
 import java.time.Instant
 import java.util.UUID
 
-class ExportJobManager(private val context: Context) {
+class ExportJobManager(private val context: Context, sessionStore: Wenku8SessionStore? = null) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val repository = JobRepository(context.filesDir)
-    private val http = Wenku8HttpClient(File(context.cacheDir, "wenku8"))
+    private val http = Wenku8HttpClient(File(context.cacheDir, "wenku8"), sessionStore?.cookieJar())
     private val fileStore = EpubFileStore(context)
     private val epubBuilder = EpubBuilder()
     private val outputDirectory = File(context.filesDir, "output").apply { mkdirs() }
@@ -228,4 +229,6 @@ class ExportJobManager(private val context: Context) {
     }
 
     fun get(id: String): ExportJob? = state.value[id]
+
+    fun httpClient(): Wenku8HttpClient = http
 }

@@ -27,6 +27,8 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -36,6 +38,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -60,6 +63,10 @@ import top.yukonga.miuix.kmp.theme.ColorSchemeMode
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.theme.ThemeController
 import com.wenku8.epubstudio.R
+import com.wenku8.epubstudio.Wenku8Application
+import com.wenku8.epubstudio.auth.LoginActivity
+import com.wenku8.epubstudio.reader.ReaderActivity
+import com.wenku8.epubstudio.settings.AppThemeMode
 import com.wenku8.epubstudio.model.Chapter
 import com.wenku8.epubstudio.model.ExportJob
 import com.wenku8.epubstudio.model.JobStatus
@@ -72,6 +79,7 @@ private val MiSansFont = FontFamily(Font(R.font.misansvf))
 
 class MainActivity : ComponentActivity() {
     private val notificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    private val loginLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { studioViewModel.refreshSession() }
     private val studioViewModel: StudioViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: android.os.Bundle?) {
@@ -81,6 +89,7 @@ class MainActivity : ComponentActivity() {
             notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
         setContent {
+            val appSettings by (application as Wenku8Application).settingsRepository.appTheme.collectAsStateWithLifecycle()
             val baseTextStyles = MiuixTheme.textStyles
             val textStyles = baseTextStyles.copy(
                 main = baseTextStyles.main.copy(fontFamily = MiSansFont),
@@ -99,26 +108,46 @@ class MainActivity : ComponentActivity() {
                 title4 = baseTextStyles.title4.copy(fontFamily = MiSansFont),
             )
             MiuixTheme(
-                controller = remember {
-                    ThemeController(ColorSchemeMode.MonetSystem, keyColor = Color(0xFFA34B2F))
+                controller = remember(appSettings.mode, appSettings.useDynamicColor, appSettings.accentColor) {
+                    ThemeController(
+                        colorSchemeMode = if (appSettings.useDynamicColor) {
+                            when (appSettings.mode) {
+                                AppThemeMode.SYSTEM -> ColorSchemeMode.MonetSystem
+                                AppThemeMode.LIGHT -> ColorSchemeMode.MonetLight
+                                AppThemeMode.DARK -> ColorSchemeMode.MonetDark
+                                AppThemeMode.MONET -> ColorSchemeMode.MonetSystem
+                            }
+                        } else {
+                            when (appSettings.mode) {
+                                AppThemeMode.SYSTEM -> ColorSchemeMode.System
+                                AppThemeMode.LIGHT -> ColorSchemeMode.Light
+                                AppThemeMode.DARK -> ColorSchemeMode.Dark
+                                AppThemeMode.MONET -> ColorSchemeMode.System
+                            }
+                        },
+                        keyColor = Color(appSettings.accentColor),
+                    )
                 },
                 textStyles = textStyles,
             ) {
-                StudioApp(studioViewModel)
+                StudioApp(studioViewModel) { loginLauncher.launch(android.content.Intent(this, LoginActivity::class.java)) }
             }
         }
     }
 }
 
 @Composable
-private fun StudioApp(viewModel: StudioViewModel) {
+private fun StudioApp(viewModel: StudioViewModel, onLogin: () -> Unit) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     Scaffold(
         topBar = {
             TopAppBar(
                 title = when {
+                    state.tab == StudioTab.SEARCH -> "搜索轻小说"
+                    state.tab == StudioTab.SETTINGS -> "设置"
                     state.tab == StudioTab.HISTORY -> "历史任务"
                     state.step == CreateStep.SOURCE -> "文库 EPUB 工坊"
+                    state.step == CreateStep.DETAIL -> "书籍详情"
                     state.step == CreateStep.CHAPTERS -> "选择章节"
                     state.step == CreateStep.EXPORT -> "导出设置"
                     else -> "导出进度"
@@ -127,6 +156,12 @@ private fun StudioApp(viewModel: StudioViewModel) {
         },
         bottomBar = {
             NavigationBar {
+                NavigationBarItem(
+                    selected = state.tab == StudioTab.SEARCH,
+                    onClick = { viewModel.setTab(StudioTab.SEARCH) },
+                    icon = Icons.Default.Search,
+                    label = "搜索",
+                )
                 NavigationBarItem(
                     selected = state.tab == StudioTab.CREATE,
                     onClick = { viewModel.setTab(StudioTab.CREATE) },
@@ -139,13 +174,22 @@ private fun StudioApp(viewModel: StudioViewModel) {
                     icon = Icons.Default.History,
                     label = "历史",
                 )
+                NavigationBarItem(
+                    selected = state.tab == StudioTab.SETTINGS,
+                    onClick = { viewModel.setTab(StudioTab.SETTINGS) },
+                    icon = Icons.Default.Settings,
+                    label = "设置",
+                )
             }
         },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).padding(horizontal = 18.dp)) {
             when {
+                state.tab == StudioTab.SEARCH -> SearchScreen(state, viewModel, onLogin)
+                state.tab == StudioTab.SETTINGS -> SettingsScreen(viewModel)
                 state.tab == StudioTab.HISTORY -> HistoryScreen(state.jobs, viewModel)
                 state.step == CreateStep.SOURCE -> SourceScreen(state, viewModel)
+                state.step == CreateStep.DETAIL -> state.book?.let { BookDetailScreen(it, state.index?.chapters?.size ?: 0, viewModel) } ?: SourceScreen(state, viewModel)
                 state.step == CreateStep.CHAPTERS -> ChaptersScreen(state, viewModel)
                 state.step == CreateStep.EXPORT -> ExportScreen(state, viewModel)
                 state.step == CreateStep.PROGRESS -> ProgressScreen(state, viewModel)
@@ -290,6 +334,7 @@ private fun ProgressContent(job: ExportJob, viewModel: StudioViewModel) {
 
 @Composable
 private fun HistoryScreen(jobs: List<ExportJob>, viewModel: StudioViewModel) {
+    val context = LocalContext.current
     if (jobs.isEmpty()) { Text("还没有导出任务。", Modifier.padding(top = 20.dp), color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.72f)); return }
     LazyColumn(Modifier.fillMaxWidth().padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         items(jobs, key = { it.id }) { job ->
@@ -302,6 +347,9 @@ private fun HistoryScreen(jobs: List<ExportJob>, viewModel: StudioViewModel) {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             TextButton(text = "保存", onClick = { viewModel.save(job.id) })
                             TextButton(text = "分享", onClick = { viewModel.share(job.id) })
+                            job.output?.let { output ->
+                                TextButton(text = "阅读", onClick = { context.startActivity(android.content.Intent(context, ReaderActivity::class.java).putExtra(ReaderActivity.EXTRA_URI, output.uri).putExtra(ReaderActivity.EXTRA_BOOK_ID, job.id)) })
+                            }
                         }
                     }
                 }

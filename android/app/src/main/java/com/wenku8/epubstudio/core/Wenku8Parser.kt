@@ -4,6 +4,8 @@ import com.wenku8.epubstudio.model.Book
 import com.wenku8.epubstudio.model.BookIndex
 import com.wenku8.epubstudio.model.Chapter
 import com.wenku8.epubstudio.model.ContentBlock
+import com.wenku8.epubstudio.model.SearchBook
+import com.wenku8.epubstudio.model.SearchField
 import com.wenku8.epubstudio.model.ParsedChapter
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
@@ -32,6 +34,9 @@ object Wenku8Parser {
             category = cleanInline(content.selectFirst("a[href*=articlelist.php]")?.text()).ifBlank { "轻小说" },
             status = fieldValue(document, "文章状态", "文章状态：", "文章状态:"),
             updatedAt = fieldValue(document, "最后更新", "最后更新：", "最后更新:"),
+            wordCount = parseWordCount(document),
+            latestChapter = fieldValue(document, "最新章节", "最新章节：", "最新章节:").ifBlank { content.selectFirst("a[href*=/novel/][href$=index.htm]")?.text().orEmpty() },
+            isComplete = fieldValue(document, "文章状态", "文章状态：", "文章状态:").contains("完结"),
             tags = tags,
             summary = cleanText(summary).replace(Regex("^内容简介\\s*[：:]\\s*"), ""),
             coverUrl = Wenku8Url.resolve(bookUrl, coverNode?.attr("src")),
@@ -116,6 +121,44 @@ object Wenku8Parser {
         flush()
         return blocks
     }
+
+    fun looksLikeLoginPage(html: String): Boolean {
+        val head = html.take(30_000)
+        return Regex("<title[^>]*>[^<]*(登录|login)|name=[\"']username[\"']|action=[\"'][^\"']*login", RegexOption.IGNORE_CASE).containsMatchIn(head)
+    }
+
+    fun parseSearchResults(html: String, finalUrl: String): List<SearchBook> {
+        if (looksLikeLoginPage(html)) throw Wenku8Exception("搜索需要登录轻小说文库。", "AUTH_REQUIRED")
+        val document = Jsoup.parse(html, finalUrl)
+        val results = mutableListOf<SearchBook>()
+        val seen = mutableSetOf<String>()
+        for (anchor in document.select("a[href*=/book/],a[href*=articleinfo.php]")) {
+            val href = anchor.attr("href")
+            val id = Regex("/book/(\\d+)\\.htm", RegexOption.IGNORE_CASE).find(href)?.groupValues?.get(1)
+                ?: Regex("[?&]id=(\\d+)", RegexOption.IGNORE_CASE).find(href)?.groupValues?.get(1)
+                ?: continue
+            if (!seen.add(id)) continue
+            val container = anchor.parents().firstOrNull { it.tagName() in setOf("tr", "li", "div") } ?: anchor.parent() ?: continue
+            val raw = cleanInline(container.text())
+            val title = cleanInline(anchor.text()).ifBlank { cleanInline(container.selectFirst("a[href*=/book/]")?.text()) }.ifBlank { continue }
+            val image = container.selectFirst("img[src]")?.let { Wenku8Url.resolve(finalUrl, it.attr("src")) }
+            results += SearchBook(
+                id = id,
+                title = title,
+                author = Regex("作者\\s*[：:]\\s*([^\\s/]+)").find(raw)?.groupValues?.get(1).orEmpty(),
+                category = Regex("分类\\s*[：:]\\s*([^\\s/]+)").find(raw)?.groupValues?.get(1).orEmpty(),
+                status = Regex("状态\\s*[：:]\\s*([^\\s/]+)").find(raw)?.groupValues?.get(1).orEmpty(),
+                updatedAt = Regex("(?:更新|最后更新)\\s*[：:]\\s*(\\d{4}-\\d{2}-\\d{2})").find(raw)?.groupValues?.get(1).orEmpty(),
+                wordCount = Regex("(?:字数|全文长度)\\s*[：:]\\s*([\\d,，]+)\\s*字").find(raw)?.groupValues?.get(1)?.replace(",", "")?.replace("，", "")?.toLongOrNull(),
+                coverUrl = image,
+                latestChapter = Regex("最新章节\\s*[：:]\\s*(.+)").find(raw)?.groupValues?.get(1).orEmpty(),
+                sourceUrl = Wenku8Urls.book(id),
+            )
+        }
+        return results
+    }
+
+    private fun parseWordCount(document: org.jsoup.nodes.Document): Long? = Regex("全文长度\\s*[：:]\\s*([\\d,，]+)\\s*字").find(document.text())?.groupValues?.get(1)?.replace(",", "")?.replace("，", "")?.toLongOrNull()
 
     private fun fieldValue(document: org.jsoup.nodes.Document, vararg labels: String): String {
         for (label in labels) {
