@@ -58,9 +58,9 @@ class EpubReaderRepository(private val context: Context? = null) {
                 val id = item.attr("id")
                 id to ReaderManifestItem(id, resolvePath(packageDir, item.attr("href")), item.attr("media-type"), item.attr("properties"))
             }
-            val title = packageDoc.selectFirst("metadata > title, metadata title")?.text()?.trim().orEmpty().ifBlank { "EPUB 阅读" }
-            val author = packageDoc.selectFirst("metadata > creator, metadata creator")?.text()?.trim().orEmpty()
-            val language = packageDoc.selectFirst("metadata > language, metadata language")?.text()?.trim().orEmpty().ifBlank { "zh-CN" }
+            val title = packageDoc.select("metadata > *").firstOrNull { it.tagName().substringAfter(':').equals("title", ignoreCase = true) }?.text()?.trim().orEmpty().ifBlank { "EPUB 阅读" }
+            val author = packageDoc.select("metadata > *").firstOrNull { it.tagName().substringAfter(':').equals("creator", ignoreCase = true) }?.text()?.trim().orEmpty()
+            val language = packageDoc.select("metadata > *").firstOrNull { it.tagName().substringAfter(':').equals("language", ignoreCase = true) }?.text()?.trim().orEmpty().ifBlank { "zh-CN" }
             val toc = readToc(entries, packageDir, manifest)
             val chapters = packageDoc.select("spine itemref").mapNotNull { ref ->
                 val item = manifest[ref.attr("idref")] ?: return@mapNotNull null
