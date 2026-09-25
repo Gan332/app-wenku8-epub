@@ -3,6 +3,7 @@ package com.wenku8.epubstudio
 import com.wenku8.epubstudio.core.Wenku8Parser
 import com.wenku8.epubstudio.core.Wenku8Url
 import com.wenku8.epubstudio.epub.EpubBuilder
+import com.wenku8.epubstudio.reader.EpubReaderRepository
 import com.wenku8.epubstudio.model.Book
 import com.wenku8.epubstudio.model.Chapter
 import com.wenku8.epubstudio.model.ContentBlock
@@ -77,6 +78,10 @@ class CoreSmokeTest {
                 assertEquals("application/epub+zip", zip.getInputStream(first).readBytes().decodeToString())
                 assertTrue(zip.getEntry("EPUB/package.opf") != null)
             }
+            val readerBook = EpubReaderRepository.parseArchive("1", output)
+            assertEquals("测试书", readerBook.title)
+            assertTrue(readerBook.chapters.isNotEmpty())
+            assertTrue(readerBook.chapters.first().blocks.any { it is com.wenku8.epubstudio.reader.ReaderBlock.Paragraph })
         } finally {
             directory.deleteRecursively()
         }

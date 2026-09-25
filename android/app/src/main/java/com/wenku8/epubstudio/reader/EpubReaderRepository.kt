@@ -15,7 +15,7 @@ import java.util.zip.ZipFile
 class EpubReaderRepository(private val context: Context) {
     fun open(bookId: String, uri: Uri): ReaderBook {
         val file = copyToCache(uri)
-        return runCatching { parse(bookId, file) }.getOrElse { error ->
+        return runCatching { parseArchive(bookId, file) }.getOrElse { error ->
             if (error is Wenku8Exception) throw error
             throw Wenku8Exception("无法打开 EPUB：${error.message ?: "文件格式无效"}", "EPUB_PARSE_FAILED", error)
         }
@@ -35,7 +35,7 @@ class EpubReaderRepository(private val context: Context) {
         return target
     }
 
-    private fun parse(bookId: String, file: File): ReaderBook {
+    internal fun parseArchive(bookId: String, file: File): ReaderBook {
         ZipFile(file).use { zip ->
             val entries = linkedMapOf<String, ByteArray>()
             var total = 0L
