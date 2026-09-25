@@ -129,7 +129,7 @@ class CatalogRepository(private val context: Context) {
             val collected = mutableSetOf<String>()
             var pageNo = 1
             while (pageNo <= MAX_AUTHOR_PAGES) {
-                val target = if (pageNo == 1) author else author.replace(Regex("([?&]page=)\\d+"), "$1$page")
+                val target = if (pageNo == 1) author else author.replace(Regex("([?&]page=)\\d+"), "\$1$pageNo")
                 val page = runCatching { http.fetchText(target, "catalog-author", Wenku8Urls.BASE) }.getOrNull() ?: break
                 val links = runCatching { Wenku8Parser.parseBookLinks(page.html, page.finalUrl) }.getOrDefault(emptyList())
                 if (links.isEmpty()) break
