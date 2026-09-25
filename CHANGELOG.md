@@ -2,6 +2,15 @@
 
 本项目遵循语义化版本。
 
+## [0.2.0] - 2026-09-25
+
+- Android 迁移为纯 Kotlin + Jetpack Compose
+- 使用官方 MiuiX v0.8.8 作为 UI 基础
+- 移除 Android Capacitor WebView 和 TypeScript 运行层
+- 原生任务队列、进度通知、取消、历史恢复和文件保存
+- 原生 OkHttp 限流/GBK、Jsoup 解析和 EPUB 打包
+- Android MiSans 字体、动态主题和 GitHub Actions 原生 APK 门禁
+
 ## [0.1.0] - 2026-09-25
 
 首个规范化 MVP：
