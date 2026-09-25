@@ -27,7 +27,7 @@ const included = [
   'src',
   'test',
 ];
-const excludedNames = new Set(['node_modules', '.git', 'data', 'output', 'dist', 'work', 'outputs']);
+const excludedNames = new Set(['node_modules', '.git', 'data', 'output', 'dist', 'work', 'outputs', 'fixtures']);
 
 async function collectFiles(relativePath) {
   const absolutePath = path.join(root, relativePath);

@@ -117,7 +117,7 @@ npm run release:package
 - `wenku8-epub-studio-v0.1.0.zip`
 - `wenku8-epub-studio-v0.1.0.zip.sha256`
 
-发布包不包含 `node_modules/`、任务记录、EPUB 输出或研究抓取文件。
+发布包不包含 `node_modules/`、任务记录、EPUB 输出、研究抓取文件或源站网页测试样本；测试样本仅保留在 Git 仓库中供开发回归使用。
 
 ## 文档
 
