@@ -86,11 +86,11 @@ object Wenku8Parser {
             }
             val index = imageUrls.size
             imageUrls += url
-            image.before(TextNode.create("\n@@WENKU8_IMAGE_$index@@\n"))
+            image.before(TextNode("\n@@WENKU8_IMAGE_$index@@\n"))
             image.remove()
         }
-        root.select("br").forEach { it.before(TextNode.create("\n")); it.remove() }
-        root.select("p").forEach { it.append(TextNode.create("\n")) }
+        root.select("br").forEach { it.before(TextNode("\n")); it.remove() }
+        root.select("p").forEach { it.append(TextNode("\n")) }
         val blocks = normalizeBlocks(root.text(), imageUrls.size)
         val plain = blocks.filterIsInstance<ContentBlock.Text>().joinToString("") { it.value }
         if (plain.length < 10 && imageUrls.isEmpty()) throw Wenku8Exception("章节正文为空：${chapter.title}", "EMPTY_CHAPTER")
