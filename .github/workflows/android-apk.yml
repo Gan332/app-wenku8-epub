@@ -20,7 +20,7 @@ concurrency:
 
 jobs:
   build-debug-apk:
-    name: Build debug APK
+    name: Build native Compose APK
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
@@ -28,14 +28,8 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v4
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-
       - name: Set up Java 21
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '21'
@@ -49,24 +43,16 @@ jobs:
             exit 1
           fi
           yes | "$SDKMANAGER" --licenses >/dev/null || true
-          "$SDKMANAGER" 'platform-tools' 'platforms;android-36' 'build-tools;35.0.0'
+          "$SDKMANAGER" 'platform-tools' 'platforms;android-36' 'build-tools;36.1.0'
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.11.1'
+          gradle-version: '9.4.1'
 
-      - name: Install JavaScript dependencies
-        run: npm install --no-audit --no-fund
-
-      - name: Type-check mobile core
-        run: npm run mobile:check
-
-      - name: Bundle mobile web assets
-        run: npm run mobile:bundle
-
-      - name: Sync Capacitor Android project
-        run: npx cap sync android
+      - name: Run Android unit tests
+        working-directory: android
+        run: gradle testDebugUnitTest --no-daemon --stacktrace
 
       - name: Build debug APK
         working-directory: android
