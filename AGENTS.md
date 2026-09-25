@@ -11,7 +11,7 @@
 
 当前主要发版对象是 **Android 原生应用**。Android 版本不需要 Node.js 服务，WebView 仅用于 wenku8 登录。
 
-当前版本：`0.5.0`（versionCode 5）
+当前版本：`0.6.0`（versionCode 6）
 
 仓库地址：`https://github.com/Gan332/app-wenku8-epub`
 
@@ -71,12 +71,34 @@ android/app/src/main/java/com/wenku8/epubstudio/
 
 - 只允许 wenku8.net / wenku8.cc / wenku8.com
 - 阻止本机和内网地址，重定向后重新校验
-- 搜索和部分探索接口需要用户主动登录
+- 搜索与浏览**不要求登录**，靠本地书目索引实现
 - **不得**绕过登录、验证码、付费墙或访问控制
 - **不得**保存用户密码
 - Cookie 使用 Keystore 加密保存，过期需清理
 - EPUB 解析必须限制解压大小、条目大小，并拒绝路径穿越
 - 不支持加密/DRM EPUB
+
+#### 免登录书目索引（0.6.0 起）
+
+只允许抓取 wenku8 对匿名访客公开返回 200 的页面：
+
+| 页面 | 用途 |
+| --- | --- |
+| `modules/article/articleinfo.php?id=N` | 书籍详情 |
+| `modules/article/authorarticle.php?author=X&page=N` | 同作者作品 |
+| `/zt/sugoi/{year}.php` | 年度精选榜 |
+| `/zt/booklist/{yyyyMM}.php` | 月度新书榜 |
+| `/novel/2/{id}/index.htm` | 章节目录 |
+
+以下接口由站点控制登录，**保持原样，不得规避**：
+
+- `modules/article/search.php`
+- `modules/article/articlelist.php`
+- `modules/article/toplist.php`
+- `modules/article/tags.php`
+
+抓取器 `CatalogCrawler` / `CatalogRepository` 必须使用**独立的无 Cookie 客户端**，
+即使设备存在登录态也不得携带 Cookie。
 
 ### 4.3 状态与持久化
 

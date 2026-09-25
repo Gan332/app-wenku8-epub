@@ -12,7 +12,9 @@
 - `settings/`：DataStore 应用主题、阅读设置、搜索历史和阅读进度
 - `auth/LoginActivity.kt`：仅用于 wenku8 登录和验证码的 WebView
 - `core/`：URL 白名单、OkHttp Cookie/限流、GBK 解码、搜索和 Jsoup 解析
-- `core/ExploreRepository.kt`：可扩展数据源和 Wenku8 探索页
+- `core/ExploreRepository.kt`：数据源抽象和 Wenku8 探索页
+- `core/CatalogCrawler.kt`：公开书目抓取（无 Cookie）
+- `core/CatalogIndex.kt`：本地书目索引与搜索
 - `data/`：DataStore 书架、阅读统计和设置持久化
 - `epub/EpubBuilder.kt`：EPUB 3 / NCX 与本地图片打包
 - `reader/`：EPUB 容器/目录解析、阅读器、背景、字体、沉浸模式和章节导航设置
