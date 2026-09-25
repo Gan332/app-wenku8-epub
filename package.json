@@ -1,0 +1,32 @@
+{
+  "name": "wenku8-epub-studio",
+  "version": "0.1.0",
+  "description": "将公开可访问的 wenku8 轻小说页面整理为包含插图的 EPUB 3 文件",
+  "main": "server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "test": "node --test --test-concurrency=1 test/*.test.js",
+    "test:live": "node scripts/test-live.js",
+    "smoke:epub": "node scripts/smoke-epub.js",
+    "release:package": "node scripts/package-release.js",
+    "verify": "npm run check && npm test && npm run smoke:epub",
+    "check": "node --check server.js && node --check src/app.js && node --check src/errors.js && node --check src/http.js && node --check src/wenku8.js && node --check src/epub.js && node --check src/jobs.js && node --check public/app.js && node --check scripts/epub-check.js && node --check scripts/smoke-epub.js && node --check scripts/test-live.js && node --check scripts/package-release.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "archiver": "^7.0.1",
+    "cheerio": "^1.1.2",
+    "express": "^5.1.0",
+    "iconv-lite": "^0.7.0"
+  },
+  "devDependencies": {
+    "saxes": "^6.0.0",
+    "yauzl": "^3.2.0"
+  },
+  "license": "MIT",
+  "private": true
+}

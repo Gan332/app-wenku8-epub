@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="theme-color" content="#f4efe6">
+  <title>文库 EPUB 工坊</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <div class="paper-noise" aria-hidden="true"></div>
+  <header class="site-header">
+    <a class="brand" href="/" aria-label="文库 EPUB 工坊首页">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 48 48" role="img"><path d="M9 8.5c7-1.3 12.2.4 15 4.7v28.1c-2.8-4.3-8-6-15-4.7V8.5Zm30 0c-7-1.3-12.2.4-15 4.7v28.1c2.8-4.3 8-6 15-4.7V8.5Z"/><path d="M24 13.2v28.1"/></svg>
+      </span>
+      <span><strong>文库 EPUB 工坊</strong><small>WENKU8 ARCHIVE STUDIO</small></span>
+    </a>
+    <div class="header-status"><i></i> 本地服务运行中</div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="eyebrow"><span>01</span> 从公开页面创建个人电子书</div>
+      <h1>让长篇轻小说，<br><em>整齐装进口袋。</em></h1>
+      <p>粘贴 wenku8 书籍链接，整理章节与插图，导出一个可离线阅读的 EPUB 文件。</p>
+      <div class="feature-pills" aria-label="功能特点">
+        <span>正文清理</span><span>插图本地化</span><span>EPUB 3</span><span>本地保存</span>
+      </div>
+    </section>
+
+    <section class="workspace" aria-label="EPUB 创建工作区">
+      <div class="step-panel active" data-step="1">
+        <div class="step-heading">
+          <span class="step-number">01</span>
+          <div><h2>添加书籍</h2><p>支持书籍页、目录页或纯书籍 ID</p></div>
+        </div>
+        <form id="source-form" class="url-form">
+          <label class="sr-only" for="source-url">wenku8 书籍网址</label>
+          <div class="url-input-wrap">
+            <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M10.6 13.4a4 4 0 0 0 5.7 0l2.1-2.1a4 4 0 0 0-5.7-5.7l-1.2 1.2M13.4 10.6a4 4 0 0 0-5.7 0l-2.1 2.1a4 4 0 1 0 5.7 5.7l1.2-1.2"/></svg>
+            <input id="source-url" name="url" type="text" inputmode="url" autocomplete="url" spellcheck="false" placeholder="https://www.wenku8.net/novel/2/2835/index.htm" required>
+          </div>
+          <button class="primary-button" type="submit"><span>解析书籍</span><b aria-hidden="true">→</b></button>
+        </form>
+        <div class="form-hints">
+          <span>支持 <code>/book/2835.htm</code></span>
+          <span>或 <code>/novel/分类/编号/index.htm</code></span>
+          <button class="text-button" type="button" id="example-button">填入示例</button>
+        </div>
+        <p class="inline-message" id="source-message" role="status" aria-live="polite"></p>
+      </div>
+
+      <div class="step-panel" data-step="2" hidden>
+        <div class="step-heading book-heading">
+          <span class="step-number">02</span>
+          <div class="book-title-block">
+            <p class="overline" id="book-category">轻小说</p>
+            <h2 id="book-title">等待解析</h2>
+            <p class="book-meta"><span id="book-author"></span><span id="book-status"></span></p>
+          </div>
+          <button class="secondary-button compact" type="button" data-back>更换书籍</button>
+        </div>
+        <div class="chapter-toolbar">
+          <label class="search-box">
+            <svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></svg>
+            <input id="chapter-search" type="search" placeholder="搜索章节标题…">
+          </label>
+          <div class="selection-actions">
+            <button class="text-button" type="button" data-select="all">全选</button>
+            <button class="text-button" type="button" data-select="none">清空</button>
+          </div>
+        </div>
+        <div class="selection-summary"><strong id="selected-count">0</strong> / <span id="total-count">0</span> 章已选择</div>
+        <div class="chapter-list" id="chapter-list"></div>
+        <p class="inline-message" id="chapter-message" role="status" aria-live="polite"></p>
+        <div class="chapter-next-actions">
+          <button class="primary-button" id="to-export-button" type="button">
+            <span>继续导出</span><b aria-hidden="true">→</b>
+          </button>
+        </div>
+      </div>
+
+      <div class="step-panel" data-step="3" hidden>
+        <div class="step-heading">
+          <span class="step-number">03</span>
+          <div><h2>导出 EPUB</h2><p>确认选项并开始本地整理</p></div>
+        </div>
+        <div class="export-summary">
+          <div><span>书籍</span><strong id="export-title">—</strong></div>
+          <div><span>章节</span><strong id="export-count">—</strong></div>
+          <div><span>格式</span><strong>EPUB 3 · 含图片</strong></div>
+        </div>
+        <label class="option-card">
+          <input id="include-cover" type="checkbox" checked>
+          <span class="custom-check" aria-hidden="true"></span>
+          <span><strong>包含书籍封面</strong><small>封面无法下载时自动跳过，不影响正文导出</small></span>
+        </label>
+        <div class="legal-note">
+          <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 3 4.5 6v5.4c0 4.6 3.1 8.3 7.5 9.6 4.4-1.3 7.5-5 7.5-9.6V6L12 3Z"/><path d="m9 12 2 2 4-4"/></svg>
+          <p><strong>仅供个人离线阅读</strong>请确认你拥有相应内容的合法使用权，并遵守源站条款。应用不会绕过登录、付费墙或访问验证。</p>
+        </div>
+        <div class="export-actions">
+          <button class="secondary-button" type="button" data-back>返回章节</button>
+          <button class="primary-button wide" type="button" id="export-button"><span>开始生成 EPUB</span><b aria-hidden="true">→</b></button>
+        </div>
+        <p class="inline-message" id="export-message" role="status" aria-live="polite"></p>
+      </div>
+    </section>
+
+    <section class="job-section" id="job-section" hidden aria-live="polite">
+      <div class="job-card">
+        <div class="job-card-heading">
+          <div><span class="overline">正在本地处理</span><h2 id="job-title">—</h2></div>
+          <span class="status-pill" id="job-status">等待中</span>
+        </div>
+        <div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i id="progress-bar"></i></div>
+        <div class="job-progress-line"><span id="job-message">准备中…</span><strong id="job-percent">0%</strong></div>
+          <div class="job-stats">
+            <div><span>章节进度</span><strong id="job-chapters">0 / 0</strong></div>
+            <div><span>插图进度</span><strong id="job-images">0</strong></div>
+            <div><span>保存位置</span><strong>本机 output 文件夹</strong></div>
+          </div>
+          <div class="job-warning" id="job-warning" hidden></div>
+        <div class="job-actions">
+          <button class="secondary-button" type="button" id="cancel-button">取消任务</button>
+          <a class="primary-button" id="download-button" href="#" hidden><span>下载 EPUB</span><b aria-hidden="true">↓</b></a>
+        </div>
+        <p class="inline-message" id="job-message-error" role="alert"></p>
+      </div>
+    </section>
+
+    <section class="history-section" id="history-section" hidden>
+      <div class="section-title"><div><span class="overline">最近任务</span><h2>导出记录</h2></div><button class="text-button" id="refresh-history" type="button">刷新</button></div>
+      <div class="history-list" id="history-list"></div>
+    </section>
+  </main>
+
+  <footer>
+    <p>文件仅保存在本机，关闭应用后任务记录仍会保留。</p>
+    <p>Wenku8 EPUB Studio · v0.1.0</p>
+  </footer>
+
+  <div class="toast-region" id="toast-region" aria-live="assertive" aria-atomic="true"></div>
+</body>
+</html>
