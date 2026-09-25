@@ -41,8 +41,11 @@ internal fun CatalogEntry.toSearchBook(): SearchBook = SearchBook(
     sourceUrl = sourceUrl,
 )
 
-enum class StudioTab { BOOKSHELF, EXPLORE, CREATE, STATS, SETTINGS }
+enum class StudioTab { BOOKSHELF, EXPLORE, CREATE, SETTINGS }
 enum class CreateStep { SOURCE, DETAIL, CHAPTERS, EXPORT, PROGRESS }
+
+/** 设置二级界面分区。 */
+enum class SettingsSection { OVERVIEW, APPEARANCE, READER, STATISTICS, CATALOG, ABOUT }
 
 data class StudioUiState(
     val tab: StudioTab = StudioTab.BOOKSHELF,
@@ -74,6 +77,8 @@ data class StudioUiState(
     val catalogProgress: Pair<Int, Int>? = null,
     val catalogUpdatedAt: Long = 0L,
     val localResults: List<CatalogEntry> = emptyList(),
+    val settingsSection: SettingsSection = SettingsSection.OVERVIEW,
+    val readerSettings: com.wenku8.epubstudio.settings.ReaderSettings = com.wenku8.epubstudio.settings.ReaderSettings(),
 )
 
 class StudioViewModel(application: Application) : AndroidViewModel(application) {
@@ -109,6 +114,11 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
             readingStatsRepository.stats.collect { stats -> mutable.update { it.copy(readingStats = stats) } }
         }
         viewModelScope.launch {
+            settingsRepository.readerSettings.collect { settings ->
+                mutable.update { it.copy(readerSettings = settings) }
+            }
+        }
+        viewModelScope.launch {
             catalogRepository.state.collect { catalog ->
                 val stats = catalog.stats
                 mutable.update {
@@ -125,6 +135,9 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun setTab(tab: StudioTab) = mutable.update { it.copy(tab = tab, message = null) }
+
+    fun openSettingsSection(section: SettingsSection) = mutable.update { it.copy(settingsSection = section) }
+    fun backSettings() = mutable.update { it.copy(settingsSection = SettingsSection.OVERVIEW) }
 
     /**
      * 公开探索来源：年度精选榜与月度新书榜，均为匿名可访问页面。
@@ -189,6 +202,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun updateCatalog(budget: Int = 200) = catalogRepository.update(budget)
+    fun clearCatalog() = catalogRepository.clear()
 
     /** 由用户在书架操作界面显式触发：抓取该作者的作品。被动触发，不由打开页面自动执行。 */
     fun expandAuthor(bookId: String) {
@@ -279,6 +293,21 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     fun setThemeMode(mode: com.wenku8.epubstudio.settings.AppThemeMode) { viewModelScope.launch { settingsRepository.setThemeMode(mode) } }
     fun setDynamicColor(enabled: Boolean) { viewModelScope.launch { settingsRepository.setDynamicColor(enabled) } }
     fun setAccentColor(color: Int) { viewModelScope.launch { settingsRepository.setAccentColor(color) } }
+
+    // 阅读器设置：与阅读器共用同一 DataStore，改动实时生效
+    fun setReaderFontSize(value: Float) { viewModelScope.launch { settingsRepository.setReaderFontSize(value) } }
+    fun setReaderFontWeight(value: Int) { viewModelScope.launch { settingsRepository.setReaderFontWeight(value) } }
+    fun setReaderLineHeight(value: Float) { viewModelScope.launch { settingsRepository.setReaderLineHeight(value) } }
+    fun setReaderSpacing(value: Int) { viewModelScope.launch { settingsRepository.setReaderParagraphSpacing(value) } }
+    fun setReaderPadding(value: Int) { viewModelScope.launch { settingsRepository.setReaderHorizontalPadding(value) } }
+    fun setReaderBackground(value: com.wenku8.epubstudio.settings.ReaderBackground) { viewModelScope.launch { settingsRepository.setReaderBackground(value) } }
+    fun setReaderBackgroundColor(value: Int) { viewModelScope.launch { settingsRepository.setReaderCustomBackground(value) } }
+    fun setReaderTextColor(value: Int) { viewModelScope.launch { settingsRepository.setReaderTextColor(value) } }
+    fun setReaderPageMode(value: com.wenku8.epubstudio.settings.ReaderPageTurnMode) { viewModelScope.launch { settingsRepository.setReaderPageTurn(value) } }
+    fun setReaderKeepScreenOn(value: Boolean) { viewModelScope.launch { settingsRepository.setReaderKeepScreenOn(value) } }
+    fun setReaderImmersive(value: Boolean) { viewModelScope.launch { settingsRepository.setReaderImmersive(value) } }
+    fun resetReaderFont() { viewModelScope.launch { settingsRepository.setReaderFontUri(null) } }
+    fun applyImportedFont(path: String) { viewModelScope.launch { settingsRepository.setReaderFontUri(path) } }
 
     fun parseSource() {
         val value = state.value.sourceUrl.trim()

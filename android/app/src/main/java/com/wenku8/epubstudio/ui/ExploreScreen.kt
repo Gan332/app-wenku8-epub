@@ -32,20 +32,23 @@ private sealed interface ExploreListItem {
 }
 
 @Composable
-fun ExploreScreen(state: StudioUiState, viewModel: StudioViewModel, onLogin: () -> Unit) {
+fun ExploreScreen(state: StudioUiState, viewModel: StudioViewModel, onLogin: () -> Unit, onGoToCatalog: () -> Unit) {
     Column(Modifier.fillMaxWidth().padding(top = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text("探索", fontSize = 25.sp, fontWeight = FontWeight.Bold)
         Text("数据源：Wenku8 轻小说文库 · 公开页面，无需登录", color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f), fontSize = 13.sp)
         Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(14.dp)) {
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                val updated = state.catalogUpdatedAt.takeIf { it > 0 }?.let { "上次更新 ${java.time.Instant.ofEpochMilli(it).atZone(java.time.ZoneId.systemDefault()).toLocalDate()}" } ?: "尚未更新"
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                val updated = state.catalogUpdatedAt.takeIf { it > 0 }
+                    ?.let { "上次更新 ${java.time.Instant.ofEpochMilli(it).atZone(java.time.ZoneId.systemDefault()).toLocalDate()}" }
+                    ?: "尚未更新"
                 Text("本地书目 ${state.catalogSize} 本 · $updated", fontSize = 14.sp, fontWeight = FontWeight.Bold)
                 Text("搜索与浏览均基于本地缓存，断网也能用。", color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f), fontSize = 12.sp)
-                val progress = state.catalogProgress
                 if (state.catalogLoading) {
+                    val progress = state.catalogProgress
                     Text("正在抓取 ${progress?.first ?: 0} / ${progress?.second ?: 0}", fontSize = 12.sp, color = MiuixTheme.colorScheme.primary)
-                } else {
-                    TextButton(text = "更新书目缓存", onClick = { viewModel.updateCatalog() }, modifier = Modifier.fillMaxWidth())
+                }
+                if (state.catalogSize == 0) {
+                    TextButton(text = "前往设置更新书目", onClick = onGoToCatalog, modifier = Modifier.fillMaxWidth())
                 }
             }
         }

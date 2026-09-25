@@ -156,5 +156,19 @@ class CatalogRepository(private val context: Context) {
         const val MAX_AUTHOR_PAGES = 3
     }
 
+    fun clear() {
+        scope.launch {
+            lock.withLock {
+                entries.clear()
+                cursor = CatalogCursor()
+                index = CatalogIndex(emptyList())
+                mutable.value = CatalogState()
+            }
+            withContext(Dispatchers.IO) {
+                crawler.clear()
+            }
+        }
+    }
+
     fun clearMessage() { mutable.value = mutable.value.copy(message = null) }
 }

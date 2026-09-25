@@ -59,7 +59,13 @@ class CatalogCrawler(context: Context) {
         writeAtomic(cursorFile, json.encodeToString(CatalogCursor.serializer(), cursor))
     }
 
-    private fun writeAtomic(target: File, content: String) {
+    fun clear() {
+        entriesFile.delete()
+        cursorFile.delete()
+        File(directory, "catalog.json.bak").delete()
+    }
+
+    fun writeAtomic(target: File, content: String) {
         val tmp = File(target.parentFile, "${target.name}.tmp")
         tmp.writeText(content)
         if (target.exists()) target.delete()

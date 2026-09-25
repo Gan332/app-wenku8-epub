@@ -95,6 +95,12 @@ class MainActivity : ComponentActivity() {
             startActivity(android.content.Intent(this, ReaderActivity::class.java).putExtra(ReaderActivity.EXTRA_URI, uri.toString()).putExtra(ReaderActivity.EXTRA_BOOK_ID, "local:${uri.toString().hashCode()}"))
         }
     }
+    private val fontPicker = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri == null) return@registerForActivityResult
+        runCatching { contentResolver.takePersistableUriPermission(uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION) }
+        val path = com.wenku8.epubstudio.file.FontStore(this).import(uri)
+        if (path != null) studioViewModel.applyImportedFont(path)
+    }
     private val loginLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { studioViewModel.refreshSession() }
     private val studioViewModel: StudioViewModel by viewModels()
 
@@ -110,6 +116,7 @@ class MainActivity : ComponentActivity() {
                     viewModel = studioViewModel,
                     onLogin = { loginLauncher.launch(android.content.Intent(this, LoginActivity::class.java)) },
                     onImportEpub = { epubPicker.launch(arrayOf("application/epub+zip", "application/octet-stream", "application/zip", "*/*")) },
+                    onImportFont = { fontPicker.launch(arrayOf("font/ttf", "font/otf", "application/x-font-ttf", "application/octet-stream")) },
                 )
             }
         }
@@ -117,7 +124,7 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun StudioApp(viewModel: StudioViewModel, onLogin: () -> Unit, onImportEpub: () -> Unit) {
+private fun StudioApp(viewModel: StudioViewModel, onLogin: () -> Unit, onImportEpub: () -> Unit, onImportFont: () -> Unit) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     Scaffold(
@@ -141,7 +148,6 @@ private fun StudioApp(viewModel: StudioViewModel, onLogin: () -> Unit, onImportE
                 NavigationBarItem(selected = state.tab == StudioTab.BOOKSHELF, onClick = { viewModel.setTab(StudioTab.BOOKSHELF) }, icon = Icons.Default.History, label = "书架")
                 NavigationBarItem(selected = state.tab == StudioTab.EXPLORE, onClick = { viewModel.setTab(StudioTab.EXPLORE) }, icon = Icons.Default.Search, label = "探索")
                 NavigationBarItem(selected = state.tab == StudioTab.CREATE, onClick = { viewModel.setTab(StudioTab.CREATE) }, icon = Icons.Default.Add, label = "创建")
-                NavigationBarItem(selected = state.tab == StudioTab.STATS, onClick = { viewModel.setTab(StudioTab.STATS) }, icon = Icons.Default.Download, label = "统计")
                 NavigationBarItem(selected = state.tab == StudioTab.SETTINGS, onClick = { viewModel.setTab(StudioTab.SETTINGS) }, icon = Icons.Default.Settings, label = "设置")
             }
         },
@@ -153,9 +159,11 @@ private fun StudioApp(viewModel: StudioViewModel, onLogin: () -> Unit, onImportE
                         context.startActivity(android.content.Intent(context, ReaderActivity::class.java).putExtra(ReaderActivity.EXTRA_URI, uri).putExtra(ReaderActivity.EXTRA_BOOK_ID, entry.bookId))
                     }
                 }, onOpenRemote = { entry -> viewModel.openShelfRemote(entry) })
-                state.tab == StudioTab.EXPLORE -> ExploreScreen(state, viewModel, onLogin)
-                state.tab == StudioTab.STATS -> ReadingStatsScreen(state.readingStats, viewModel::clearReadingStats)
-                state.tab == StudioTab.SETTINGS -> SettingsScreen(viewModel, onImportEpub)
+                state.tab == StudioTab.EXPLORE -> ExploreScreen(state, viewModel, onLogin) {
+                    viewModel.setTab(StudioTab.SETTINGS)
+                    viewModel.openSettingsSection(SettingsSection.CATALOG)
+                }
+                state.tab == StudioTab.SETTINGS -> SettingsScreen(viewModel, onImportEpub, onImportFont)
                 state.step == CreateStep.SOURCE -> SourceScreen(state, viewModel)
                 state.step == CreateStep.DETAIL -> state.book?.let {
                     BookDetailScreen(it, state.index?.chapters?.size ?: 0, viewModel) { tag ->
