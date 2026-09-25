@@ -12,16 +12,17 @@ import java.io.FileInputStream
 import java.io.InputStream
 import java.util.zip.ZipFile
 
-class EpubReaderRepository(private val context: Context) {
+class EpubReaderRepository(private val context: Context? = null) {
     fun open(bookId: String, uri: Uri): ReaderBook {
-        val file = copyToCache(uri)
+        val appContext = context?.applicationContext ?: throw Wenku8Exception("阅读器上下文不可用。", "EPUB_CONTEXT_MISSING")
+        val file = copyToCache(appContext, uri)
         return runCatching { parseArchive(bookId, file) }.getOrElse { error ->
             if (error is Wenku8Exception) throw error
             throw Wenku8Exception("无法打开 EPUB：${error.message ?: "文件格式无效"}", "EPUB_PARSE_FAILED", error)
         }
     }
 
-    private fun copyToCache(uri: Uri): File {
+    private fun copyToCache(context: Context, uri: Uri): File {
         val directory = File(context.cacheDir, "reader").apply { mkdirs() }
         val target = File(directory, "${uri.toString().hashCode().toUInt().toString(16)}.epub")
         if (target.exists() && target.length() in 1..MAX_EPUB_BYTES) return target

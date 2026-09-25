@@ -78,7 +78,7 @@ class CoreSmokeTest {
                 assertEquals("application/epub+zip", zip.getInputStream(first).readBytes().decodeToString())
                 assertTrue(zip.getEntry("EPUB/package.opf") != null)
             }
-            val readerBook = EpubReaderRepository.parseArchive("1", output)
+            val readerBook = EpubReaderRepository().parseArchive("1", output)
             assertEquals("测试书", readerBook.title)
             assertTrue(readerBook.chapters.isNotEmpty())
             assertTrue(readerBook.chapters.first().blocks.any { it is com.wenku8.epubstudio.reader.ReaderBlock.Paragraph })
