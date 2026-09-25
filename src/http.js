@@ -7,8 +7,15 @@ const { AppError } = require('./errors');
 
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Wenku8EPUBStudio/1.0';
 const DEFAULT_TIMEOUT_MS = 20_000;
+const DEFAULT_REQUEST_INTERVAL_MS = 1_000;
+const DEFAULT_RETRIES = 3;
+const RETRY_BASE_DELAY_MS = 750;
+const RATE_LIMIT_FALLBACK_MS = 5_000;
+const MAX_RETRY_DELAY_MS = 30_000;
+const MAX_RETRY_AFTER_MS = 120_000;
 const MAX_HTML_BYTES = 16 * 1024 * 1024;
 const MAX_REDIRECTS = 5;
+const requestStates = new Map();
 
 function isPrivateIp(address) {
   if (net.isIPv4(address)) {
@@ -79,17 +86,106 @@ function combineSignals(signal, timeoutMs) {
 }
 
 function sleep(ms, signal) {
-  if (ms <= 0) return Promise.resolve();
+  if (ms <= 0) return signal?.aborted
+    ? Promise.reject(signal.reason || new DOMException('操作已取消', 'AbortError'))
+    : Promise.resolve();
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(resolve, ms);
+    let timer;
+    let abort;
+    const cleanup = () => {
+      clearTimeout(timer);
+      if (signal && abort) signal.removeEventListener('abort', abort);
+    };
+    const finish = () => {
+      cleanup();
+      resolve();
+    };
+    abort = () => {
+      cleanup();
+      reject(signal.reason || new DOMException('操作已取消', 'AbortError'));
+    };
+    timer = setTimeout(finish, ms);
     if (signal) {
-      const abort = () => {
-        clearTimeout(timer);
-        reject(signal.reason || new DOMException('操作已取消', 'AbortError'));
-      };
       if (signal.aborted) abort();
       else signal.addEventListener('abort', abort, { once: true });
     }
+  });
+}
+
+function requestOrigin(value) {
+  try {
+    const url = new URL(value);
+    const hostname = url.hostname.toLowerCase();
+    if (/(^|\.)wenku8\.(net|cc|com)$/.test(hostname)) return 'wenku8-source';
+    return url.origin;
+  } catch {
+    return null;
+  }
+}
+
+function requestState(origin) {
+  if (!origin) return null;
+  let state = requestStates.get(origin);
+  if (!state) {
+    state = { nextAt: 0, tail: null };
+    requestStates.set(origin, state);
+  }
+  return state;
+}
+
+function parseRetryAfter(value, now = Date.now()) {
+  if (!value) return 0;
+  const seconds = Number(value);
+  if (Number.isFinite(seconds) && seconds >= 0) {
+    return Math.min(MAX_RETRY_AFTER_MS, Math.round(seconds * 1_000));
+  }
+  const timestamp = Date.parse(value);
+  if (Number.isFinite(timestamp)) {
+    return Math.max(0, Math.min(MAX_RETRY_AFTER_MS, timestamp - now));
+  }
+  return 0;
+}
+
+function deferOrigin(origin, delayMs) {
+  const state = requestState(origin);
+  if (state) state.nextAt = Math.max(state.nextAt, Date.now() + Math.max(0, delayMs));
+}
+
+async function withRequestGate(url, options, action) {
+  const origin = requestOrigin(url);
+  const state = requestState(origin);
+  if (!state) return action();
+
+  const previous = state.tail || Promise.resolve();
+  let release;
+  const current = new Promise((resolve) => { release = resolve; });
+  state.tail = current;
+  await previous.catch(() => {});
+
+  const configuredInterval = Number(options.requestIntervalMs);
+  const interval = Number.isFinite(configuredInterval)
+    ? Math.max(0, configuredInterval)
+    : DEFAULT_REQUEST_INTERVAL_MS;
+  try {
+    await sleep(Math.max(0, state.nextAt - Date.now()), options.signal);
+    state.nextAt = Date.now() + interval;
+    return await action();
+  } finally {
+    release();
+    if (state.tail === current) state.tail = null;
+  }
+}
+
+async function requestThroughGate(url, options) {
+  return withRequestGate(url, options, async () => {
+    const result = await fetchOnce(url, options);
+    const retryAfterMs = parseRetryAfter(result.response.headers.get('retry-after'));
+    if (result.response.status === 429) {
+      deferOrigin(requestOrigin(url), Math.max(retryAfterMs, RATE_LIMIT_FALLBACK_MS));
+    } else if (retryAfterMs && (result.response.status === 408 || result.response.status >= 500)) {
+      deferOrigin(requestOrigin(url), retryAfterMs);
+    }
+    return { ...result, retryAfterMs };
   });
 }
 
@@ -97,7 +193,7 @@ async function fetchOnce(url, options = {}) {
   let current = new URL(url);
   for (let redirect = 0; redirect <= MAX_REDIRECTS; redirect += 1) {
     await assertSafeHttpUrl(current);
-    const response = await fetch(current, {
+    const response = await (options.fetchImpl || fetch)(current, {
       redirect: 'manual',
       signal: combineSignals(options.signal, options.timeoutMs || DEFAULT_TIMEOUT_MS),
       headers: {
@@ -125,26 +221,34 @@ async function fetchOnce(url, options = {}) {
 }
 
 async function fetchResource(url, options = {}) {
-  const retries = options.retries ?? 2;
+  const configuredRetries = Number(options.retries);
+  const retries = Number.isFinite(configuredRetries) ? Math.max(0, Math.floor(configuredRetries)) : DEFAULT_RETRIES;
   let lastError;
 
   for (let attempt = 0; attempt <= retries; attempt += 1) {
     try {
-      const { response, finalUrl } = await fetchOnce(url, options);
+      const { response, finalUrl, retryAfterMs } = await requestThroughGate(url, options);
       if (response.status >= 500 || response.status === 408 || response.status === 429) {
-        throw new AppError(`源站暂时不可用（HTTP ${response.status}）。`, {
+        if (response.body) await response.body.cancel().catch(() => {});
+        const rateLimited = response.status === 429;
+        const error = new AppError(rateLimited
+          ? '源站暂时限制了请求（HTTP 429），已按退避策略等待，请稍后重试。'
+          : `源站暂时不可用（HTTP ${response.status}）。`, {
           status: 502,
-          code: 'UPSTREAM_UNAVAILABLE',
+          code: rateLimited ? 'UPSTREAM_RATE_LIMIT' : 'UPSTREAM_UNAVAILABLE',
         });
+        error.retryAfterMs = retryAfterMs;
+        error.response = response;
+        throw error;
       }
       return { response, finalUrl };
     } catch (error) {
       lastError = error;
       if (options.signal?.aborted || error?.name === 'AbortError' || error?.code === 'ABORT_ERR') throw error;
-      if (error instanceof AppError && error.status < 500 && error.code !== 'UPSTREAM_UNAVAILABLE') throw error;
+      if (error instanceof AppError && error.status < 500 && error.code !== 'UPSTREAM_UNAVAILABLE' && error.code !== 'UPSTREAM_RATE_LIMIT') throw error;
       if (attempt < retries) {
-        const retryAfter = Number(error?.response?.headers?.get?.('retry-after')) || 0;
-        await sleep(Math.max(350 * (2 ** attempt), retryAfter * 1000), options.signal);
+        const backoff = Math.min(MAX_RETRY_DELAY_MS, RETRY_BASE_DELAY_MS * (2 ** attempt));
+        await sleep(Math.max(backoff, Number(error?.retryAfterMs) || 0), options.signal);
       }
     }
   }
@@ -207,6 +311,7 @@ module.exports = {
   decodeHtml,
   fetchHtml,
   fetchResource,
+  parseRetryAfter,
   readLimited,
   sleep,
 };

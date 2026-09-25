@@ -81,6 +81,52 @@ output/       生成的 EPUB 文件
 
 记录和文件默认保留，应用不会自动删除。请在确认不再需要后手动清理。
 
+## Android 独立应用源码
+
+Android 版本使用 Capacitor WebView 加本地 TypeScript 核心和 Kotlin 原生插件，不需要启动 Node.js 服务：
+
+```text
+mobile/core.ts       移动端解析、任务、进度、持久化和 EPUB 打包
+android/             Android 工程、HTTP 限流、文件保存和前台任务服务
+public/mobile-core.js 构建后生成的单文件核心（不手工编辑）
+```
+
+源码准备完成后，构建环境需要另行准备：
+
+```powershell
+npm install
+npm run mobile:check
+npm run android:sync
+npm run android:apk
+```
+
+本轮只提交源码和构建配置，不自动安装 Android SDK/JDK，也不执行 Gradle 编译。Android 任务历史保存在应用私有数据目录，EPUB 可保存到 `Download/EPUB`。
+
+### GitHub Actions APK
+
+工作流位于 `.github/workflows/android-apk.yml`：
+
+- 推送到 `main`、提交 Pull Request 或手动触发时，CI 构建 debug APK 并保存为 Actions Artifact
+- 推送 `v*` 标签时，额外把 APK 挂到 GitHub Release
+- 目标仓库：`https://github.com/Gan332/app-wenku8-epub`
+- APK 不直接提交到 Git，避免二进制文件污染仓库历史
+
+推送代码到目标仓库：
+
+```powershell
+git remote add origin https://github.com/Gan332/app-wenku8-epub.git
+git add .
+git commit -m "feat: add standalone Android APK source and CI"
+git push -u origin main
+```
+
+推送 `v0.1.0-android.1` 等版本标签会触发 Release APK：
+
+```powershell
+git tag v0.1.0-android.1
+git push origin v0.1.0-android.1
+```
+
 ## 测试与验收
 
 离线回归测试：
@@ -131,6 +177,8 @@ npm run release:package
 
 ```text
 public/       本地 Web 界面
+mobile/       Android 单文件 TypeScript 业务核心
+android/      Android 原生工程与 Capacitor 插件
 src/          Express 服务、解析器、任务和 EPUB 生成器
 scripts/      离线、真实源站和发布验收脚本
 test/         Node.js 自动化测试与网页样本
@@ -143,6 +191,7 @@ docs/         中文 SOP
 
 - **无法启动**：确认 Node.js 版本、端口 `3210` 是否被占用、依赖是否安装成功。
 - **源站要求验证**：停止重试，不尝试绕过；改用你有权访问且无需验证的公开页面。
+- **HTTP 429（请求过多）**：应用会按 `Retry-After` 和退避策略自动等待，并降低请求频率；如果仍然被限流，请暂停任务，等待源站限制解除后再重试，不要连续点击重试。
 - **章节失败**：查看任务警告，单独重试失败章节。
 - **图片缺失**：重新生成；若源站图片不可访问，正文仍会保留并显示警告。
 - **EPUB 无法打开**：运行 `npm run smoke:epub`，检查容器、manifest 和 XML。

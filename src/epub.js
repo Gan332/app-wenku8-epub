@@ -50,7 +50,6 @@ async function downloadImage(sourceUrl, { referer, signal } = {}) {
     referer,
     signal,
     accept: 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
-    retries: 2,
     timeoutMs: 30_000,
   });
   if (!response.ok) throw new Error(`HTTP ${response.status}`);

@@ -7,6 +7,12 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
+    "mobile:bundle": "node build-android.mjs",
+    "mobile:check": "tsc --noEmit -p tsconfig.json",
+    "mobile:test": "tsx --test test/mobile/*.test.ts",
+    "android:sync": "npm run mobile:bundle && cap sync android",
+    "android:open": "cap open android",
+    "android:apk": "npm run android:sync && cd android && gradlew.bat assembleDebug",
     "test": "node --test --test-concurrency=1 test/*.test.js",
     "test:live": "node scripts/test-live.js",
     "smoke:epub": "node scripts/smoke-epub.js",
@@ -18,13 +24,22 @@
     "node": ">=20"
   },
   "dependencies": {
+    "@capacitor/core": "^7.4.3",
+    "@capacitor/filesystem": "^7.1.0",
     "archiver": "^7.0.1",
     "cheerio": "^1.1.2",
     "express": "^5.1.0",
+    "fflate": "^0.8.2",
     "iconv-lite": "^0.7.0"
   },
   "devDependencies": {
+    "@capacitor/android": "^7.4.3",
+    "@capacitor/cli": "^7.4.3",
+    "@types/node": "^22.15.21",
+    "esbuild": "^0.25.5",
     "saxes": "^6.0.0",
+    "tsx": "^4.19.4",
+    "typescript": "^5.8.3",
     "yauzl": "^3.2.0"
   },
   "license": "MIT",

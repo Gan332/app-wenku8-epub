@@ -20,6 +20,26 @@ function percentage(current, total) {
   return Math.max(0, Math.min(100, Math.round((current / total) * 100)));
 }
 
+function count(value, fallback = 0) {
+  if (value === undefined || value === null || value === '') return fallback;
+  const number = Number(value);
+  return Number.isFinite(number) && number >= 0 ? Math.floor(number) : fallback;
+}
+
+function normalizeProgress(job) {
+  const progress = job.progress && typeof job.progress === 'object' ? job.progress : {};
+  return {
+    ...progress,
+    phase: progress.phase || 'queued',
+    percent: Math.max(0, Math.min(100, Math.round(Number(progress.percent) || 0))),
+    completed: count(progress.completed),
+    total: count(progress.total, count(job.chapterCount)),
+    imageCompleted: count(progress.imageCompleted, count(job.imageCount)),
+    message: progress.message || '',
+    currentTitle: progress.currentTitle || '',
+  };
+}
+
 function validateBook(raw) {
   if (!raw || typeof raw !== 'object') throw new AppError('缺少书籍信息。', { code: 'BOOK_REQUIRED' });
   const title = cleanInline(raw.title);
@@ -109,6 +129,7 @@ class JobManager extends EventEmitter {
       if (!entry.isFile() || !entry.name.endsWith('.json')) continue;
       try {
         const job = JSON.parse(await fsp.readFile(path.join(this.jobsDirectory, entry.name), 'utf8'));
+        job.progress = normalizeProgress(job);
         if (ACTIVE_STATES.has(job.status)) {
           job.status = 'failed';
           job.error = { code: 'SERVER_RESTARTED', message: '上次任务因应用重启而中断，请重新生成。' };
@@ -196,15 +217,15 @@ class JobManager extends EventEmitter {
       const pendingIndex = this.queue.findIndex((task) => task.job.id === id);
       if (pendingIndex >= 0) this.queue.splice(pendingIndex, 1);
       this.controllers.delete(id);
-      job.status = 'canceled';
-      job.error = { code: 'CANCELED', message: '任务已取消。' };
-      job.finishedAt = new Date().toISOString();
-      job.progress = { ...job.progress, phase: 'canceled', message: '任务已取消' };
-      await this.persist(job);
+      await this.update(job, {
+        status: 'canceled',
+        error: { code: 'CANCELED', message: '任务已取消。' },
+        finishedAt: new Date().toISOString(),
+        progress: { phase: 'canceled', message: '任务已取消' },
+      });
       return this.publicJob(job);
     }
-    job.progress.message = '正在取消…';
-    await this.persist(job);
+    await this.update(job, { progress: { message: '正在取消…' } });
     return this.publicJob(job);
   }
 
@@ -225,7 +246,7 @@ class JobManager extends EventEmitter {
         author: job.book.author,
       },
       chapterCount: job.chapterCount,
-      progress: job.progress,
+      progress: normalizeProgress(job),
       createdAt: job.createdAt,
       updatedAt: job.updatedAt,
       finishedAt: job.finishedAt || null,

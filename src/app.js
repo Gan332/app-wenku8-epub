@@ -1,6 +1,7 @@
 'use strict';
 
 const fs = require('node:fs');
+const fsp = require('node:fs/promises');
 const path = require('node:path');
 const express = require('express');
 const { version: appVersion } = require('../package.json');
@@ -66,6 +67,54 @@ function createApp(options = {}) {
     await ready;
     res.json({ job: jobs.get(req.params.id) });
   }));
+  app.get('/api/jobs/:id/events', asyncRoute(async (req, res) => {
+    await ready;
+    const id = req.params.id;
+    let closed = false;
+    let heartbeat;
+
+    const cleanup = () => {
+      if (closed) return;
+      closed = true;
+      clearInterval(heartbeat);
+      jobs.off('update', sendJob);
+      res.off('close', cleanup);
+    };
+    const write = (chunk) => {
+      if (closed) return;
+      try {
+        res.write(chunk);
+      } catch {
+        cleanup();
+        res.end();
+      }
+    };
+    function sendJob(job) {
+      if (job.id !== id) return;
+      const eventId = job.updatedAt || Date.now();
+      write(`id: ${eventId}\nevent: job\ndata: ${JSON.stringify(job)}\n\n`);
+    }
+
+    jobs.on('update', sendJob);
+    res.once('close', cleanup);
+    try {
+      const initialJob = jobs.get(id);
+      res.set({
+        'Content-Type': 'text/event-stream; charset=utf-8',
+        'Cache-Control': 'no-cache, no-transform',
+        'Connection': 'keep-alive',
+        'X-Accel-Buffering': 'no',
+      });
+      res.flushHeaders();
+      write('retry: 2000\n\n');
+      sendJob(initialJob);
+      if (!closed) heartbeat = setInterval(() => write(': keep-alive\n\n'), 15_000);
+    } catch (error) {
+      cleanup();
+      if (!res.headersSent) throw error;
+      res.end();
+    }
+  }));
   app.post('/api/jobs/:id/cancel', asyncRoute(async (req, res) => {
     await ready;
     res.json({ job: await jobs.cancel(req.params.id) });
@@ -73,7 +122,9 @@ function createApp(options = {}) {
   app.get('/api/jobs/:id/download', asyncRoute(async (req, res) => {
     await ready;
     const job = jobs.getOutputPath(req.params.id);
+    const stat = await fsp.stat(job.outputPath);
     res.set('Content-Type', 'application/epub+zip');
+    res.set('Content-Length', String(stat.size));
     res.set('Content-Disposition', contentDisposition(path.basename(job.outputPath)));
     fs.createReadStream(job.outputPath).on('error', (error) => {
       if (!res.headersSent) nextError(error, res);

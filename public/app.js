@@ -6,10 +6,16 @@ const state = {
   selected: new Set(),
   currentJobId: null,
   pollTimer: null,
+  progressSource: null,
+  progressUnsubscribe: null,
+  progressGeneration: 0,
+  currentJobFile: null,
+  downloadController: null,
 };
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
+const mobileCore = () => window.Wenku8Core?.native ? window.Wenku8Core : null;
 const panels = $$('.step-panel');
 const sourceForm = $('#source-form');
 const sourceInput = $('#source-url');
@@ -23,6 +29,8 @@ const exportMessage = $('#export-message');
 const jobSection = $('#job-section');
 const currentJobStatus = $('#job-status');
 const historyList = $('#history-list');
+const downloadButton = $('#download-button');
+const shareButton = $('#share-button');
 
 const STATUS_LABELS = {
   queued: '等待中',
@@ -221,15 +229,19 @@ async function parseSource() {
   setSourceBusy(true);
   setMessage(sourceMessage, '正在读取书籍信息…');
   try {
-    const [{ book }, { index }] = await Promise.all([
-      api('/api/parse/book', { method: 'POST', body: JSON.stringify({ url: input }) }),
-      api('/api/parse/index', { method: 'POST', body: JSON.stringify({ url: input }) }),
-    ]);
+    const runtime = mobileCore();
+    const [{ book }, { index }] = runtime
+      ? await Promise.all([runtime.parseBook(input), runtime.parseIndex(input)])
+      : await Promise.all([
+          api('/api/parse/book', { method: 'POST', body: JSON.stringify({ url: input }) }),
+          api('/api/parse/index', { method: 'POST', body: JSON.stringify({ url: input }) }),
+        ]);
     if (book.title && index.title && book.title !== index.title) {
       console.warn('书籍页和目录页标题不同，使用书籍页标题。', book.title, index.title);
     }
     state.book = book;
     state.index = index;
+    stopProgressTracking();
     state.currentJobId = null;
     renderBook();
     renderChapters();
@@ -263,18 +275,25 @@ async function createJob() {
   setBusy(exportButton, true, '正在创建任务');
   setMessage(exportMessage, '');
   try {
-    const payload = await api('/api/jobs', {
-      method: 'POST',
-      body: JSON.stringify({
-        book: state.book,
-        chapters: selected,
-        options: { includeCover: $('#include-cover').checked },
-      }),
-    });
+    const runtime = mobileCore();
+    const payload = runtime
+      ? { job: await runtime.createJob({
+          book: state.book,
+          chapters: selected,
+          options: { includeCover: $('#include-cover').checked },
+        }) }
+      : await api('/api/jobs', {
+          method: 'POST',
+          body: JSON.stringify({
+            book: state.book,
+            chapters: selected,
+            options: { includeCover: $('#include-cover').checked },
+          }),
+        });
     state.currentJobId = payload.job.id;
     renderJob(payload.job);
     jobSection.hidden = false;
-    startPolling(payload.job.id);
+    startProgressTracking(payload.job.id);
     setMessage(exportMessage, '任务已创建，正在后台处理。', 'success');
     window.scrollTo({ top: jobSection.offsetTop - 24, behavior: 'smooth' });
   } catch (error) {
@@ -285,22 +304,49 @@ async function createJob() {
   }
 }
 
+function progressNumber(value, fallback = 0) {
+  if (value === undefined || value === null || value === '') return fallback;
+  const number = Number(value);
+  return Number.isFinite(number) && number >= 0 ? Math.floor(number) : fallback;
+}
+
+function normalizeJobProgress(job) {
+  const progress = job.progress && typeof job.progress === 'object' ? job.progress : {};
+  return {
+    ...progress,
+    phase: progress.phase || 'queued',
+    percent: Math.max(0, Math.min(100, Math.round(Number(progress.percent) || 0))),
+    completed: progressNumber(progress.completed),
+    total: progressNumber(progress.total, progressNumber(job.chapterCount)),
+    imageCompleted: progressNumber(progress.imageCompleted, progressNumber(job.imageCount)),
+    message: progress.message || '',
+    currentTitle: progress.currentTitle || '',
+  };
+}
+
 function renderJob(job) {
+  const progress = normalizeJobProgress(job);
   const active = job.status === 'queued' || job.status === 'running';
   $('#job-title').textContent = job.book.title;
-  $('#job-percent').textContent = `${job.progress.percent}%`;
-  $('#progress-bar').style.width = `${job.progress.percent}%`;
-  $('.progress-track').setAttribute('aria-valuenow', String(job.progress.percent));
-  $('#job-message').textContent = job.progress.message || phaseLabel(job.progress.phase);
-  $('#job-chapters').textContent = `${job.progress.completed} / ${job.progress.total}`;
-  $('#job-images').textContent = String(job.progress.imageCompleted);
+  $('#job-percent').textContent = `${progress.percent}%`;
+  $('#progress-bar').style.width = `${progress.percent}%`;
+  $('.progress-track').setAttribute('aria-valuenow', String(progress.percent));
+  $('#job-message').textContent = progress.message || phaseLabel(progress.phase);
+  $('#job-chapters').textContent = `${progress.completed} / ${progress.total}`;
+  $('#job-images').textContent = String(progress.imageCompleted);
   $('#job-status').textContent = STATUS_LABELS[job.status] || job.status;
   currentJobStatus.className = `status-pill ${job.status}`;
   $('#cancel-button').hidden = !active;
+  $('#share-button').hidden = job.status !== 'completed' || !mobileCore();
   $('#download-button').hidden = job.status !== 'completed';
-  if (job.status === 'completed') {
-    $('#download-button').href = job.file.downloadUrl;
-    $('#download-button').setAttribute('download', job.file.name);
+  $('#job-location').textContent = mobileCore() ? '手机 Download/EPUB' : '本机 output 文件夹';
+  if (job.status === 'completed' && job.file) {
+    state.currentJobFile = job.file;
+    downloadButton.href = job.file.downloadUrl || '#';
+    downloadButton.setAttribute('download', job.file.name);
+    downloadButton.dataset.bytes = String(job.file.size || 0);
+    const label = downloadButton.querySelector('span');
+    if (label) label.textContent = mobileCore() ? '保存 EPUB' : '下载 EPUB';
   }
   $('#job-message-error').textContent = job.error?.message || '';
   $('#job-message-error').classList.toggle('error', Boolean(job.error));
@@ -316,36 +362,115 @@ function phaseLabel(phase) {
   return ({ fetching: '正在下载章节', images: '正在下载插图', cover: '正在下载封面', packaging: '正在打包 EPUB' })[phase] || '准备中…';
 }
 
-function startPolling(id) {
+function clearProgressPolling() {
   clearInterval(state.pollTimer);
-  pollNow(id);
-  state.pollTimer = setInterval(() => pollNow(id), 800);
+  state.pollTimer = null;
 }
 
-async function pollNow(id) {
-  if (!id) return;
+function stopProgressTracking() {
+  state.progressGeneration += 1;
+  clearProgressPolling();
+  state.progressUnsubscribe?.();
+  state.progressUnsubscribe = null;
+  state.progressSource?.close();
+  state.progressSource = null;
+}
+
+function startProgressPolling(id, generation) {
+  if (generation !== state.progressGeneration || state.pollTimer !== null) return;
+  state.pollTimer = setInterval(() => pollNow(id, generation), 1200);
+}
+
+function finishProgressTracking(job) {
+  stopProgressTracking();
+  loadHistory();
+  if (job.status === 'completed') toast('EPUB 已生成，可以下载。', 'success');
+  if (job.status === 'failed') toast(job.error?.message || '导出任务失败。', 'error');
+}
+
+async function getJobPayload(id) {
+  const runtime = mobileCore();
+  if (runtime) return { job: await runtime.getJob(id) };
+  return api(`/api/jobs/${encodeURIComponent(id)}`);
+}
+
+async function pollNow(id, generation = state.progressGeneration) {
+  if (!id || generation !== state.progressGeneration) return;
   try {
-    const { job } = await api(`/api/jobs/${encodeURIComponent(id)}`);
+    const { job } = await getJobPayload(id);
+    if (generation !== state.progressGeneration) return;
     renderJob(job);
-    if (job.status !== 'queued' && job.status !== 'running') {
-      clearInterval(state.pollTimer);
-      loadHistory();
-      if (job.status === 'completed') toast('EPUB 已生成，可以下载。', 'success');
-      if (job.status === 'failed') toast(job.error?.message || '导出任务失败。', 'error');
-    }
+    if (job.status !== 'queued' && job.status !== 'running') finishProgressTracking(job);
   } catch (error) {
+    if (generation !== state.progressGeneration) return;
     if (error.status === 404) {
-      clearInterval(state.pollTimer);
+      stopProgressTracking();
       loadHistory();
     } else showError(error);
   }
+}
+
+function startProgressTracking(id) {
+  stopProgressTracking();
+  const generation = state.progressGeneration;
+  const runtime = mobileCore();
+  if (runtime) {
+    state.progressUnsubscribe = runtime.subscribeJob((job) => {
+      if (generation !== state.progressGeneration || job.id !== id) return;
+      renderJob(job);
+      if (job.status !== 'queued' && job.status !== 'running') finishProgressTracking(job);
+    });
+    runtime.getJob(id).then((job) => {
+      if (generation !== state.progressGeneration || job.id !== id) return;
+      renderJob(job);
+      if (job.status !== 'queued' && job.status !== 'running') finishProgressTracking(job);
+    }).catch((error) => {
+      if (generation === state.progressGeneration) showError(error);
+    });
+    return;
+  }
+
+  pollNow(id, generation);
+  if (typeof EventSource !== 'function') {
+    startProgressPolling(id, generation);
+    return;
+  }
+
+  let source;
+  try {
+    source = new EventSource(`/api/jobs/${encodeURIComponent(id)}/events`);
+  } catch {
+    startProgressPolling(id, generation);
+    return;
+  }
+  state.progressSource = source;
+  source.addEventListener('job', (event) => {
+    if (generation !== state.progressGeneration) return;
+    let job;
+    try {
+      job = JSON.parse(event.data);
+    } catch {
+      startProgressPolling(id, generation);
+      return;
+    }
+    if (!job || job.id !== id) return;
+    clearProgressPolling();
+    renderJob(job);
+    if (job.status !== 'queued' && job.status !== 'running') finishProgressTracking(job);
+  });
+  source.addEventListener('error', () => {
+    if (generation === state.progressGeneration) startProgressPolling(id, generation);
+  });
 }
 
 async function cancelJob() {
   if (!state.currentJobId) return;
   $('#cancel-button').disabled = true;
   try {
-    const { job } = await api(`/api/jobs/${state.currentJobId}/cancel`, { method: 'POST' });
+    const runtime = mobileCore();
+    const { job } = runtime
+      ? { job: await runtime.cancelJob(state.currentJobId) }
+      : await api(`/api/jobs/${state.currentJobId}/cancel`, { method: 'POST' });
     renderJob(job);
   } catch (error) {
     showError(error);
@@ -368,24 +493,202 @@ function formatDate(value) {
   return Number.isNaN(date.getTime()) ? '' : date.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
 }
 
+function filenameFromDisposition(header, fallback = 'book.epub') {
+  const encoded = header?.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+  if (encoded) {
+    try { return decodeURIComponent(encoded); } catch {}
+  }
+  const plain = header?.match(/filename="([^"]+)"/i)?.[1];
+  return plain || fallback;
+}
+
+function setDownloadProgress({ percent = 0, loaded = 0, total = 0, status = '', state = '' } = {}) {
+  const safeLoaded = Number(loaded) || 0;
+  const safeTotal = Number(total) || 0;
+  const safePercent = Math.max(0, Math.min(100, Math.round(Number(percent) || 0)));
+  $('#download-progress-bar').style.width = `${safePercent}%`;
+  $('#download-percent').textContent = `${safePercent}%`;
+  $('#download-progress').setAttribute('aria-valuenow', String(safePercent));
+  $('#download-progress').className = `download-progress-track ${state}`.trim();
+  $('#download-bytes').textContent = safeTotal > 0
+    ? `${formatBytes(safeLoaded)} / ${formatBytes(safeTotal)}`
+    : `${formatBytes(safeLoaded)} / 未知大小`;
+  if (status) $('#download-file-status').textContent = status;
+}
+
+function setDownloadControls(active) {
+  const closeButton = $('#close-download-panel');
+  closeButton.disabled = active;
+  closeButton.textContent = active ? '下载中…' : '关闭';
+  $('#cancel-download-button').hidden = !active;
+}
+
+function showDownloadPanel(name) {
+  $('#download-file-name').textContent = name || 'book.epub';
+  $('#download-panel').hidden = false;
+  setDownloadControls(true);
+  setDownloadProgress({ percent: 0, loaded: 0, total: 0, status: '正在连接…' });
+}
+
+function closeDownloadPanel() {
+  if (state.downloadController) return;
+  $('#download-panel').hidden = true;
+}
+
+function triggerBrowserDownload(blob, fileName) {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = fileName || 'book.epub';
+  anchor.style.display = 'none';
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
+async function startFileDownload(job) {
+  const file = job?.file || state.currentJobFile;
+  const runtime = mobileCore();
+  if (runtime) {
+    const jobId = job?.id || state.currentJobId;
+    if (!jobId || !file) {
+      toast('没有可保存的 EPUB 文件。', 'error');
+      return;
+    }
+    if (state.downloadController) {
+      toast('已有文件操作正在进行。');
+      return;
+    }
+    const controller = new AbortController();
+    state.downloadController = controller;
+    showDownloadPanel(file.name);
+    setDownloadControls(true);
+    try {
+      const result = await runtime.saveFile(jobId);
+      setDownloadProgress({ percent: 100, loaded: result.bytes, total: result.bytes, status: `已保存到 ${result.location}`, state: 'complete' });
+      setDownloadControls(false);
+      toast('EPUB 已保存到下载目录。', 'success');
+    } catch (error) {
+      setDownloadProgress({ percent: 0, loaded: 0, total: file.size, status: error.message || '保存失败。', state: 'error' });
+      setDownloadControls(false);
+      showError(error);
+    } finally {
+      state.downloadController = null;
+    }
+    return;
+  }
+  if (!file?.downloadUrl) {
+    toast('没有可下载的 EPUB 文件。', 'error');
+    return;
+  }
+  if (state.downloadController) {
+    toast('已有下载正在进行。');
+    return;
+  }
+
+  const controller = new AbortController();
+  state.downloadController = controller;
+  showDownloadPanel(file.name);
+  let total = Number(file.size) || 0;
+  let loaded = 0;
+  let lastRenderedPercent = -1;
+
+  try {
+    const response = await fetch(file.downloadUrl, {
+      signal: controller.signal,
+      cache: 'no-store',
+    });
+    if (!response.ok) throw new Error(`下载请求失败（HTTP ${response.status}）。`);
+    const headerLength = Number(response.headers.get('content-length')) || 0;
+    if (headerLength > 0) total = headerLength;
+    if (!response.body) throw new Error('当前浏览器不支持流式下载。');
+
+    const reader = response.body.getReader();
+    const chunks = [];
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      loaded += value.byteLength;
+      const percent = total > 0 ? (loaded / total) * 100 : 0;
+      const rounded = Math.min(100, Math.round(percent));
+      if (rounded !== lastRenderedPercent || (total > 0 && loaded === total)) {
+        lastRenderedPercent = rounded;
+        setDownloadProgress({ percent, loaded, total, status: '正在下载 EPUB…' });
+      }
+    }
+
+    if (total > 0 && loaded !== total) throw new Error('下载数据不完整，请重试。');
+    setDownloadProgress({ percent: 100, loaded, total: total || loaded, status: '下载完成，正在交给浏览器保存。', state: 'complete' });
+    setDownloadControls(false);
+    triggerBrowserDownload(
+      new Blob(chunks, { type: 'application/epub+zip' }),
+      filenameFromDisposition(response.headers.get('content-disposition'), file.name),
+    );
+    toast('EPUB 下载完成。', 'success');
+  } catch (error) {
+    if (error.name === 'AbortError') {
+      setDownloadProgress({ percent: 0, loaded: 0, total, status: '下载已取消。', state: 'canceled' });
+      setDownloadControls(false);
+      toast('下载已取消。');
+      return;
+    }
+    setDownloadProgress({ percent: 0, loaded: 0, total, status: error.message || '下载失败。', state: 'error' });
+    setDownloadControls(false);
+    showError(error);
+  } finally {
+    state.downloadController = null;
+  }
+}
+
+async function startFileShare() {
+  const runtime = mobileCore();
+  if (!runtime || !state.currentJobId) {
+    toast('当前平台不支持分享。', 'error');
+    return;
+  }
+  try {
+    await runtime.shareFile(state.currentJobId);
+  } catch (error) {
+    showError(error);
+  }
+}
+
+function cancelFileDownload() {
+  state.downloadController?.abort(new DOMException('用户取消了下载', 'AbortError'));
+}
+
 async function loadHistory() {
   try {
-    const { jobs } = await api('/api/jobs');
+    const runtime = mobileCore();
+    const { jobs } = runtime
+      ? { jobs: runtime.listJobs() }
+      : await api('/api/jobs');
     const historySection = $('#history-section');
     historySection.hidden = jobs.length === 0;
     const rows = document.createDocumentFragment();
     for (const job of jobs) {
       const row = document.createElement('div');
       row.className = 'history-item';
+      row.dataset.jobId = job.id;
       const detail = `${job.chapterCount} 章 · ${formatDate(job.createdAt)}${job.warnings?.length ? ` · ${job.warnings.length} 条警告` : ''}`;
       row.innerHTML = `
         <div><strong>${escapeHtml(job.book.title)}</strong><small>${escapeHtml(detail)}</small></div>
         <span class="status-pill ${job.status}">${STATUS_LABELS[job.status] || job.status}</span>
-        ${job.file ? `<a class="text-button" href="${job.file.downloadUrl}" download="${escapeHtml(job.file.name)}">下载</a>` : ''}
+        ${job.file ? `<a class="text-button" href="${job.file.downloadUrl || '#'}" download="${escapeHtml(job.file.name)}">${mobileCore() ? '保存' : '下载'}</a>` : ''}
       `;
       rows.append(row);
     }
     historyList.replaceChildren(rows);
+    for (const link of $('.text-button', historyList)) {
+      link.addEventListener('click', (event) => {
+        event.preventDefault();
+        const row = link.closest('.history-item');
+        const job = jobs.find((item) => item.file && `${item.id}` === row?.dataset.jobId);
+        if (job) startFileDownload(job);
+      });
+    }
   } catch (error) {
     console.warn('任务历史读取失败。', error);
   }
@@ -398,19 +701,34 @@ function wireEvents() {
     sourceInput.focus();
   });
   chapterSearch.addEventListener('input', () => filterChapters(chapterSearch.value));
-  $$('.text-button[data-select]').each((button) => button.addEventListener('click', () => selectAll(button.dataset.select !== 'none')));
+  for (const button of $$('.text-button[data-select]')) {
+    button.addEventListener('click', () => selectAll(button.dataset.select !== 'none'));
+  }
   toExportButton.addEventListener('click', prepareExport);
-  $$('[data-back]').each((button) => button.addEventListener('click', () => {
+  for (const button of $$('[data-back]')) button.addEventListener('click', () => {
     const step = button.closest('.step-panel').dataset.step;
     showPanel(Number(step) === 3 ? 2 : 1);
-  }));
+  });
   exportButton.addEventListener('click', createJob);
+  downloadButton.addEventListener('click', (event) => {
+    event.preventDefault();
+    startFileDownload({ file: state.currentJobFile });
+  });
+  $('#close-download-panel').addEventListener('click', closeDownloadPanel);
+  $('#cancel-download-button').addEventListener('click', cancelFileDownload);
+  shareButton.addEventListener('click', startFileShare);
   $('#cancel-button').addEventListener('click', cancelJob);
   $('#refresh-history').addEventListener('click', loadHistory);
-  window.addEventListener('beforeunload', () => clearInterval(state.pollTimer));
+  window.addEventListener('beforeunload', stopProgressTracking);
 }
 
 document.addEventListener('DOMContentLoaded', () => {
   wireEvents();
-  loadHistory();
+  const runtime = mobileCore();
+  if (runtime) {
+    runtime.init().then(loadHistory).catch((error) => {
+      showError(error);
+      setMessage(sourceMessage, 'Android 本地运行时初始化失败。', 'error');
+    });
+  } else loadHistory();
 });

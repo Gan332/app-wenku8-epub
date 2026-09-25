@@ -1,3 +1,11 @@
+@font-face {
+  font-family: "MiSans";
+  src: url("/fonts/MiSansVF.ttf") format("truetype");
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+}
+
 :root {
   --paper: #f4efe6;
   --paper-deep: #e9e0d2;
@@ -10,8 +18,8 @@
   --green: #426c58;
   --shadow: 0 22px 60px rgba(66, 49, 32, .11);
   --radius: 18px;
-  --serif: "Noto Serif CJK SC", "Source Han Serif SC", "Songti SC", SimSun, serif;
-  --sans: Inter, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --serif: "MiSans", "MiSans Latin", "Noto Serif CJK SC", "Source Han Serif SC", "Songti SC", SimSun, serif;
+  --sans: "MiSans", "MiSans Latin", Inter, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
 }
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; }
@@ -91,7 +99,7 @@ button:disabled { cursor: not-allowed; opacity: .52; }
 .chapter-row input:checked + .custom-check { border-color: var(--accent); background: var(--accent); }
 .chapter-row input:checked + .custom-check::after { content: ""; width: 8px; height: 4px; border: solid white; border-width: 0 0 2px 2px; transform: translateY(-1px) rotate(-45deg); }
 .chapter-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
-.chapter-index { color: #9c9388; font-family: Georgia, serif; font-size: 11px; }
+.chapter-index { color: #9c9388; font-family: var(--sans); font-size: 11px; }
 .chapter-marker { min-width: 0; }
 .illustration-label { padding: 2px 6px; color: #79522e; background: #f1e6d4; border-radius: 4px; font-size: 9px; }
 .empty-state { padding: 38px 10px; color: var(--muted); text-align: center; font-size: 13px; }
@@ -182,3 +190,22 @@ footer p { margin: 0; }
   footer { padding-left: 18px; padding-right: 18px; flex-direction: column; gap: 5px; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; animation: none !important; transition: none !important; } }
+
+.download-panel { position: fixed; right: 22px; bottom: 22px; z-index: 9; width: min(390px, calc(100vw - 30px)); padding: 20px; color: #f8f2e8; background: #2e2a26; border: 1px solid rgba(255, 255, 255, .12); border-radius: 14px; box-shadow: 0 18px 50px rgba(30, 22, 16, .32); }
+.download-panel-heading, .download-file-row, .download-meta { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; }
+.download-panel-heading h2 { margin: 3px 0 0; font-family: var(--serif); font-size: 18px; }
+.download-panel .text-button { flex: 0 0 auto; color: #e5b19b; }
+.download-file-row { margin-top: 18px; align-items: center; }
+.download-file-row > div { min-width: 0; }
+.download-file-row strong, .download-file-row small { display: block; }
+.download-file-row > div strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
+.download-file-row small { margin-top: 3px; color: #9f958b; font-size: 9px; }
+.download-file-row > strong { flex: 0 0 auto; color: white; font-size: 15px; }
+.download-progress-track { height: 8px; overflow: hidden; margin-top: 12px; background: rgba(255, 255, 255, .1); border-radius: 99px; }
+.download-progress-track i { display: block; width: 0; height: 100%; background: linear-gradient(90deg, #bd694b, #e0a078); border-radius: inherit; transition: width .15s linear; }
+.download-progress-track.complete i { background: linear-gradient(90deg, #4f8668, #83bd91); }
+.download-progress-track.error i, .download-progress-track.canceled i { background: #a44837; }
+.download-meta { margin-top: 9px; align-items: center; color: #9f958b; font-size: 9px; }
+@media (max-width: 720px) {
+  .download-panel { right: 15px; bottom: 15px; }
+}

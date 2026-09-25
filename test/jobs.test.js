@@ -133,6 +133,40 @@ test('cancels an active task', async () => {
   }
 });
 
+test('fills missing progress fields when loading legacy job records', async () => {
+  const temporaryDirectory = await fsp.mkdtemp(path.join(os.tmpdir(), 'wenku8-job-test-'));
+  const dataDirectory = path.join(temporaryDirectory, 'data');
+  const jobsDirectory = path.join(dataDirectory, 'jobs');
+  await fsp.mkdir(jobsDirectory, { recursive: true });
+  await fsp.writeFile(path.join(jobsDirectory, 'legacy.json'), JSON.stringify({
+    id: 'legacy',
+    status: 'failed',
+    book,
+    chapterCount: 2,
+    imageCount: 3,
+    options: { includeCover: false },
+    progress: { phase: 'failed', percent: 50, completed: 1, message: '旧任务' },
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    error: { code: 'OLD_FAILURE', message: '旧任务失败' },
+    warnings: [],
+    outputPath: null,
+  }), 'utf8');
+  const manager = new JobManager({
+    dataDirectory,
+    outputDirectory: path.join(temporaryDirectory, 'output'),
+  });
+  try {
+    await manager.init();
+    const job = manager.get('legacy');
+    assert.equal(job.progress.total, 2);
+    assert.equal(job.progress.imageCompleted, 3);
+    assert.equal(job.progress.completed, 1);
+  } finally {
+    await fsp.rm(temporaryDirectory, { recursive: true, force: true });
+  }
+});
+
 test('marks unfinished tasks as failed when the manager restarts', async () => {
   const temporaryDirectory = await fsp.mkdtemp(path.join(os.tmpdir(), 'wenku8-job-test-'));
   const dataDirectory = path.join(temporaryDirectory, 'data');

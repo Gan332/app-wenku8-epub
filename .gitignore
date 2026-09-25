@@ -4,7 +4,15 @@ data/*
 output/*
 !output/.gitkeep
 dist/
+release/
 work/
 outputs/
 *.log
 .DS_Store
+public/mobile-core.js
+android/.gradle/
+android/local.properties
+android/**/build/
+.kotlin/
+.idea/
+*.iml

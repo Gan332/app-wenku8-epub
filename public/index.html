@@ -121,11 +121,12 @@
           <div class="job-stats">
             <div><span>章节进度</span><strong id="job-chapters">0 / 0</strong></div>
             <div><span>插图进度</span><strong id="job-images">0</strong></div>
-            <div><span>保存位置</span><strong>本机 output 文件夹</strong></div>
+            <div><span>保存位置</span><strong id="job-location">本机 output 文件夹</strong></div>
           </div>
           <div class="job-warning" id="job-warning" hidden></div>
         <div class="job-actions">
           <button class="secondary-button" type="button" id="cancel-button">取消任务</button>
+          <button class="secondary-button" type="button" id="share-button" hidden>分享 EPUB</button>
           <a class="primary-button" id="download-button" href="#" hidden><span>下载 EPUB</span><b aria-hidden="true">↓</b></a>
         </div>
         <p class="inline-message" id="job-message-error" role="alert"></p>
@@ -142,6 +143,30 @@
     <p>文件仅保存在本机，关闭应用后任务记录仍会保留。</p>
     <p>Wenku8 EPUB Studio · v0.1.0</p>
   </footer>
+
+  <section class="download-panel" id="download-panel" hidden aria-live="polite" aria-labelledby="download-title">
+    <div class="download-panel-heading">
+      <div>
+        <span class="overline">文件传输</span>
+        <h2 id="download-title">下载 EPUB</h2>
+      </div>
+      <button class="text-button" id="close-download-panel" type="button" aria-label="关闭下载进度">关闭</button>
+    </div>
+    <div class="download-file-row">
+      <div>
+        <strong id="download-file-name">—</strong>
+        <small id="download-file-status">正在连接…</small>
+      </div>
+      <strong id="download-percent">0%</strong>
+    </div>
+    <div class="download-progress-track" id="download-progress" role="progressbar" aria-label="EPUB 下载进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+      <i id="download-progress-bar"></i>
+    </div>
+    <div class="download-meta">
+      <span id="download-bytes">0 B / 0 B</span>
+      <button class="text-button" id="cancel-download-button" type="button">取消下载</button>
+    </div>
+  </section>
 
   <div class="toast-region" id="toast-region" aria-live="assertive" aria-atomic="true"></div>
 </body>

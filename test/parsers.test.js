@@ -12,7 +12,7 @@ const {
   parseIndexHtml,
   sourceIds,
 } = require('../src/wenku8');
-const { assertSafeHttpUrl, decodeHtml } = require('../src/http');
+const { assertSafeHttpUrl, decodeHtml, fetchResource, parseRetryAfter } = require('../src/http');
 
 const fixture = (name) => path.join(__dirname, 'fixtures', name);
 const read = (name) => fs.readFileSync(fixture(name), 'utf8');
@@ -65,6 +65,25 @@ test('resolves relative lazy image URLs against the chapter URL', () => {
   const parsed = parseChapterHtml(html, { id: 'x', title: '测试', url: chapterUrl, order: 1, volume: '正文' }, chapterUrl);
   assert.deepEqual(parsed.imageUrls, ['https://www.wenku8.net/image-root/cover/a.jpg']);
   assert.deepEqual(parsed.blocks.filter((block) => block.type === 'image'), [{ type: 'image', index: 0 }]);
+});
+
+test('honors numeric and HTTP-date Retry-After values', () => {
+  assert.equal(parseRetryAfter('2'), 2_000);
+  assert.equal(parseRetryAfter('0'), 0);
+  const now = Date.parse('2026-01-01T00:00:00.000Z');
+  assert.equal(parseRetryAfter('Thu, 01 Jan 2026 00:00:05 GMT', now), 5_000);
+  assert.equal(parseRetryAfter('not-a-delay', now), 0);
+});
+
+test('classifies HTTP 429 as a rate-limit response', async () => {
+  await assert.rejects(
+    fetchResource('https://8.8.8.8/test', {
+      fetchImpl: async () => new Response('busy', { status: 429, headers: { 'retry-after': '0' } }),
+      retries: 0,
+      requestIntervalMs: 0,
+    }),
+    (error) => error.code === 'UPSTREAM_RATE_LIMIT' && error.status === 502,
+  );
 });
 
 test('rejects challenge pages instead of attempting access-control bypass', () => {
