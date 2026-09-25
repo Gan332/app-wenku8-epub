@@ -19,4 +19,5 @@ class Wenku8Application : Application() {
     val readingStatsRepository: ReadingStatsRepository by lazy { ReadingStatsRepository(this) }
     val exploreRepository: ExploreRepository by lazy { ExploreRepository(Wenku8DataSource(jobManager.httpClient(), sessionStore)) }
     val catalogRepository: com.wenku8.epubstudio.core.CatalogRepository by lazy { com.wenku8.epubstudio.core.CatalogRepository(this) }
+    val coverRepository: com.wenku8.epubstudio.ui.cover.CoverRepository by lazy { com.wenku8.epubstudio.ui.cover.CoverRepository(this) }
 }
