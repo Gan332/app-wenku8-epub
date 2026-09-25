@@ -29,8 +29,9 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import top.yukonga.miuix.kmp.basic.IconButton
-import top.yukonga.miuix.kmp.basic.SuperDialog
 import top.yukonga.miuix.kmp.basic.Text as MiuixText
 import kotlin.math.abs
 
@@ -71,7 +72,10 @@ fun CoverViewerDialog(
 
     BackHandler(onBack = onDismiss)
 
-    SuperDialog(show = true, title = title, onDismissRequest = onDismiss) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+    ) {
         Box(
             modifier = Modifier.fillMaxSize().background(Color.Black),
             contentAlignment = Alignment.Center,
