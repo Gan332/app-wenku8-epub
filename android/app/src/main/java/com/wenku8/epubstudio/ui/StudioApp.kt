@@ -73,6 +73,7 @@ import com.wenku8.epubstudio.ui.BookshelfScreen
 import com.wenku8.epubstudio.ui.ExploreScreen
 import com.wenku8.epubstudio.ui.ReadingStatsScreen
 import com.wenku8.epubstudio.ui.SearchScreen
+import com.wenku8.epubstudio.ui.SettingsSection
 import com.wenku8.epubstudio.ui.SettingsScreen
 import com.wenku8.epubstudio.settings.AppThemeMode
 import com.wenku8.epubstudio.model.Chapter
