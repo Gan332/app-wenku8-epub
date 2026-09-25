@@ -5,6 +5,7 @@ import java.io.File
 import java.time.Year
 import java.time.YearMonth
 import kotlinx.serialization.builtins.MapSerializer
+import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
 
 /**
@@ -22,7 +23,7 @@ import kotlinx.serialization.json.Json
  */
 class CatalogCrawler(context: Context) {
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
-    private val mapSerializer = MapSerializer(CatalogEntry.serializer(), CatalogEntry.serializer())
+    private val mapSerializer = MapSerializer(String.serializer(), CatalogEntry.serializer())
     private val directory = File(context.filesDir, "catalog").apply { mkdirs() }
     private val entriesFile = File(directory, "catalog.json")
     private val cursorFile = File(directory, "index.json")
