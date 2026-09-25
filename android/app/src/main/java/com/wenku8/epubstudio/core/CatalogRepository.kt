@@ -57,7 +57,7 @@ class CatalogRepository(private val context: Context) {
 
     /** 本地搜索，免登录。 */
     fun search(query: String, field: CatalogSearchField, limit: Int = 60): List<CatalogEntry> = index.search(query, field, limit)
-    fun searchTag(tag: String): List<CatalogEntry> = index.byTag(tag)
+    fun searchTag(tag: String): List<CatalogEntry> = index.searchTag(tag)
 
     /** 触发一次增量抓取。 */
     fun update(detailBudget: Int = 200) {

@@ -11,7 +11,7 @@ class CatalogIndex(entries: Collection<CatalogEntry>) {
     val entries: Map<String, CatalogEntry> = entries.associateBy { it.id }
     private val byTitle = HashMap<String, List<String>>()
     private val byAuthor = HashMap<String, List<String>>()
-    private val byTag = HashMap<String, List<String>>()
+    private val tagIndex = HashMap<String, List<String>>()
 
     init {
         val title = HashMap<String, MutableList<String>>()
@@ -25,12 +25,12 @@ class CatalogIndex(entries: Collection<CatalogEntry>) {
         }
         byTitle.putAll(title)
         byAuthor.putAll(author)
-        byTag.putAll(tag)
+        tagIndex.putAll(tag)
     }
 
     val size: Int get() = entries.size
 
-    val allTags: List<String> get() = byTag.keys.sorted()
+    val allTags: List<String> get() = tagIndex.keys.sorted()
 
     fun get(id: String): CatalogEntry? = entries[id]
 
@@ -53,7 +53,7 @@ class CatalogIndex(entries: Collection<CatalogEntry>) {
             else if (key.startsWith(needle)) ids.forEach(prefix::add)
             else if (key.contains(needle)) ids.forEach(contains::add)
         }
-        for ((key, ids) in byTag) {
+        for ((key, ids) in tagIndex) {
             if (key == needle) ids.forEach(exact::add)
             else if (key.startsWith(needle)) ids.forEach(prefix::add)
             else if (key.contains(needle)) ids.forEach(contains::add)
@@ -74,8 +74,8 @@ class CatalogIndex(entries: Collection<CatalogEntry>) {
     }
 
     /** 按标签浏览。 */
-    fun byTag(tag: String, limit: Int = 200): List<CatalogEntry> =
-        byTag[normalize(tag)].orEmpty().mapNotNull { entries[it] }.take(limit)
+    fun searchTag(tag: String, limit: Int = 200): List<CatalogEntry> =
+        tagIndex[normalize(tag)].orEmpty().mapNotNull { entries[it] }.take(limit)
 
     private fun indexInto(target: HashMap<String, MutableList<String>>, raw: String, id: String) {
         if (raw.isBlank()) return
