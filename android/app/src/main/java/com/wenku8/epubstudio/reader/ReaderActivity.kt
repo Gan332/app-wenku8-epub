@@ -19,7 +19,17 @@ class ReaderActivity : ComponentActivity() {
     private val epubPicker = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri == null) return@registerForActivityResult
         runCatching { contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
-        startActivity(Intent(this, ReaderActivity::class.java).putExtra(EXTRA_URI, uri.toString()).putExtra(EXTRA_BOOK_ID, "import-${uri.toString().hashCode()}"))
+        val id = "local:${uri.toString().hashCode()}"
+        (application as com.wenku8.epubstudio.Wenku8Application).bookshelfRepository.add(
+            com.wenku8.epubstudio.model.BookshelfEntry(
+                id = id,
+                bookId = id,
+                title = uri.lastPathSegment?.substringAfterLast('/') ?: "本地 EPUB",
+                source = com.wenku8.epubstudio.model.BookshelfSource.LOCAL_EPUB,
+                localUri = uri.toString(),
+            )
+        )
+        startActivity(Intent(this, ReaderActivity::class.java).putExtra(EXTRA_URI, uri.toString()).putExtra(EXTRA_BOOK_ID, id))
         finish()
     }
     private val fontPicker = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -27,6 +37,16 @@ class ReaderActivity : ComponentActivity() {
         runCatching { contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
         val path = FontStore(this).import(uri)
         if (path != null) viewModel.updateFontUri(path)
+    }
+
+    override fun onStart() {
+        super.onStart()
+        viewModel.startSession()
+    }
+
+    override fun onStop() {
+        viewModel.stopSession()
+        super.onStop()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -39,9 +59,7 @@ class ReaderActivity : ComponentActivity() {
         }
         viewModel.load(uri, bookId)
         setContent {
-            MiuixTheme(
-                controller = remember { ThemeController(ColorSchemeMode.MonetSystem, keyColor = Color(0xFFA34B2F)) },
-            ) {
+            com.wenku8.epubstudio.ui.AppMiuixTheme {
                 ReaderScreen(
                     viewModel = viewModel,
                     onImportFont = { fontPicker.launch(arrayOf("font/ttf", "font/otf", "application/x-font-ttf", "application/octet-stream")) },

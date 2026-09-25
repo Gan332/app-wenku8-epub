@@ -38,6 +38,8 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
     private val mutable = MutableStateFlow(ReaderUiState())
     val state: StateFlow<ReaderUiState> = mutable.asStateFlow()
     private var bookId: String = ""
+    private var bookTitle: String = ""
+    private var sessionStartedAt: Long? = null
 
     init {
         viewModelScope.launch {
@@ -52,6 +54,7 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
             mutable.update { it.copy(loading = true, error = null) }
             runCatching { withContext(Dispatchers.IO) { repository.open(id, uri) } }
                 .onSuccess { book ->
+                    bookTitle = book.title
                     val progress = settingsRepository.progress(id).first()
                     val index = progress?.chapterIndex?.coerceIn(0, (book.chapters.size - 1).coerceAtLeast(0)) ?: 0
                     mutable.update { it.copy(loading = false, book = book, chapterIndex = index, paragraphIndex = progress?.paragraphIndex ?: 0) }
@@ -91,6 +94,22 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
     fun updateKeepScreenOn(value: Boolean) { viewModelScope.launch { settingsRepository.setReaderKeepScreenOn(value); refreshSettings() } }
     fun updateImmersive(value: Boolean) { viewModelScope.launch { settingsRepository.setReaderImmersive(value); setImmersive(value); refreshSettings() } }
     fun updateFontUri(value: String?) { viewModelScope.launch { settingsRepository.setReaderFontUri(value); refreshSettings() } }
+
+    fun startSession() {
+        if (sessionStartedAt == null) sessionStartedAt = android.os.SystemClock.elapsedRealtime()
+    }
+
+    fun stopSession() {
+        val started = sessionStartedAt ?: return
+        sessionStartedAt = null
+        val seconds = ((android.os.SystemClock.elapsedRealtime() - started) / 1000L).coerceIn(0L, 1800L)
+        if (seconds > 0) viewModelScope.launch { app.readingStatsRepository.recordSession(bookId, bookTitle, seconds) }
+    }
+
+    override fun onCleared() {
+        stopSession()
+        super.onCleared()
+    }
 
     private fun refreshSettings() { viewModelScope.launch { mutable.update { it.copy(settings = settingsRepository.readerSettings.first()) } } }
 

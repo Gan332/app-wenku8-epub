@@ -184,7 +184,7 @@ private fun ReaderBottomBar(state: ReaderUiState, viewModel: ReaderViewModel) {
     val hasPrevious = state.chapterIndex > 0
     val hasNext = state.chapterIndex < chapterCount - 1
     Row(
-        modifier = Modifier.fillMaxWidth().height(CONTROL_BAR_HEIGHT.dp).background(readerPalette(state.settings).background).padding(horizontal = 6.dp),
+        modifier = Modifier.fillMaxWidth().height(CONTROL_BAR_HEIGHT.dp).background(MiuixTheme.colorScheme.background).padding(horizontal = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
@@ -249,7 +249,7 @@ private fun ChapterContent(chapter: ReaderChapter, settings: ReaderSettings, fon
 @Composable
 private fun ReaderTocSheet(book: ReaderBook, current: Int, onSelect: (Int) -> Unit, onDismiss: () -> Unit) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState, containerColor = MiuixTheme.colorScheme.background, contentColor = MiuixTheme.colorScheme.onBackground) {
         MiuixText("目录", fontSize = 21.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
         LazyColumn(Modifier.fillMaxWidth().heightIn(max = 520.dp), contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             itemsIndexed(book.chapters) { index, chapter ->
@@ -283,7 +283,7 @@ private fun ReaderSettingsSheet(
     onResetFont: () -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState, containerColor = MiuixTheme.colorScheme.background, contentColor = MiuixTheme.colorScheme.onBackground) {
         LazyColumn(Modifier.fillMaxWidth().heightIn(max = 650.dp), contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             item { MiuixText("阅读设置", fontSize = 21.sp, fontWeight = FontWeight.Bold) }
             item { MiuixText("背景") }

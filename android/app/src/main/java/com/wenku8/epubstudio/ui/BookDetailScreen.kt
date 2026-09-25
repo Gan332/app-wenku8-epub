@@ -53,5 +53,8 @@ fun BookDetailScreen(book: Book, chapterCount: Int, viewModel: StudioViewModel) 
         item {
             Button(onClick = viewModel::toChapters, enabled = chapterCount > 0, modifier = Modifier.fillMaxWidth()) { Text("选择章节并导出") }
         }
+        item {
+            TextButton(text = "加入书架", onClick = { viewModel.addToShelf(book, chapterCount) }, modifier = Modifier.fillMaxWidth())
+        }
     }
 }

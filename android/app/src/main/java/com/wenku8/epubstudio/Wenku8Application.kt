@@ -4,6 +4,10 @@ import android.app.Application
 import com.wenku8.epubstudio.core.Wenku8SessionStore
 import com.wenku8.epubstudio.core.Wenku8SearchProvider
 import com.wenku8.epubstudio.service.ExportJobManager
+import com.wenku8.epubstudio.data.BookshelfRepository
+import com.wenku8.epubstudio.data.ReadingStatsRepository
+import com.wenku8.epubstudio.core.ExploreRepository
+import com.wenku8.epubstudio.core.Wenku8DataSource
 import com.wenku8.epubstudio.settings.SettingsRepository
 
 class Wenku8Application : Application() {
@@ -11,4 +15,7 @@ class Wenku8Application : Application() {
     val sessionStore: Wenku8SessionStore by lazy { Wenku8SessionStore(this) }
     val jobManager: ExportJobManager by lazy { ExportJobManager(this, sessionStore) }
     val searchProvider: Wenku8SearchProvider by lazy { Wenku8SearchProvider(jobManager.httpClient(), sessionStore) }
+    val bookshelfRepository: BookshelfRepository by lazy { BookshelfRepository(this) }
+    val readingStatsRepository: ReadingStatsRepository by lazy { ReadingStatsRepository(this) }
+    val exploreRepository: ExploreRepository by lazy { ExploreRepository(Wenku8DataSource(jobManager.httpClient(), sessionStore)) }
 }

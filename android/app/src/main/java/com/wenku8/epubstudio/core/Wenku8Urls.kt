@@ -9,6 +9,9 @@ object Wenku8Urls {
     const val LOGIN = "$BASE/login.php"
     const val SEARCH = "$BASE/modules/article/search.php"
     const val ARTICLE_INFO = "$BASE/modules/article/articleinfo.php"
+    const val TOP_LIST = "$BASE/modules/article/toplist.php"
+    const val ARTICLE_LIST = "$BASE/modules/article/articlelist.php"
+    const val TAGS = "$BASE/modules/article/tags.php"
 
     fun book(bookId: String): String = "$BASE/book/${bookId.filter(Char::isDigit)}.htm"
 
@@ -19,4 +22,7 @@ object Wenku8Urls {
         val type = if (field == SearchField.AUTHOR) "author" else "articlename"
         return "$SEARCH?searchtype=$type&searchkey=$encoded"
     }
+
+    fun toplist(sort: String = "lastupdate") = "$TOP_LIST?sort=$sort"
+    fun tag(tag: String) = "$TAGS?t=${runCatching { URLEncoder.encode(tag, Charset.forName("GBK")) }.getOrElse { URLEncoder.encode(tag, Charsets.UTF_8) }}"
 }

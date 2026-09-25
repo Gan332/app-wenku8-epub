@@ -67,7 +67,11 @@ import com.wenku8.epubstudio.R
 import com.wenku8.epubstudio.Wenku8Application
 import com.wenku8.epubstudio.auth.LoginActivity
 import com.wenku8.epubstudio.reader.ReaderActivity
+import com.wenku8.epubstudio.ui.AppMiuixTheme
 import com.wenku8.epubstudio.ui.BookDetailScreen
+import com.wenku8.epubstudio.ui.BookshelfScreen
+import com.wenku8.epubstudio.ui.ExploreScreen
+import com.wenku8.epubstudio.ui.ReadingStatsScreen
 import com.wenku8.epubstudio.ui.SearchScreen
 import com.wenku8.epubstudio.ui.SettingsScreen
 import com.wenku8.epubstudio.settings.AppThemeMode
@@ -86,7 +90,8 @@ class MainActivity : ComponentActivity() {
     private val epubPicker = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
             runCatching { contentResolver.takePersistableUriPermission(uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION) }
-            startActivity(android.content.Intent(this, ReaderActivity::class.java).putExtra(ReaderActivity.EXTRA_URI, uri.toString()).putExtra(ReaderActivity.EXTRA_BOOK_ID, "import-${uri.toString().hashCode()}"))
+            studioViewModel.addLocalEpub(uri.toString(), uri.lastPathSegment?.substringAfterLast('/') ?: "本地 EPUB")
+            startActivity(android.content.Intent(this, ReaderActivity::class.java).putExtra(ReaderActivity.EXTRA_URI, uri.toString()).putExtra(ReaderActivity.EXTRA_BOOK_ID, "local:${uri.toString().hashCode()}"))
         }
     }
     private val loginLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { studioViewModel.refreshSession() }
@@ -99,47 +104,7 @@ class MainActivity : ComponentActivity() {
             notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
         setContent {
-            val appSettings by (application as Wenku8Application).settingsRepository.appTheme.collectAsStateWithLifecycle(initialValue = com.wenku8.epubstudio.settings.AppThemeSettings(), lifecycle = LocalLifecycleOwner.current.lifecycle)
-            val baseTextStyles = MiuixTheme.textStyles
-            val textStyles = baseTextStyles.copy(
-                main = baseTextStyles.main.copy(fontFamily = MiSansFont),
-                paragraph = baseTextStyles.paragraph.copy(fontFamily = MiSansFont),
-                body1 = baseTextStyles.body1.copy(fontFamily = MiSansFont),
-                body2 = baseTextStyles.body2.copy(fontFamily = MiSansFont),
-                button = baseTextStyles.button.copy(fontFamily = MiSansFont),
-                footnote1 = baseTextStyles.footnote1.copy(fontFamily = MiSansFont),
-                footnote2 = baseTextStyles.footnote2.copy(fontFamily = MiSansFont),
-                headline1 = baseTextStyles.headline1.copy(fontFamily = MiSansFont),
-                headline2 = baseTextStyles.headline2.copy(fontFamily = MiSansFont),
-                subtitle = baseTextStyles.subtitle.copy(fontFamily = MiSansFont),
-                title1 = baseTextStyles.title1.copy(fontFamily = MiSansFont),
-                title2 = baseTextStyles.title2.copy(fontFamily = MiSansFont),
-                title3 = baseTextStyles.title3.copy(fontFamily = MiSansFont),
-                title4 = baseTextStyles.title4.copy(fontFamily = MiSansFont),
-            )
-            MiuixTheme(
-                controller = remember(appSettings.mode, appSettings.useDynamicColor, appSettings.accentColor) {
-                    ThemeController(
-                        colorSchemeMode = if (appSettings.useDynamicColor) {
-                            when (appSettings.mode) {
-                                AppThemeMode.SYSTEM -> ColorSchemeMode.MonetSystem
-                                AppThemeMode.LIGHT -> ColorSchemeMode.MonetLight
-                                AppThemeMode.DARK -> ColorSchemeMode.MonetDark
-                                AppThemeMode.MONET -> ColorSchemeMode.MonetSystem
-                            }
-                        } else {
-                            when (appSettings.mode) {
-                                AppThemeMode.SYSTEM -> ColorSchemeMode.System
-                                AppThemeMode.LIGHT -> ColorSchemeMode.Light
-                                AppThemeMode.DARK -> ColorSchemeMode.Dark
-                                AppThemeMode.MONET -> ColorSchemeMode.System
-                            }
-                        },
-                        keyColor = Color(appSettings.accentColor),
-                    )
-                },
-                textStyles = textStyles,
-            ) {
+            AppMiuixTheme {
                 StudioApp(
                     viewModel = studioViewModel,
                     onLogin = { loginLauncher.launch(android.content.Intent(this, LoginActivity::class.java)) },
@@ -153,13 +118,15 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun StudioApp(viewModel: StudioViewModel, onLogin: () -> Unit, onImportEpub: () -> Unit) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val context = LocalContext.current
     Scaffold(
         topBar = {
             TopAppBar(
                 title = when {
-                    state.tab == StudioTab.SEARCH -> "搜索轻小说"
+                    state.tab == StudioTab.BOOKSHELF -> "我的书架"
+                    state.tab == StudioTab.EXPLORE -> "探索"
+                    state.tab == StudioTab.STATS -> "阅读统计"
                     state.tab == StudioTab.SETTINGS -> "设置"
-                    state.tab == StudioTab.HISTORY -> "历史任务"
                     state.step == CreateStep.SOURCE -> "文库 EPUB 工坊"
                     state.step == CreateStep.DETAIL -> "书籍详情"
                     state.step == CreateStep.CHAPTERS -> "选择章节"
@@ -170,38 +137,24 @@ private fun StudioApp(viewModel: StudioViewModel, onLogin: () -> Unit, onImportE
         },
         bottomBar = {
             NavigationBar {
-                NavigationBarItem(
-                    selected = state.tab == StudioTab.SEARCH,
-                    onClick = { viewModel.setTab(StudioTab.SEARCH) },
-                    icon = Icons.Default.Search,
-                    label = "搜索",
-                )
-                NavigationBarItem(
-                    selected = state.tab == StudioTab.CREATE,
-                    onClick = { viewModel.setTab(StudioTab.CREATE) },
-                    icon = Icons.Default.Add,
-                    label = "创建",
-                )
-                NavigationBarItem(
-                    selected = state.tab == StudioTab.HISTORY,
-                    onClick = { viewModel.setTab(StudioTab.HISTORY) },
-                    icon = Icons.Default.History,
-                    label = "历史",
-                )
-                NavigationBarItem(
-                    selected = state.tab == StudioTab.SETTINGS,
-                    onClick = { viewModel.setTab(StudioTab.SETTINGS) },
-                    icon = Icons.Default.Settings,
-                    label = "设置",
-                )
+                NavigationBarItem(selected = state.tab == StudioTab.BOOKSHELF, onClick = { viewModel.setTab(StudioTab.BOOKSHELF) }, icon = Icons.Default.History, label = "书架")
+                NavigationBarItem(selected = state.tab == StudioTab.EXPLORE, onClick = { viewModel.setTab(StudioTab.EXPLORE) }, icon = Icons.Default.Search, label = "探索")
+                NavigationBarItem(selected = state.tab == StudioTab.CREATE, onClick = { viewModel.setTab(StudioTab.CREATE) }, icon = Icons.Default.Add, label = "创建")
+                NavigationBarItem(selected = state.tab == StudioTab.STATS, onClick = { viewModel.setTab(StudioTab.STATS) }, icon = Icons.Default.Download, label = "统计")
+                NavigationBarItem(selected = state.tab == StudioTab.SETTINGS, onClick = { viewModel.setTab(StudioTab.SETTINGS) }, icon = Icons.Default.Settings, label = "设置")
             }
         },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).padding(horizontal = 18.dp)) {
             when {
-                state.tab == StudioTab.SEARCH -> SearchScreen(state, viewModel, onLogin)
+                state.tab == StudioTab.BOOKSHELF -> BookshelfScreen(state, viewModel, onImportEpub, onOpenLocal = { entry ->
+                    entry.localUri?.let { uri ->
+                        context.startActivity(android.content.Intent(context, ReaderActivity::class.java).putExtra(ReaderActivity.EXTRA_URI, uri).putExtra(ReaderActivity.EXTRA_BOOK_ID, entry.bookId))
+                    }
+                }, onOpenRemote = { entry -> viewModel.openShelfRemote(entry) })
+                state.tab == StudioTab.EXPLORE -> ExploreScreen(state, viewModel, onLogin)
+                state.tab == StudioTab.STATS -> ReadingStatsScreen(state.readingStats, viewModel::clearReadingStats)
                 state.tab == StudioTab.SETTINGS -> SettingsScreen(viewModel, onImportEpub)
-                state.tab == StudioTab.HISTORY -> HistoryScreen(state.jobs, viewModel)
                 state.step == CreateStep.SOURCE -> SourceScreen(state, viewModel)
                 state.step == CreateStep.DETAIL -> state.book?.let { BookDetailScreen(it, state.index?.chapters?.size ?: 0, viewModel) } ?: SourceScreen(state, viewModel)
                 state.step == CreateStep.CHAPTERS -> ChaptersScreen(state, viewModel)

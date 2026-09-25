@@ -4,23 +4,29 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.wenku8.epubstudio.Wenku8Application
+import com.wenku8.epubstudio.core.ExploreBooksRow
+import com.wenku8.epubstudio.core.ExplorePage
+import com.wenku8.epubstudio.core.Wenku8Urls
 import com.wenku8.epubstudio.model.Book
-import com.wenku8.epubstudio.model.SearchBook
-import com.wenku8.epubstudio.model.SearchField
 import com.wenku8.epubstudio.model.BookIndex
+import com.wenku8.epubstudio.model.BookshelfEntry
+import com.wenku8.epubstudio.model.BookshelfSource
 import com.wenku8.epubstudio.model.ExportJob
 import com.wenku8.epubstudio.model.JobStatus
+import com.wenku8.epubstudio.model.ReadingStats
+import com.wenku8.epubstudio.model.SearchBook
+import com.wenku8.epubstudio.model.SearchField
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-enum class StudioTab { SEARCH, CREATE, HISTORY, SETTINGS }
+enum class StudioTab { BOOKSHELF, EXPLORE, CREATE, STATS, SETTINGS }
 enum class CreateStep { SOURCE, DETAIL, CHAPTERS, EXPORT, PROGRESS }
 
 data class StudioUiState(
-    val tab: StudioTab = StudioTab.SEARCH,
+    val tab: StudioTab = StudioTab.BOOKSHELF,
     val step: CreateStep = CreateStep.SOURCE,
     val sourceUrl: String = "https://www.wenku8.net/novel/2/2835/index.htm",
     val book: Book? = null,
@@ -39,6 +45,11 @@ data class StudioUiState(
     val searchBusy: Boolean = false,
     val searchMessage: String? = null,
     val loggedIn: Boolean = false,
+    val bookshelf: List<BookshelfEntry> = emptyList(),
+    val readingStats: ReadingStats = ReadingStats(),
+    val exploreRows: List<ExploreBooksRow> = emptyList(),
+    val exploreBusy: Boolean = false,
+    val exploreMessage: String? = null,
 )
 
 class StudioViewModel(application: Application) : AndroidViewModel(application) {
@@ -46,6 +57,9 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     private val manager = app.jobManager
     private val searchProvider = app.searchProvider
     private val settingsRepository = app.settingsRepository
+    private val bookshelfRepository = app.bookshelfRepository
+    private val readingStatsRepository = app.readingStatsRepository
+    private val exploreRepository = app.exploreRepository
     private val mutable = MutableStateFlow(StudioUiState())
     val state: StateFlow<StudioUiState> = mutable.asStateFlow()
     val appTheme = settingsRepository.appTheme
@@ -63,9 +77,80 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch {
             settingsRepository.searchHistory.collect { history -> mutable.update { it.copy(searchHistory = history) } }
         }
+        viewModelScope.launch {
+            bookshelfRepository.entries.collect { entries -> mutable.update { it.copy(bookshelf = entries) } }
+        }
+        viewModelScope.launch {
+            readingStatsRepository.stats.collect { stats -> mutable.update { it.copy(readingStats = stats) } }
+        }
     }
 
     fun setTab(tab: StudioTab) = mutable.update { it.copy(tab = tab, message = null) }
+
+    val explorePages: List<ExplorePage> = listOf(
+        ExplorePage("lastupdate", "今日更新", Wenku8Urls.toplist("lastupdate"), requiresAuth = false),
+        ExplorePage("allvisit", "热门轻小说", Wenku8Urls.toplist("allvisit"), requiresAuth = false),
+        ExplorePage("postdate", "新书一览", Wenku8Urls.toplist("postdate"), requiresAuth = false),
+        ExplorePage("anime", "动画化作品", Wenku8Urls.toplist("anime"), requiresAuth = false),
+        ExplorePage("all", "全部轻小说", "${Wenku8Urls.ARTICLE_LIST}?s=0", requiresAuth = false),
+        ExplorePage("校园", "校园", Wenku8Urls.tag("校园"), requiresAuth = false),
+        ExplorePage("恋爱", "恋爱", Wenku8Urls.tag("恋爱"), requiresAuth = false),
+        ExplorePage("奇幻", "奇幻", Wenku8Urls.tag("奇幻"), requiresAuth = false),
+        ExplorePage("科幻", "科幻", Wenku8Urls.tag("科幻"), requiresAuth = false),
+    )
+
+    fun loadExplore(page: ExplorePage = explorePages.first()) {
+        viewModelScope.launch {
+            mutable.update { it.copy(exploreBusy = true, exploreMessage = null) }
+            runCatching { exploreRepository.load(page) }
+                .onSuccess { books -> mutable.update { it.copy(exploreBusy = false, exploreRows = listOf(ExploreBooksRow(page.title, books, page.id))) } }
+                .onFailure { error -> mutable.update { it.copy(exploreBusy = false, exploreMessage = error.message ?: "探索失败。") } }
+        }
+    }
+
+    fun addToShelf(book: Book, chapterCount: Int = state.value.index?.chapters?.size ?: 0) {
+        val id = book.id ?: book.bookUrl.substringAfterLast('/').removeSuffix(".htm")
+        viewModelScope.launch {
+            bookshelfRepository.add(
+                BookshelfEntry(
+                    id = "wenku8:$id",
+                    bookId = id,
+                    title = book.title,
+                    author = book.author,
+                    source = BookshelfSource.WENKU8,
+                    sourceUrl = book.sourceUrl,
+                    coverUrl = book.coverUrl,
+                    chapterCount = chapterCount,
+                    wordCount = book.wordCount,
+                )
+            )
+            mutable.update { it.copy(message = "已加入书架") }
+        }
+    }
+
+    fun addSearchToShelf(book: SearchBook) {
+        viewModelScope.launch {
+            bookshelfRepository.add(BookshelfEntry(id = "wenku8:${book.id}", bookId = book.id, title = book.title, author = book.author, sourceUrl = book.sourceUrl, coverUrl = book.coverUrl, wordCount = book.wordCount))
+            mutable.update { it.copy(message = "已加入书架") }
+        }
+    }
+
+    fun addLocalEpub(uri: String, title: String = "本地 EPUB") {
+        val id = "local:${uri.hashCode()}"
+        viewModelScope.launch {
+            bookshelfRepository.add(BookshelfEntry(id = id, bookId = id, title = title, source = BookshelfSource.LOCAL_EPUB, localUri = uri))
+        }
+    }
+
+    fun removeFromShelf(id: String) { viewModelScope.launch { bookshelfRepository.remove(id) } }
+    fun setPinned(id: String, pinned: Boolean) { viewModelScope.launch { bookshelfRepository.setPinned(id, pinned) } }
+    fun markShelfRead(id: String) { viewModelScope.launch { bookshelfRepository.recordRead(id) } }
+    fun openShelfRemote(entry: BookshelfEntry) {
+        mutable.update { it.copy(sourceUrl = entry.sourceUrl, tab = StudioTab.CREATE, step = CreateStep.SOURCE, book = null, index = null) }
+        parseSource()
+    }
+    fun clearReadingStats() { viewModelScope.launch { readingStatsRepository.clear() } }
+
     fun setSource(value: String) = mutable.update { it.copy(sourceUrl = value, message = null) }
     fun setSearch(value: String) = mutable.update { it.copy(search = value) }
     fun setCover(value: Boolean) = mutable.update { it.copy(includeCover = value) }
