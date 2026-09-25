@@ -786,12 +786,9 @@ class MobileJobManager {
   private async persist(job: StoredJob): Promise<void> {
     job.updatedAt = new Date().toISOString();
     const target = `jobs/${job.id}.json`;
-    const temporary = `${target}.${publicId()}.tmp`;
-    await Filesystem.writeFile({ path: temporary, data: JSON.stringify(job, null, 2), directory: Directory.Data, encoding: Encoding.UTF8 });
     try {
-      await Filesystem.moveFile({ from: temporary, to: target, directory: Directory.Data });
+      await Filesystem.writeFile({ path: target, data: JSON.stringify(job, null, 2), directory: Directory.Data, encoding: Encoding.UTF8 });
     } catch {
-      await Filesystem.deleteFile({ path: temporary, directory: Directory.Data }).catch(() => undefined);
       throw new MobileError('任务记录保存失败。', 'PERSIST_FAILED', 500);
     }
   }
