@@ -90,7 +90,7 @@ object Wenku8Parser {
             image.remove()
         }
         root.select("br").forEach { it.before(TextNode("\n")); it.remove() }
-        root.select("p").forEach { it.append(TextNode("\n")) }
+        root.select("p").forEach { it.append("\n") }
         val blocks = normalizeBlocks(root.text(), imageUrls.size)
         val plain = blocks.filterIsInstance<ContentBlock.Text>().joinToString("") { it.value }
         if (plain.length < 10 && imageUrls.isEmpty()) throw Wenku8Exception("章节正文为空：${chapter.title}", "EMPTY_CHAPTER")
