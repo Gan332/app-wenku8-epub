@@ -45,6 +45,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.Card
@@ -66,6 +67,9 @@ import com.wenku8.epubstudio.R
 import com.wenku8.epubstudio.Wenku8Application
 import com.wenku8.epubstudio.auth.LoginActivity
 import com.wenku8.epubstudio.reader.ReaderActivity
+import com.wenku8.epubstudio.ui.BookDetailScreen
+import com.wenku8.epubstudio.ui.SearchScreen
+import com.wenku8.epubstudio.ui.SettingsScreen
 import com.wenku8.epubstudio.settings.AppThemeMode
 import com.wenku8.epubstudio.model.Chapter
 import com.wenku8.epubstudio.model.ExportJob
@@ -89,7 +93,7 @@ class MainActivity : ComponentActivity() {
             notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
         setContent {
-            val appSettings by (application as Wenku8Application).settingsRepository.appTheme.collectAsStateWithLifecycle()
+            val appSettings by (application as Wenku8Application).settingsRepository.appTheme.collectAsStateWithLifecycle(initialValue = com.wenku8.epubstudio.settings.AppThemeSettings(), lifecycle = LocalLifecycleOwner.current.lifecycle)
             val baseTextStyles = MiuixTheme.textStyles
             val textStyles = baseTextStyles.copy(
                 main = baseTextStyles.main.copy(fontFamily = MiSansFont),
@@ -383,7 +387,7 @@ private fun ChapterRow(chapter: Chapter, selected: Boolean, onToggle: () -> Unit
 }
 
 @Composable
-private fun MessageCard(message: String) {
+internal fun MessageCard(message: String) {
     Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(14.dp)) { Text(message, color = MiuixTheme.colorScheme.error, fontSize = 14.sp) }
 }
 

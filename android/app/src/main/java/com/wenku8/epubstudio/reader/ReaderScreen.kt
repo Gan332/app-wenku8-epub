@@ -61,6 +61,7 @@ fun ReaderScreen(viewModel: ReaderViewModel, onImportFont: () -> Unit) {
     val book = state.book
     val settings = state.settings
     val palette = readerPalette(settings)
+    val error = state.error
     BackHandler(onBack = { viewModel.showSettings(false) })
 
     Scaffold(
@@ -78,7 +79,7 @@ fun ReaderScreen(viewModel: ReaderViewModel, onImportFont: () -> Unit) {
     ) { padding ->
         when {
             state.loading -> MiuixText("正在打开 EPUB…", Modifier.padding(padding).padding(24.dp))
-            state.error != null -> MiuixText(state.error, Modifier.padding(padding).padding(24.dp), color = Color(0xFFB3261E))
+            error != null -> MiuixText(error, Modifier.padding(padding).padding(24.dp), color = Color(0xFFB3261E))
             book != null -> ReaderContent(book, state, viewModel, palette, Modifier.padding(padding))
         }
     }

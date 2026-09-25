@@ -19,6 +19,7 @@ import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.theme.MiuixTheme
+import com.wenku8.epubstudio.MessageCard
 import com.wenku8.epubstudio.model.SearchBook
 import com.wenku8.epubstudio.model.SearchField
 
