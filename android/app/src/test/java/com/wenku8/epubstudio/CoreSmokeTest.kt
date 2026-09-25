@@ -36,6 +36,32 @@ class CoreSmokeTest {
     }
 
     @Test
+    fun parsesBookMetadataAndWordCount() {
+        val html = """
+            <html><head><title>测试书 - 作者 - 文库</title></head><body><div id="content"><table>
+            <tr><td>小说作者：测试作者</td><td>文章状态：连载中</td></tr>
+            <tr><td>最后更新：2026-09-25</td><td>全文长度：207,559字</td></tr>
+            <tr><td><a href="/novel/2/2835/index.htm">目录</a></td></tr>
+            </table></div></body></html>
+        """.trimIndent()
+        val book = Wenku8Parser.parseBook(html, "https://www.wenku8.net/book/2835.htm")
+        assertEquals("测试作者", book.author)
+        assertEquals(207559L, book.wordCount)
+        assertEquals("2026-09-25", book.updatedAt)
+        assertEquals(false, book.isComplete)
+    }
+
+    @Test
+    fun searchParserExtractsResultIdsAndLoginIsExplicit() {
+        assertTrue(Wenku8Parser.looksLikeLoginPage("<html><title>用户登录</title><form action='/login.php'></form></html>"))
+        val html = "<div><a href='/book/12.htm'>结果书</a><span>作者：作者甲</span><span>字数：1234字</span></div>"
+        val result = Wenku8Parser.parseSearchResults(html, "https://www.wenku8.net/modules/article/search.php").single()
+        assertEquals("12", result.id)
+        assertEquals("结果书", result.title)
+        assertEquals(1234L, result.wordCount)
+    }
+
+    @Test
     fun epubStartsWithUncompressedMimetype() {
         val directory = File(System.getProperty("java.io.tmpdir"), "wenku8-epub-test-${System.nanoTime()}").apply { mkdirs() }
         try {

@@ -52,7 +52,7 @@ class LoginActivity : Activity() {
                 override fun onPageFinished(view: WebView, url: String) {
                     CookieManager.getInstance().flush()
                     sessionStore.saveWebViewSession()
-                    if (sessionStore.hasSession() && !url.contains("login.php", ignoreCase = true)) {
+                    if (sessionStore.hasSession()) {
                         setResult(RESULT_OK, Intent().putExtra("logged_in", true))
                         finish()
                     }

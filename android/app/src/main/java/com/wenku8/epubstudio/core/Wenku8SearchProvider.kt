@@ -13,7 +13,7 @@ class Wenku8SearchProvider(
         val value = keyword.trim()
         if (value.isEmpty()) return emptyList()
         if (!sessionStore.hasSession()) throw Wenku8Exception("请先登录轻小说文库后搜索。", "AUTH_REQUIRED")
-        val page = http.fetchText(Wenku8Urls.search(value, field), "search")
+        val page = http.fetchText(Wenku8Urls.search(value, field), "search", Wenku8Urls.BASE)
         if (Wenku8Parser.looksLikeLoginPage(page.html)) {
             sessionStore.clear()
             throw Wenku8Exception("搜索登录已过期，请重新登录。", "AUTH_REQUIRED")

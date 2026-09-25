@@ -56,19 +56,19 @@ import java.io.File
 import java.util.zip.ZipFile
 
 @Composable
-fun ReaderScreen(viewModel: ReaderViewModel, onImportFont: () -> Unit) {
+fun ReaderScreen(viewModel: ReaderViewModel, onImportFont: () -> Unit, onBack: () -> Unit) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val book = state.book
     val settings = state.settings
     val palette = readerPalette(settings)
     val error = state.error
-    BackHandler(onBack = { viewModel.showSettings(false) })
+    BackHandler(onBack = { if (state.showSettings) viewModel.showSettings(false) else onBack() })
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = book?.chapters?.getOrNull(state.chapterIndex)?.title ?: "EPUB 阅读器",
-                navigationIcon = { TextButton(text = "返回", onClick = { viewModel.showSettings(false) }) },
+                navigationIcon = { TextButton(text = "返回", onClick = onBack) },
                 actions = {
                     TextButton(text = "目录", onClick = { viewModel.showToc(true) })
                     TextButton(text = "设置", onClick = { viewModel.showSettings(true) })
@@ -125,19 +125,27 @@ private fun ReaderContent(book: ReaderBook, state: ReaderUiState, viewModel: Rea
         LaunchedEffect(state.chapterIndex) { if (pagerState.currentPage != state.chapterIndex) pagerState.animateScrollToPage(state.chapterIndex) }
         LaunchedEffect(pagerState.currentPage) { if (pagerState.currentPage != state.chapterIndex) viewModel.selectChapter(pagerState.currentPage) }
         HorizontalPager(state = pagerState, modifier = modifier.fillMaxSize().background(palette.background)) { page ->
-            ChapterContent(book.chapters[page], state.settings, fontFamily, palette, Modifier.fillMaxSize(), book.archivePath) { viewModel.setParagraph(it) }
+            ChapterContent(book.chapters[page], state.settings, fontFamily, palette, Modifier.fillMaxSize(), book.archivePath, viewModel::toggleControls) { viewModel.setParagraph(it) }
         }
     } else {
         val chapter = book.chapters.getOrNull(state.chapterIndex) ?: return
-        ChapterContent(chapter, state.settings, fontFamily, palette, modifier.fillMaxSize(), book.archivePath) { viewModel.setParagraph(it) }
+        Box(modifier.fillMaxSize()) {
+            ChapterContent(chapter, state.settings, fontFamily, palette, Modifier.fillMaxSize(), book.archivePath, viewModel::toggleControls) { viewModel.setParagraph(it) }
+            if (state.controlsVisible) {
+                Row(Modifier.align(Alignment.BottomCenter).padding(bottom = 10.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    TextButton(text = "上一章", onClick = viewModel::previousChapter)
+                    TextButton(text = "下一章", onClick = viewModel::nextChapter)
+                }
+            }
+        }
     }
 }
 
 @Composable
-private fun ChapterContent(chapter: ReaderChapter, settings: com.wenku8.epubstudio.settings.ReaderSettings, fontFamily: FontFamily, palette: ReaderPalette, modifier: Modifier, archivePath: String, onParagraph: (Int) -> Unit) {
+private fun ChapterContent(chapter: ReaderChapter, settings: com.wenku8.epubstudio.settings.ReaderSettings, fontFamily: FontFamily, palette: ReaderPalette, modifier: Modifier, archivePath: String, onTap: () -> Unit, onParagraph: (Int) -> Unit) {
     var paragraphNumber = 0
     LazyColumn(
-        modifier = modifier.clickable { },
+        modifier = modifier.clickable { onTap() },
         contentPadding = PaddingValues(horizontal = settings.horizontalPaddingDp.dp, vertical = 18.dp),
         verticalArrangement = Arrangement.spacedBy(settings.paragraphSpacingDp.dp),
     ) {

@@ -18,7 +18,7 @@ class ReaderActivity : ComponentActivity() {
     private val viewModel: ReaderViewModel by viewModels()
     private val fontPicker = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri == null) return@registerForActivityResult
-        contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        runCatching { contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
         val path = FontStore(this).import(uri)
         if (path != null) viewModel.updateFontUri(path)
     }
@@ -36,7 +36,7 @@ class ReaderActivity : ComponentActivity() {
             MiuixTheme(
                 controller = remember { ThemeController(ColorSchemeMode.MonetSystem, keyColor = Color(0xFFA34B2F)) },
             ) {
-                ReaderScreen(viewModel) { fontPicker.launch(arrayOf("font/ttf", "font/otf", "application/x-font-ttf", "application/octet-stream")) }
+                ReaderScreen(viewModel, { fontPicker.launch(arrayOf("font/ttf", "font/otf", "application/x-font-ttf", "application/octet-stream")) }) { finish() }
             }
         }
     }
