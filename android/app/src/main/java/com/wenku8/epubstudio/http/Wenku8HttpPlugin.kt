@@ -18,6 +18,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
 import okhttp3.HttpUrl
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import java.util.concurrent.TimeUnit
 
 @CapacitorPlugin(name = "Wenku8Http")
@@ -181,7 +182,7 @@ class Wenku8HttpPlugin : Plugin() {
     }
 
     private fun validateUrl(raw: String): HttpUrl {
-        val parsed = HttpUrl.parse(raw) ?: throw IllegalArgumentException("网址格式无效。")
+        val parsed = raw.toHttpUrlOrNull() ?: throw IllegalArgumentException("网址格式无效。")
         if (parsed.scheme != "https" && parsed.scheme != "http") throw IllegalArgumentException("只允许 HTTP/HTTPS 网址。")
         if (parsed.username.isNotEmpty() || parsed.password.isNotEmpty()) throw IllegalArgumentException("网址不能包含用户名或密码。")
         val host = parsed.host.lowercase()
