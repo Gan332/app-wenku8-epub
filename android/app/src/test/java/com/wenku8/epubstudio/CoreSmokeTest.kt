@@ -2,6 +2,9 @@ package com.wenku8.epubstudio
 
 import com.wenku8.epubstudio.core.Wenku8Parser
 import com.wenku8.epubstudio.core.Wenku8Url
+import com.wenku8.epubstudio.core.Wenku8Urls
+import com.wenku8.epubstudio.model.ReadingStats
+import kotlinx.serialization.json.Json
 import com.wenku8.epubstudio.epub.EpubBuilder
 import com.wenku8.epubstudio.reader.EpubReaderRepository
 import com.wenku8.epubstudio.model.Book
@@ -60,6 +63,15 @@ class CoreSmokeTest {
         assertEquals("12", result.id)
         assertEquals("结果书", result.title)
         assertEquals(1234L, result.wordCount)
+    }
+
+    @Test
+    fun exploreEndpointsAndStatsAreStable() {
+        assertEquals("https://www.wenku8.net/modules/article/toplist.php?sort=lastupdate", Wenku8Urls.toplist("lastupdate"))
+        assertTrue(Wenku8Urls.tag("恋爱").startsWith("https://www.wenku8.net/modules/article/tags.php?t="))
+        val stats = ReadingStats(totalSeconds = 7200, todaySeconds = 600, currentStreak = 3, longestStreak = 8, totalSessions = 4, lastReadAt = 10L, dailySeconds = mapOf("2026-09-25" to 600L), bookSeconds = mapOf("b1" to 700L), bookTitles = mapOf("b1" to "测试书"))
+        val encoded = Json.encodeToString(ReadingStats.serializer(), stats)
+        assertEquals(stats, Json.decodeFromString(ReadingStats.serializer(), encoded))
     }
 
     @Test

@@ -4,11 +4,16 @@
 
 主要模块：
 
-- `ui/StudioApp.kt`：MiuiX 主题、搜索、创建流程、章节选择、导出进度和历史页面
+- `ui/StudioApp.kt`：MiuiX 主题、书架、探索、创建流程、章节选择、导出进度和设置页面
+- `ui/BookshelfScreen.kt`：本地 EPUB/Wenku8 书架、置顶和导出记录
+- `ui/ExploreScreen.kt`：Wenku8 数据源探索和搜索
+- `ui/ReadingStatsScreen.kt`：阅读时长和阅读统计
 - `ui/StudioViewModel.kt`：应用状态、搜索、详情和主题交互
 - `settings/`：DataStore 应用主题、阅读设置、搜索历史和阅读进度
 - `auth/LoginActivity.kt`：仅用于 wenku8 登录和验证码的 WebView
 - `core/`：URL 白名单、OkHttp Cookie/限流、GBK 解码、搜索和 Jsoup 解析
+- `core/ExploreRepository.kt`：可扩展数据源和 Wenku8 探索页
+- `data/`：DataStore 书架、阅读统计和设置持久化
 - `epub/EpubBuilder.kt`：EPUB 3 / NCX 与本地图片打包
 - `reader/`：EPUB 容器/目录解析、阅读器、背景、字体、沉浸模式和章节导航设置
 - `service/ExportJobManager.kt`：串行任务队列、实时进度、取消和历史恢复
