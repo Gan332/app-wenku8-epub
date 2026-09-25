@@ -4,8 +4,12 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.wenku8.epubstudio.Wenku8Application
+import com.wenku8.epubstudio.core.CatalogEntry
+import com.wenku8.epubstudio.core.CatalogSearchField
 import com.wenku8.epubstudio.core.ExploreBooksRow
 import com.wenku8.epubstudio.core.ExplorePage
+import com.wenku8.epubstudio.core.Wenku8HttpClient
+import com.wenku8.epubstudio.core.Wenku8Parser
 import com.wenku8.epubstudio.core.Wenku8Urls
 import com.wenku8.epubstudio.model.Book
 import com.wenku8.epubstudio.model.BookIndex
@@ -16,11 +20,26 @@ import com.wenku8.epubstudio.model.JobStatus
 import com.wenku8.epubstudio.model.ReadingStats
 import com.wenku8.epubstudio.model.SearchBook
 import com.wenku8.epubstudio.model.SearchField
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+
+/** 把本地索引条目转成统一的书籍卡片模型。 */
+internal fun CatalogEntry.toSearchBook(): SearchBook = SearchBook(
+    id = id,
+    title = title,
+    author = author,
+    category = category,
+    status = status,
+    updatedAt = updatedAt,
+    wordCount = wordCount,
+    coverUrl = coverUrl,
+    sourceUrl = sourceUrl,
+)
 
 enum class StudioTab { BOOKSHELF, EXPLORE, CREATE, STATS, SETTINGS }
 enum class CreateStep { SOURCE, DETAIL, CHAPTERS, EXPORT, PROGRESS }
@@ -50,6 +69,11 @@ data class StudioUiState(
     val exploreRows: List<ExploreBooksRow> = emptyList(),
     val exploreBusy: Boolean = false,
     val exploreMessage: String? = null,
+    val catalogSize: Int = 0,
+    val catalogLoading: Boolean = false,
+    val catalogProgress: Pair<Int, Int>? = null,
+    val catalogUpdatedAt: Long = 0L,
+    val localResults: List<CatalogEntry> = emptyList(),
 )
 
 class StudioViewModel(application: Application) : AndroidViewModel(application) {
@@ -60,6 +84,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     private val bookshelfRepository = app.bookshelfRepository
     private val readingStatsRepository = app.readingStatsRepository
     private val exploreRepository = app.exploreRepository
+    private val catalogRepository = app.catalogRepository
     private val mutable = MutableStateFlow(StudioUiState())
     val state: StateFlow<StudioUiState> = mutable.asStateFlow()
     val appTheme = settingsRepository.appTheme
@@ -83,30 +108,89 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch {
             readingStatsRepository.stats.collect { stats -> mutable.update { it.copy(readingStats = stats) } }
         }
+        viewModelScope.launch {
+            catalogRepository.state.collect { catalog ->
+                val stats = catalog.stats
+                mutable.update {
+                    it.copy(
+                        catalogSize = stats.count,
+                        catalogUpdatedAt = stats.lastUpdatedAt,
+                        catalogLoading = catalog.loading,
+                        catalogProgress = catalog.progress,
+                        exploreMessage = catalog.message ?: it.exploreMessage,
+                    )
+                }
+            }
+        }
     }
 
     fun setTab(tab: StudioTab) = mutable.update { it.copy(tab = tab, message = null) }
 
-    val explorePages: List<ExplorePage> = listOf(
-        ExplorePage("lastupdate", "今日更新", Wenku8Urls.toplist("lastupdate"), requiresAuth = false),
-        ExplorePage("allvisit", "热门轻小说", Wenku8Urls.toplist("allvisit"), requiresAuth = false),
-        ExplorePage("postdate", "新书一览", Wenku8Urls.toplist("postdate"), requiresAuth = false),
-        ExplorePage("anime", "动画化作品", Wenku8Urls.toplist("anime"), requiresAuth = false),
-        ExplorePage("all", "全部轻小说", "${Wenku8Urls.ARTICLE_LIST}?s=0", requiresAuth = false),
-        ExplorePage("校园", "校园", Wenku8Urls.tag("校园"), requiresAuth = false),
-        ExplorePage("恋爱", "恋爱", Wenku8Urls.tag("恋爱"), requiresAuth = false),
-        ExplorePage("奇幻", "奇幻", Wenku8Urls.tag("奇幻"), requiresAuth = false),
-        ExplorePage("科幻", "科幻", Wenku8Urls.tag("科幻"), requiresAuth = false),
-    )
+    /**
+     * 公开探索来源：年度精选榜与月度新书榜，均为匿名可访问页面。
+     * 不再使用 toplist.php / tags.php / articlelist.php（由站点控制登录）。
+     */
+    val explorePages: List<ExplorePage> = buildList {
+        val thisYear = java.time.Year.now().value
+        (0 until 5).forEach { offset ->
+            val year = thisYear - offset
+            add(ExplorePage("sugoi-$year", "$year 年度精选", Wenku8Urls.sugoi(year), requiresAuth = false))
+        }
+        val now = java.time.YearMonth.now()
+        (0 until 3).forEach { offset ->
+            val ym = now.minusMonths(offset.toLong())
+            val stamp = "${ym.year}${ym.monthValue.toString().padStart(2, '0')}"
+            add(ExplorePage("booklist-$stamp", "${ym.monthValue} 月新书", Wenku8Urls.booklist(stamp), requiresAuth = false))
+        }
+    }
 
     fun loadExplore(page: ExplorePage = explorePages.first()) {
         viewModelScope.launch {
             mutable.update { it.copy(exploreBusy = true, exploreMessage = null) }
-            runCatching { exploreRepository.load(page) }
-                .onSuccess { books -> mutable.update { it.copy(exploreBusy = false, exploreRows = listOf(ExploreBooksRow(page.title, books, page.id))) } }
-                .onFailure { error -> mutable.update { it.copy(exploreBusy = false, exploreMessage = error.message ?: "探索失败。") } }
+            runCatching {
+                val publicClient = com.wenku8.epubstudio.core.Wenku8HttpClient(java.io.File(app.cacheDir, "wenku8-explore"))
+                val resource = publicClient.fetchText(page.url, "explore-public", Wenku8Urls.BASE)
+                Wenku8Parser.parseBookLinks(resource.html, resource.finalUrl).map { it.id }
+            }.onSuccess { ids ->
+                // 公开页只给出 ID，用本地索引补全元数据；缺失的排队下次抓取
+                val known = ids.mapNotNull { catalogRepository.get(it) }
+                val pending = ids.size - known.size
+                val rows = if (known.isEmpty()) emptyList() else listOf(ExploreBooksRow(page.title, known.map { it.toSearchBook() }, page.id))
+                mutable.update {
+                    it.copy(
+                        exploreBusy = false,
+                        exploreRows = rows,
+                        exploreMessage = if (pending > 0) "已缓存 ${known.size} 本，另有 $pending 本可在「更新书目」时补全。" else null,
+                    )
+                }
+            }.onFailure { error ->
+                mutable.update { it.copy(exploreBusy = false, exploreMessage = error.message ?: "加载失败。") }
+            }
         }
     }
+
+    /** 免登录本地搜索。 */
+    fun searchLocal() {
+        val query = state.value.searchQuery.trim()
+        if (query.isEmpty()) {
+            mutable.update { it.copy(localResults = emptyList(), searchMessage = null) }
+            return
+        }
+        val field = if (state.value.searchField == SearchField.AUTHOR) CatalogSearchField.AUTHOR else CatalogSearchField.TITLE
+        viewModelScope.launch {
+            val results = withContext(Dispatchers.Default) { catalogRepository.search(query, field) }
+            mutable.update {
+                it.copy(
+                    localResults = results,
+                    searchMessage = if (results.isEmpty() && it.catalogSize == 0) "本地书目为空，请先到设置页更新书目缓存。" else null,
+                )
+            }
+        }
+    }
+
+    fun updateCatalog(budget: Int = 200) = catalogRepository.update(budget)
+
+    fun catalogTagList(): List<String> = catalogRepository.tagList()
 
     fun addToShelf(book: Book, chapterCount: Int = state.value.index?.chapters?.size ?: 0) {
         val id = book.id ?: book.bookUrl.substringAfterLast('/').removeSuffix(".htm")

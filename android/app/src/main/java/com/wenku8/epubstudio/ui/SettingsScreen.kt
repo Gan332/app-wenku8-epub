@@ -31,6 +31,7 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 @Composable
 fun SettingsScreen(viewModel: StudioViewModel, onImportEpub: () -> Unit) {
     val theme by viewModel.appTheme.collectAsStateWithLifecycle(initialValue = com.wenku8.epubstudio.settings.AppThemeSettings())
+    val state by viewModel.state.collectAsStateWithLifecycle()
     Column(Modifier.fillMaxWidth().padding(top = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("设置", fontSize = 25.sp, fontWeight = FontWeight.Bold)
         Text("主题", fontWeight = FontWeight.Bold, fontSize = 17.sp)
@@ -59,5 +60,17 @@ fun SettingsScreen(viewModel: StudioViewModel, onImportEpub: () -> Unit) {
         }
         Text("阅读器设置在 EPUB 阅读界面中提供：背景、字体、字号、字重、行距和翻页模式。", color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f), fontSize = 13.sp)
         TextButton(text = "导入 EPUB 文件", onClick = onImportEpub, modifier = Modifier.fillMaxWidth())
+        Text("书目缓存", fontWeight = FontWeight.Bold, fontSize = 17.sp)
+        val updated = state.catalogUpdatedAt.takeIf { it > 0 }
+            ?.let { "上次更新 ${java.time.Instant.ofEpochMilli(it).atZone(java.time.ZoneId.systemDefault()).toLocalDate()}" }
+            ?: "尚未更新"
+        Text("已缓存 ${state.catalogSize} 本 · $updated", color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f), fontSize = 13.sp)
+        Text("仅使用 wenku8 对匿名访客公开的页面（书籍详情、同作者作品、年度与月度榜单），不携带登录 Cookie。", color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f), fontSize = 12.sp)
+        val progress = state.catalogProgress
+        if (state.catalogLoading) {
+            Text("正在抓取 ${progress?.first ?: 0} / ${progress?.second ?: 0}", color = MiuixTheme.colorScheme.primary, fontSize = 13.sp)
+        } else {
+            TextButton(text = "更新书目缓存", onClick = viewModel::updateCatalog, modifier = Modifier.fillMaxWidth())
+        }
     }
 }

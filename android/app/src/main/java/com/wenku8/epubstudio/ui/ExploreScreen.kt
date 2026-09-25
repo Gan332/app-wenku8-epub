@@ -35,18 +35,25 @@ private sealed interface ExploreListItem {
 fun ExploreScreen(state: StudioUiState, viewModel: StudioViewModel, onLogin: () -> Unit) {
     Column(Modifier.fillMaxWidth().padding(top = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text("探索", fontSize = 25.sp, fontWeight = FontWeight.Bold)
-        Text("数据源：Wenku8 轻小说文库", color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f), fontSize = 13.sp)
-        if (!state.loggedIn) {
-            Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(14.dp)) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("登录后可搜索和浏览更多分类", fontSize = 14.sp)
-                    TextButton(text = "登录", onClick = onLogin)
+        Text("数据源：Wenku8 轻小说文库 · 公开页面，无需登录", color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f), fontSize = 13.sp)
+        Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(14.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                val updated = state.catalogUpdatedAt.takeIf { it > 0 }?.let { "上次更新 ${java.time.Instant.ofEpochMilli(it).atZone(java.time.ZoneId.systemDefault()).toLocalDate()}" } ?: "尚未更新"
+                Text("本地书目 ${state.catalogSize} 本 · $updated", fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                Text("搜索与浏览均基于本地缓存，断网也能用。", color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f), fontSize = 12.sp)
+                val progress = state.catalogProgress
+                if (state.catalogLoading) {
+                    Text("正在抓取 ${progress?.first ?: 0} / ${progress?.second ?: 0}", fontSize = 12.sp, color = MiuixTheme.colorScheme.primary)
+                } else {
+                    TextButton(text = "更新书目缓存", onClick = { viewModel.updateCatalog() }, modifier = Modifier.fillMaxWidth())
                 }
             }
         }
+        if (!state.loggedIn) {
+            Text("无需登录即可搜索；登录后可在设置页使用站内搜索作为补充。", color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f), fontSize = 12.sp)
+        }
         LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             items(viewModel.explorePages) { page ->
-                val selected = state.exploreRows.firstOrNull()?.title == page.title
                 TextButton(text = page.title, onClick = { viewModel.loadExplore(page) })
             }
         }
@@ -61,7 +68,7 @@ fun ExploreScreen(state: StudioUiState, viewModel: StudioViewModel, onLogin: () 
             useLabelAsPlaceholder = true,
             modifier = Modifier.fillMaxWidth(),
         )
-        Button(onClick = viewModel::searchBooks, enabled = !state.searchBusy && state.searchQuery.isNotBlank(), modifier = Modifier.fillMaxWidth()) { Text(if (state.searchBusy) "搜索中…" else "搜索") }
+        Button(onClick = viewModel::searchLocal, enabled = state.searchQuery.isNotBlank(), modifier = Modifier.fillMaxWidth()) { Text("搜索本地书目") }
         if (state.searchHistory.isNotEmpty()) {
             Text("最近搜索", fontSize = 13.sp, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f))
             LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -70,10 +77,12 @@ fun ExploreScreen(state: StudioUiState, viewModel: StudioViewModel, onLogin: () 
         }
         state.exploreMessage?.let { MessageCard(it) }
         state.searchMessage?.let { MessageCard(it) }
-        if (state.exploreBusy) Text("正在加载探索数据…", color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f), fontSize = 13.sp)
-        if (!state.exploreBusy && state.exploreRows.isEmpty() && state.searchResults.isEmpty()) {
-            Button(onClick = { viewModel.loadExplore(viewModel.explorePages.first()) }, modifier = Modifier.fillMaxWidth()) { Text("加载今日更新") }
+        if (state.exploreBusy) Text("正在加载公开榜单…", color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f), fontSize = 13.sp)
+        if (!state.exploreBusy && state.exploreRows.isEmpty() && state.localResults.isEmpty() && state.catalogSize == 0) {
+            Text("本地书目为空，点击「更新书目缓存」抓取公开榜单。", color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f), fontSize = 13.sp)
         }
+        if (state.localResults.isNotEmpty()) Text("本地搜索结果 ${state.localResults.size} 条", fontSize = 13.sp, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f))
+        val localItems = state.localResults.map { ExploreListItem.Book(it.toSearchBook()) }
         val exploreItems = buildList {
             state.exploreRows.forEach { row ->
                 add(ExploreListItem.Header(row.title))
@@ -81,8 +90,10 @@ fun ExploreScreen(state: StudioUiState, viewModel: StudioViewModel, onLogin: () 
             }
         }
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(state.searchResults, key = { "search-${it.id}" }) { book ->
-                ExploreBookCard(book, onOpen = { viewModel.openSearchBook(book) }, onAdd = { viewModel.addSearchToShelf(book) })
+            items(localItems, key = { "local-${it.key}" }) { item ->
+                (item as? ExploreListItem.Book)?.let { book ->
+                    ExploreBookCard(book.book, onOpen = { viewModel.openSearchBook(book.book) }, onAdd = { viewModel.addSearchToShelf(book.book) })
+                }
             }
             items(exploreItems, key = { "explore-${it.key}" }) { item ->
                 when (item) {
