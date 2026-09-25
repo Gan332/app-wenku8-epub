@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+
 package com.wenku8.epubstudio.reader
 
 import android.app.Activity
@@ -25,10 +27,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.foundation.pointerInput
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ChevronLeft
@@ -285,7 +288,7 @@ private fun ReaderSettingsSheet(
             item { MiuixText("阅读设置", fontSize = 21.sp, fontWeight = FontWeight.Bold) }
             item { MiuixText("背景") }
             item { LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                ReaderBackground.entries.forEach { background ->
+                items(ReaderBackground.entries.toList()) { background ->
                     TextButton(text = when (background) { ReaderBackground.PAPER -> "米黄"; ReaderBackground.LIGHT -> "白纸"; ReaderBackground.GREEN -> "护眼"; ReaderBackground.DARK -> "夜间"; ReaderBackground.OLED -> "OLED"; ReaderBackground.CUSTOM -> "自定义" }, onClick = { onBackground(background) })
                 }
             } }
