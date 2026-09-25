@@ -56,7 +56,7 @@ class TaskGuardPlugin : Plugin() {
         call.resolve()
     }
 
-    @Permission(Manifest.permission.POST_NOTIFICATIONS)
+    @Permission(permissions = [Manifest.permission.POST_NOTIFICATIONS])
     @PluginMethod
     fun requestNotificationPermission(call: PluginCall) {
         if (Build.VERSION.SDK_INT < 33) {
