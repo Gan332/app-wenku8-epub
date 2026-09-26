@@ -66,7 +66,9 @@ android {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
-            proguardFiles(getDefaultProguardFile("proguard-optimize.txt"), "proguard-rules.pro")
+            // AGP 9.x 只接受 proguard-android-optimize.txt / proguard-android.txt，
+            // 旧的 proguard-optimize.txt 会在配置期直接报错。
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             // 缺 Secrets 时不静默降级成 debug 签名，避免产出「看起来正常」的假包
             signingConfig = signingConfigs.getByName("release")
         }
