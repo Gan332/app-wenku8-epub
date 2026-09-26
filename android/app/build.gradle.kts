@@ -8,12 +8,12 @@ plugins {
 }
 
 android {
-    namespace = "com.wenku8.epubstudio"
+    namespace = "com.example.hyperreader"
     // MiuiX 0.9.4 的 AAR 要求 compileSdk 37+；targetSdk 保持 36，不引入运行时行为变更
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "com.wenku8.epubstudio"
+        applicationId = "com.example.hyperreader"
         minSdk = 26
         targetSdk = 36
         versionCode = 9
