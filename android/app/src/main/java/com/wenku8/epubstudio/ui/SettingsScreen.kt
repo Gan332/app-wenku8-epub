@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -34,7 +35,6 @@ import com.wenku8.epubstudio.settings.ReaderPageTurnMode
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.ColorPicker
 import top.yukonga.miuix.kmp.basic.HorizontalDivider
-import top.yukonga.miuix.kmp.basic.NumberPicker
 import top.yukonga.miuix.kmp.basic.Switch
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
@@ -188,16 +188,6 @@ private fun ReaderSection(state: StudioUiState, viewModel: StudioViewModel, onIm
         { ColorSwatchRow { viewModel.setReaderTextColor(it) } },
         { SectionTitle("字号：${settings.fontSizeSp.toInt()} sp") },
         { Slider(settings.fontSizeSp, { viewModel.setReaderFontSize(it) }, valueRange = 12f..32f, steps = 19) },
-        {
-            // 精确输入：滑块适合粗调，字号这类需要对准的场景用 NumberPicker
-            Text("精确设置字号", fontSize = 12.sp, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .7f))
-            NumberPicker(
-                value = settings.fontSizeSp.toInt(),
-                onValueChange = { viewModel.setReaderFontSize(it.toFloat()) },
-                range = 12..32,
-                modifier = Modifier.fillMaxWidth().height(150.dp),
-            )
-        },
         { SectionTitle("字重：${settings.fontWeight}") },
         { Slider(settings.fontWeight.toFloat(), { viewModel.setReaderFontWeight(it.toInt()) }, valueRange = 100f..900f, steps = 7) },
         { SectionTitle("行高：${"%.1f".format(settings.lineHeight)}") },
@@ -315,11 +305,14 @@ private fun AboutSection(viewModel: StudioViewModel) {
 
 @Composable
 private fun SettingsScaffold(title: String, onBack: () -> Unit, blocks: List<@Composable () -> Unit>) {
-    Column(Modifier.fillMaxWidth().padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    // 必须 fillMaxSize + LazyColumn 用 weight(1f)：
+    // 只写 fillMaxWidth 时 Column 会把剩余高度给最后一个子项但不做滚动预算，
+    // 内容一旦超出就被裁掉（真机上「字重以下全部不可达」）。
+    Column(Modifier.fillMaxSize().padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         TextButton(text = "‹ 返回设置", onClick = onBack)
         Text(title, fontSize = 23.sp, fontWeight = FontWeight.Bold)
         LazyColumn(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().weight(1f),
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {

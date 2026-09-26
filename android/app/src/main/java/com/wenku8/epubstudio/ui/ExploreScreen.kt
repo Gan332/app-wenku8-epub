@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -33,7 +34,7 @@ private sealed interface ExploreListItem {
 
 @Composable
 fun ExploreScreen(state: StudioUiState, viewModel: StudioViewModel, onLogin: () -> Unit, onGoToCatalog: () -> Unit) {
-    Column(Modifier.fillMaxWidth().padding(top = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    Column(Modifier.fillMaxSize().padding(top = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text("探索", fontSize = 25.sp, fontWeight = FontWeight.Bold)
         Text("数据源：Wenku8 轻小说文库 · 公开页面，无需登录", color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f), fontSize = 13.sp)
         Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(14.dp)) {
@@ -92,7 +93,8 @@ fun ExploreScreen(state: StudioUiState, viewModel: StudioViewModel, onLogin: () 
                 row.books.forEach { add(ExploreListItem.Book(it)) }
             }
         }
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        // weight(1f) 让列表拿到剩余高度并自行滚动；否则内容被底部导航截断且无法滑动
+        LazyColumn(Modifier.fillMaxWidth().weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(localItems, key = { "local-${it.key}" }) { item ->
                 (item as? ExploreListItem.Book)?.let { book ->
                     ExploreBookCard(book.book, onOpen = { viewModel.openSearchBook(book.book) }, onAdd = { viewModel.addSearchToShelf(book.book) })

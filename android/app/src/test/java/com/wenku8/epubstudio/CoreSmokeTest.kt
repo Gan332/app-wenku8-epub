@@ -8,8 +8,11 @@ import com.wenku8.epubstudio.core.Wenku8Parser
 import com.wenku8.epubstudio.core.Wenku8Url
 import com.wenku8.epubstudio.core.Wenku8Urls
 import com.wenku8.epubstudio.model.ReadingStats
+import com.wenku8.epubstudio.reader.readableTextOn
+import com.wenku8.epubstudio.reader.relativeLuminance
 import com.wenku8.epubstudio.ui.SettingsSection
 import com.wenku8.epubstudio.ui.formatWordCount
+import androidx.compose.ui.graphics.Color
 import kotlinx.serialization.json.Json
 import com.wenku8.epubstudio.epub.EpubBuilder
 import com.wenku8.epubstudio.reader.EpubReaderRepository
@@ -190,6 +193,31 @@ class CoreSmokeTest {
         assertTrue(SettingsSection.entries.contains(SettingsSection.READER))
         assertTrue(SettingsSection.entries.contains(SettingsSection.STATISTICS))
         assertTrue(SettingsSection.entries.contains(SettingsSection.CATALOG))
+    }
+
+    @Test
+    fun darkBackgroundNeverKeepsDarkText() {
+        // CUSTOM 背景配默认深色文字色（0xFF272522）曾经直接黑底黑字
+        val darkBackground = Color(0xFF17191C)
+        val defaultText = Color(0xFF272522)
+        assertTrue("黑底必须被纠正为可读文字色", relativeLuminance(readableTextOn(darkBackground, defaultText)) > 0.5)
+        // 纯黑（OLED）同理
+        assertTrue(relativeLuminance(readableTextOn(Color.Black, defaultText)) > 0.5)
+    }
+
+    @Test
+    fun lightBackgroundKeepsDarkTextWhenContrastIsSufficient() {
+        val paper = Color(0xFFF4EFE6)
+        val darkText = Color(0xFF272522)
+        assertEquals(darkText, readableTextOn(paper, darkText))
+        assertEquals(darkText, readableTextOn(Color.White, darkText))
+    }
+
+    @Test
+    fun darkBackgroundKeepsWhiteText() {
+        val white = Color.White
+        assertEquals(white, readableTextOn(Color.Black, white))
+        assertEquals(white, readableTextOn(Color(0xFF17191C), white))
     }
 
     @Test

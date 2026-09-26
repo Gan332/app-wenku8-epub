@@ -110,13 +110,15 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application),
     override fun nextChapter() = selectChapter(state.value.chapterIndex + 1)
     override fun previousChapter() = selectChapter(state.value.chapterIndex - 1)
     override fun setParagraph(index: Int) { mutable.update { it.copy(paragraphIndex = index.coerceAtLeast(0)) }; persistProgress() }
-    override fun toggleControls() = mutable.update { current ->
-        val next = !current.isImmersive
-        current.copy(isImmersive = next, controlsVisible = !next)
-    }
+    /**
+     * 点击正文只切换控件显隐，**不改 isImmersive**。
+     * 之前翻转 isImmersive（持久设置）会让系统栏跟着反复 hide/show，
+     * 与 Scaffold 底栏互相打架，表现为控件闪现、进得去出不来。
+     */
+    override fun toggleControls() = mutable.update { it.copy(controlsVisible = !it.controlsVisible) }
     override fun setImmersive(value: Boolean) = mutable.update { it.copy(isImmersive = value, controlsVisible = !value) }
-    override fun showSettings(show: Boolean) = mutable.update { it.copy(showSettings = show, isImmersive = false) }
-    override fun showToc(show: Boolean) = mutable.update { it.copy(showToc = show, isImmersive = false) }
+    override fun showSettings(show: Boolean) = mutable.update { it.copy(showSettings = show, controlsVisible = true) }
+    override fun showToc(show: Boolean) = mutable.update { it.copy(showToc = show, controlsVisible = true) }
     override fun closeOverlays() = mutable.update { it.copy(showSettings = false, showToc = false) }
 
     override fun updateFontSize(value: Float) { viewModelScope.launch { settingsRepository.setReaderFontSize(value); refreshSettings() } }

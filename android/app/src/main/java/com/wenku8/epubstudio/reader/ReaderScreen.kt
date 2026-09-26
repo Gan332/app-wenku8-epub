@@ -40,9 +40,7 @@ import androidx.compose.material.icons.filled.FileOpen
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Slider
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -74,6 +72,7 @@ import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.Text as MiuixText
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.TopAppBar
+import top.yukonga.miuix.kmp.overlay.OverlayBottomSheet
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import java.io.File
 import java.util.zip.ZipFile
@@ -282,18 +281,30 @@ private fun ChapterContent(
     imageResolver: @Composable (block: ReaderBlock.Image) -> ImageBitmap?,
     onParagraph: (Int) -> Unit,
 ) {
-    var paragraphNumber = 0
+    // 段落下标由 blocks 顺序**推导**得出。
+    // 之前用 `var paragraphNumber = 0` 在组合期自增，既不是稳定状态，
+    // 又会把「最后一个被组合的项」当成阅读位置写回，导致下标漂移。
+    fun paragraphIndexAt(blockIndex: Int): Int =
+        chapter.blocks.take(blockIndex.coerceIn(0, chapter.blocks.size)).count { it is ReaderBlock.Paragraph }
+
+    val listState = rememberLazyListState()
+    LaunchedEffect(listState, chapter.id) {
+        snapshotFlow { listState.firstVisibleItemIndex }
+            .collect { onParagraph(paragraphIndexAt(it)) }
+    }
+
     LazyColumn(
-        modifier = Modifier.fillMaxSize().background(palette.background).pointerInput(Unit) { detectTapGestures { } },
+        state = listState,
+        // 这里不能挂 detectTapGestures：它会吞掉全部点击，
+        // 父层的 toggleControls() 永远收不到事件，沉浸模式就成了单向陷阱。
+        modifier = Modifier.fillMaxSize().background(palette.background),
         contentPadding = PaddingValues(horizontal = settings.horizontalPaddingDp.dp, vertical = 18.dp),
         verticalArrangement = Arrangement.spacedBy(settings.paragraphSpacingDp.dp),
     ) {
-        itemsIndexed(chapter.blocks) { index, block ->
+        itemsIndexed(chapter.blocks, key = { index, block -> "${chapter.id}-$index-${block::class.simpleName}" }) { index, block ->
             when (block) {
                 is ReaderBlock.Heading -> MiuixText(block.text, fontSize = (settings.fontSizeSp + 6).sp, fontWeight = FontWeight.Bold, fontFamily = fontFamily, color = palette.text, modifier = Modifier.padding(top = 10.dp))
                 is ReaderBlock.Paragraph -> {
-                    val paragraph = paragraphNumber++
-                    LaunchedEffect(paragraph) { onParagraph(paragraph) }
                     MiuixText(block.text, fontSize = settings.fontSizeSp.sp, lineHeight = (settings.fontSizeSp * settings.lineHeight).sp, fontWeight = FontWeight(settings.fontWeight), fontFamily = fontFamily, color = palette.text, softWrap = true)
                 }
                 is ReaderBlock.Image -> imageResolver(block)?.let { bitmap ->
@@ -306,9 +317,10 @@ private fun ChapterContent(
 
 @Composable
 private fun ReaderTocSheet(book: ReaderBook, current: Int, onSelect: (Int) -> Unit, onDismiss: () -> Unit) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState, containerColor = MiuixTheme.colorScheme.background, contentColor = MiuixTheme.colorScheme.onBackground) {
-        MiuixText("目录", fontSize = 21.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+    // 用 MiuiX 的 OverlayBottomSheet 而非 material3 的 ModalBottomSheet：
+    // MiuiX 0.9.4 传递依赖的 material3 与本工程编译期不一致，运行期抛
+    // NoSuchMethodError: ModalBottomSheet-dYc4hso（真机点设置/目录必崩）。
+    OverlayBottomSheet(show = true, title = "目录", onDismissRequest = onDismiss) {
         LazyColumn(Modifier.fillMaxWidth().heightIn(max = 520.dp), contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             itemsIndexed(book.chapters) { index, chapter ->
                 TextButton(
@@ -340,8 +352,7 @@ private fun ReaderSettingsSheet(
     onImportEpub: () -> Unit,
     onResetFont: () -> Unit,
 ) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState, containerColor = MiuixTheme.colorScheme.background, contentColor = MiuixTheme.colorScheme.onBackground) {
+    OverlayBottomSheet(show = true, title = "阅读设置", onDismissRequest = onDismiss) {
         LazyColumn(Modifier.fillMaxWidth().heightIn(max = 650.dp), contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             item { MiuixText("阅读设置", fontSize = 21.sp, fontWeight = FontWeight.Bold) }
             item { MiuixText("背景") }
@@ -389,13 +400,44 @@ private fun ColorSettingRow(onColorChanged: (Int) -> Unit) {
 
 private data class ReaderPalette(val background: Color, val text: Color)
 
-private fun readerPalette(settings: ReaderSettings): ReaderPalette = when (settings.background) {
-    ReaderBackground.PAPER -> ReaderPalette(Color(0xFFF4EFE6), Color(settings.textColor))
-    ReaderBackground.LIGHT -> ReaderPalette(Color(0xFFFFFFFF), Color(settings.textColor))
-    ReaderBackground.GREEN -> ReaderPalette(Color(0xFFE7F0DF), Color(settings.textColor))
-    ReaderBackground.DARK -> ReaderPalette(Color(0xFF17191C), Color.White)
-    ReaderBackground.OLED -> ReaderPalette(Color.Black, Color.White)
-    ReaderBackground.CUSTOM -> ReaderPalette(Color(settings.customBackgroundColor), Color(settings.textColor))
+/** WCAG 相对亮度：>0.5 视为浅色底，应配深色字。 */
+internal fun relativeLuminance(color: Color): Double {
+    fun channel(v: Float): Double {
+        val c = v.toDouble()
+        return if (c <= 0.03928) c / 12.92 else Math.pow((c + 0.055) / 1.055, 2.4)
+    }
+    return 0.2126 * channel(color.red) + 0.7152 * channel(color.green) + 0.0722 * channel(color.blue)
+}
+
+/** 对比度不足时强制纠正文字色，避免黑底黑字。 */
+internal fun readableTextOn(background: Color, preferred: Color): Color {
+    val ratio = { fg: Color ->
+        val l1 = relativeLuminance(fg)
+        val l2 = relativeLuminance(background)
+        val lighter = maxOf(l1, l2)
+        val darker = minOf(l1, l2)
+        (lighter + 0.05) / (darker + 0.05)
+    }
+    return if (ratio(preferred) >= MIN_TEXT_CONTRAST) preferred else Color.White
+}
+
+internal const val MIN_TEXT_CONTRAST = 4.5
+
+private fun readerPalette(settings: ReaderSettings): ReaderPalette {
+    val background = when (settings.background) {
+        ReaderBackground.PAPER -> Color(0xFFF4EFE6)
+        ReaderBackground.LIGHT -> Color(0xFFFFFFFF)
+        ReaderBackground.GREEN -> Color(0xFFE7F0DF)
+        ReaderBackground.DARK -> Color(0xFF17191C)
+        ReaderBackground.OLED -> Color.Black
+        // 之前 CUSTOM 直接用 textColor，而其默认值是深色 —— 选深色自定义背景就黑底黑字
+        ReaderBackground.CUSTOM -> Color(settings.customBackgroundColor)
+    }
+    val preferred = when (settings.background) {
+        ReaderBackground.DARK, ReaderBackground.OLED -> Color.White
+        else -> Color(settings.textColor)
+    }
+    return ReaderPalette(background, readableTextOn(background, preferred))
 }
 
 @Composable
@@ -406,11 +448,31 @@ private fun rememberFont(uri: String?): FontFamily {
     return if (file.isFile) runCatching { FontFamily(Font(file)) }.getOrDefault(default) else default
 }
 
+/**
+ * 插图解码不能在组合期的 `remember {}` 里做 —— 那是主线程磁盘 I/O，
+ * 大文件多插图时会直接卡住甚至无响应。改为 IO 协程 + 内存缓存。
+ */
 @Composable
-private fun rememberEpubImage(archivePath: String, path: String): ImageBitmap? = remember(archivePath, path) {
-    runCatching {
-        ZipFile(File(archivePath)).use { zip -> zip.getInputStream(zip.getEntry(path)).use { BitmapFactory.decodeStream(it)?.asImageBitmap() } }
-    }.getOrNull()
+private fun rememberEpubImage(archivePath: String, path: String): ImageBitmap? {
+    val result = produceState<ImageBitmap?>(initialValue = null, archivePath, path) {
+        value = withContext(Dispatchers.IO) { decodeEpubImage(archivePath, path) }
+    }
+    return result.value
+}
+
+private val epubImageCache = object : LruCache<String, ImageBitmap>(8 * 1024 * 1024) {
+    override fun sizeOf(key: String, value: ImageBitmap): Int = value.width * value.height * 4
+}
+
+private fun decodeEpubImage(archivePath: String, path: String): ImageBitmap? {
+    val key = "$archivePath::$path"
+    epubImageCache.get(key)?.let { return it }
+    return runCatching {
+        ZipFile(File(archivePath)).use { zip ->
+            val entry = zip.getEntry(path) ?: return null
+            zip.getInputStream(entry).use { BitmapFactory.decodeStream(it)?.asImageBitmap() }
+        }
+    }.getOrNull()?.also { epubImageCache.put(key, it) }
 }
 
 @Composable
