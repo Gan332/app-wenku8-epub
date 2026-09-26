@@ -43,7 +43,10 @@ jobs:
             exit 1
           fi
           yes | "$SDKMANAGER" --licenses >/dev/null || true
-          "$SDKMANAGER" 'platform-tools' 'platforms;android-36' 'build-tools;36.1.0'
+          # MiuiX 0.9.4 要求 compileSdk 37。注意 SDK 37 引入小版本号，
+          # 公共仓库里没有 platforms;android-37，基础包是 platforms;android-37.0
+          # （其 source.properties 为 ApiLevel=37.0 / IsBaseSdk=true）。
+          "$SDKMANAGER" 'platform-tools' 'platforms;android-37.0' 'build-tools;37.0.0'
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
