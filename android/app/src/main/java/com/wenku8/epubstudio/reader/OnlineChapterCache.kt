@@ -148,6 +148,15 @@ class OnlineChapterCache(
      * 文件名安全化。目录穿越字符被替换；只有真正发生替换时才追加哈希后缀，
      * 避免 `../../` 这类输入互相覆盖，同时保持正常 ID 的路径可读。
      */
+    /**
+     * 文件名安全化。
+     *
+     * 允许集里**刻意不含 `.`**：一旦允许，`../../evil` 会被洗成 `.._.._evil`，
+     * 名字里仍然留着 `..`，断言与「任何单一文件名组件都不得等于或含有 `..`」的安全意图都会被绕过。
+     * 去掉 `.` 后 `../../evil` 变成 `______evil-<hash>`，`..` 无处可藏。
+     * 只有真正发生替换时才追加哈希后缀，避免 `../../` 这类输入互相覆盖，
+     * 同时保持正常 ID（纯数字）的路径可读且稳定。
+     */
     private fun segment(value: String): String {
         val trimmed = value.trim()
         val cleaned = trimmed.replace(UNSAFE, "_").take(64)
@@ -157,6 +166,8 @@ class OnlineChapterCache(
 
     companion object {
         const val DEFAULT_MAX_CHAPTERS = 50
-        private val UNSAFE = Regex("[^A-Za-z0-9_.-]")
+
+        /** 允许集只有字母、数字、下划线、连字符；`.` 与路径分隔符一律替换。 */
+        private val UNSAFE = Regex("[^A-Za-z0-9_-]")
     }
 }

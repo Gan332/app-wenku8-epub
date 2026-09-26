@@ -2,6 +2,51 @@
 
 本项目遵循语义化版本。
 
+## [0.8.0] - 2026-09-26
+
+### 依赖升级
+
+- MiuiX `0.8.8` → `0.9.4`
+  - Maven 坐标变更：旧的 `top.yukonga.miuix.kmp:miuix` 止于 0.8.8，0.9.x 发布在新坐标
+    `top.yukonga.miuix.kmp:miuix-ui` + `miuix-core` + `miuix-icons`
+  - `kmp.extra` 包已整体删除，`SuperDialog` → `top.yukonga.miuix.kmp.overlay.OverlayDialog`
+  - `Checkbox` 改用 Material 风格的 `ToggleableState` + `onClick`
+  - `TextStyles`（14 个字段）、`ThemeController`、`ColorSchemeMode`、`MiuixTheme` 签名均未变化
+- AGP `9.1.0` → `9.4.1`，Kotlin `2.3.20` → `2.4.20`，Compose MP `1.10.3` → `1.12.0`
+- Gradle `9.4.1` → `9.6.0`（AGP 9.4.1 的最低要求）
+- compileSdk `36` → `37`；targetSdk 保持 `36`
+- CI SDK 安装改为 `platforms;android-37.0` + `build-tools;37.0.0`
+  （SDK 37 起平台包强制带小版本号，裸的 `platforms;android-37` 不存在）
+
+### 通知与导出进度
+
+- 点击进行中任务的通知直达该任务进度界面
+- 任务完成/失败/取消后通知不再直接消失，点击进入书架导出记录
+- 通知路由决策抽为纯函数 `NotificationRoute.resolve`，可脱机测试
+- 书架首页新增进行中任务区：书名、进度条、当前章节、章节数、插图数、取消按钮
+- 无进行中任务时该区域完全隐藏，不占空间
+
+### 配置导入导出
+
+- 设置新增「配置导入导出」二级页
+- 导出主题与阅读器设置为 JSON，含 `schemaVersion` 版本校验
+- 导入时逐字段写入并复用既有范围钳制，单字段非法只跳过该字段
+- **凭据隔离是结构性的**：导出模型的字段全部是标量类型，物理上装不进
+  Cookie、密码、Token 或书架数据；单元测试用反射强制这条不变量
+- 刻意不导出 `fontUri`（设备本地 `content://` 授权地址，跨设备无效且泄露本机路径）
+- 枚举以字符串承载，未知取值变成「跳过并计数」而非整份文件解析失败
+
+### 在线阅读
+
+- Wenku8 书籍可直接在应用内阅读，无需先导出 EPUB
+- 复用现有阅读器渲染层（`ReaderScreenCore`），字体、背景、沉浸、目录、
+  阅读进度与时长统计与 EPUB 完全一致
+- 章节正文缓存到 `filesDir/online-cache`，上限最近 50 章 LRU
+- 命中缓存不发网络请求，已读章节断网可读
+- 章节请求严格串行，不做并发预取
+- 遇到登录页提示「该内容需要登录」并停止，**不做任何绕过**
+- 章节 404/410 落墓碑并跳转相邻章节；429 不误判为章节删除
+
 ## [0.7.0] - 2026-09-25
 
 - 书籍详情页新增封面大图，点击进入全屏预览

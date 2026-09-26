@@ -127,6 +127,11 @@ class OnlineReaderTest {
             val escaped = cache.key("2835", "../../evil")
             assertFalse(escaped.contains(".."))
             assertTrue(cache.fileFor("2835", "../../evil").canonicalPath.startsWith(directory.canonicalPath))
+            // 允许集里一旦含 `.`，`../../evil` 只会被洗成 `.._.._evil`，`..` 仍留在文件名里。
+            // 这里再钉住「名字中间夹点」这种更一般的形态，防止以后有人把 `.` 加回允许集。
+            assertFalse(cache.key("2835", "a..b").contains(".."))
+            assertTrue(cache.fileFor("2835", "..").canonicalPath.startsWith(directory.canonicalPath))
+            assertTrue(cache.fileFor("2835", ".").canonicalPath.startsWith(directory.canonicalPath))
         } finally {
             directory.deleteRecursively()
         }

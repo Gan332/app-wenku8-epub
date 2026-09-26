@@ -10,6 +10,12 @@
 - `ui/BookDetailScreen.kt`：封面大图与独立元数据控件
 - `ui/cover/`：封面加载、缓存与全屏缩放预览
 - `ui/SettingsScreen.kt`：设置总览与五个二级页面
+- `ui/ConfigSection.kt`：配置导入导出（凭据安全的标量模型）
+- `settings/ConfigTransfer.kt`：配置编解码、逐字段校验与写入
+- `reader/OnlineReaderSource.kt`：wenku8 目录与正文装配为 `ReaderBook`
+- `reader/OnlineChapterCache.kt`：在线章节缓存（50 章 LRU、墓碑、原子写）
+- `reader/RemoteImage.kt`：正文插图加载，复用封面加载器与限流客户端
+- `ui/NotificationRoute.kt`：通知点击路由的纯函数决策层
 - `ui/ExploreScreen.kt`：Wenku8 数据源探索和搜索
 - `ui/ReadingStatsScreen.kt`：阅读时长和阅读统计
 - `ui/StudioViewModel.kt`：应用状态、搜索、详情和主题交互

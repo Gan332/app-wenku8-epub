@@ -132,11 +132,11 @@ git commit -m "feat: add standalone Android APK source and CI"
 git push -u origin main
 ```
 
-推送 `v0.7.0` 等版本标签会触发 Release APK：
+推送 `v0.8.0` 等版本标签会触发 Release APK：
 
 ```powershell
-git tag v0.7.0
-git push origin v0.7.0
+git tag v0.8.0
+git push origin v0.8.0
 ```
 
 ## 测试与验收

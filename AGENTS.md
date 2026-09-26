@@ -11,7 +11,7 @@
 
 当前主要发版对象是 **Android 原生应用**。Android 版本不需要 Node.js 服务，WebView 仅用于 wenku8 登录。
 
-当前版本：`0.7.0`（versionCode 7）
+当前版本：`0.8.0`（versionCode 8）
 
 仓库地址：`https://github.com/Gan332/app-wenku8-epub`
 

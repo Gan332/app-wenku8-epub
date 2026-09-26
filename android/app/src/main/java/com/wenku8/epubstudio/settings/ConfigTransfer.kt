@@ -361,8 +361,10 @@ object ConfigTransfer {
             skipped += "$label（缺失）"
             return
         }
-        // 必须是完整的不透明 ARGB，避免导入出透明或越界的控件颜色
-        if (value < 0 || (value ushr 24) != 0xFF) {
+        // 必须是完整的不透明 ARGB，避免导入出透明或越界的控件颜色。
+        // 注意用无符号右移判断：不透明色的 alpha 0xFF 在有符号 Int 里是负数，
+        // 绝不能用 `value < 0` 判非法，否则所有正常颜色都会被误杀。
+        if ((value ushr 24) != 0xFF) {
             skipped += "$label 取值无效：$value"
             return
         }

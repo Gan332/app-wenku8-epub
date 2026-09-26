@@ -15,6 +15,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.lang.reflect.Modifier
 import java.time.ZoneId
 
 /**
@@ -167,7 +168,11 @@ class ConfigTransferTest {
             ConfigChange::class.java,
         )
         dtoTypes.forEach { type ->
-            type.declaredFields.forEach { field ->
+            // @Serializable 会由编译器注入一个 static Companion 字段（序列化器的宿主），
+            // 它不是数据字段，按类型隔离的语义应当排除；只校验实例字段。
+            val instanceFields = type.declaredFields.filterNot { Modifier.isStatic(it.modifiers) }
+            assertTrue("${type.simpleName} 应当仍有实例字段，否则本测试形同虚设", instanceFields.isNotEmpty())
+            instanceFields.forEach { field ->
                 assertTrue(
                     "${type.simpleName}.${field.name} 的类型 ${field.type.name} 不应是可承载凭据的结构",
                     field.type.name in allowedScalarTypes,
@@ -300,8 +305,12 @@ class ConfigTransferTest {
     fun entirelyMissingSectionsAreReportedNotIgnored() {
         val plan = ConfigTransfer.plan(ConfigTransfer.ConfigDocument(schemaVersion = 1))
         assertEquals(0, plan.appliedCount)
-        assertEquals(14, plan.skippedCount)
+        // 整段缺失按「一段一条」计数，而不是把 14 个字段逐条摊开
+        assertEquals(2, plan.skippedCount)
         assertTrue(plan.isEmpty)
+        assertTrue(plan.summary().contains("导入成功 0 项"))
+        assertTrue(plan.details().contains("主题设置"))
+        assertTrue(plan.details().contains("阅读器设置"))
     }
 
     // -----------------------------------------------------------------
@@ -393,7 +402,9 @@ class ConfigTransferTest {
         val name = configExportFileName(1_730_000_000_000L, ZoneId.of("UTC"))
         assertTrue(name, name.matches(Regex("wenku8-settings-\\d{8}-\\d{6}\\.json")))
         // 时间可注入：不同时间得到不同文件名，命名不含任何凭据或路径
-        assertTrue(name != configExportFileName(1_730_000_000_001L, ZoneId.of("UTC")))
+        assertTrue(name != configExportFileName(1_730_003_600_000L, ZoneId.of("UTC")))
+        // 时区参与格式化，因此同一时刻在不同时区得到不同名字
+        assertTrue(name != configExportFileName(1_730_000_000_000L, ZoneId.of("Asia/Shanghai")))
         assertFalse(name.contains("/"))
         assertFalse(name.contains(":"))
     }

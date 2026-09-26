@@ -159,26 +159,31 @@ class OnlineReaderSource(
         }
         // 串行闸门：一次只允许一个章节请求在飞，不做预取。
         chapterMutex.withLock {
-            fetch(chapter.url, referer = indexUrl(bookId)).flatMap { fetched ->
-                decodeChapter(fetched, chapter).also { outcome ->
-                    if (outcome is OnlineReaderResult.Ready) {
-                        // 写缓存失败不阻塞阅读
-                        cache.write(
-                            OnlineChapterCacheEntry(
-                                bookId = bookId,
-                                chapterId = chapter.id,
-                                title = chapter.title,
-                                volume = chapter.volume,
-                                sourceUrl = fetched.finalUrl,
-                                blocks = outcome.value.blocks,
-                            ),
-                        )
-                    } else if (outcome is OnlineReaderResult.Failed && outcome.code == OnlineReaderResult.CODE_CHAPTER_GONE) {
-                        // 源站已删除：打失效标记，之后翻到这里直接短路，不再打扰源站
-                        cache.markGone(bookId, chapter.id)
-                    }
-                }
+            val outcome = fetch(chapter.url, referer = indexUrl(bookId)).flatMap { fetched ->
+                decodeChapter(fetched, chapter)
             }
+            // 缓存写入与失效标记刻意放在 flatMap **之外**：
+            // HTTP 404 是在 fetch() 里被映射成 CHAPTER_GONE 的，那种情况下
+            // flatMap 的变换根本不会执行——若把 markGone 写在变换里，
+            // 已删除的章节就永远打不上墓碑，每次翻页都会重新去打扰源站。
+            when (outcome) {
+                is OnlineReaderResult.Ready -> cache.write(
+                    OnlineChapterCacheEntry(
+                        bookId = bookId,
+                        chapterId = chapter.id,
+                        title = chapter.title,
+                        volume = chapter.volume,
+                        sourceUrl = outcome.value.href,
+                        blocks = outcome.value.blocks,
+                    ),
+                )
+                is OnlineReaderResult.Failed -> if (outcome.code == OnlineReaderResult.CODE_CHAPTER_GONE) {
+                    // 源站已删除：打失效标记，之后翻到这里直接短路
+                    cache.markGone(bookId, chapter.id)
+                }
+                is OnlineReaderResult.NeedsLogin -> Unit
+            }
+            outcome
         }
     }
 

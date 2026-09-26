@@ -16,8 +16,8 @@ android {
         applicationId = "com.wenku8.epubstudio"
         minSdk = 26
         targetSdk = 36
-        versionCode = 7
-        versionName = "0.7.0"
+        versionCode = 8
+        versionName = "0.8.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -29,6 +29,16 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    // CI 日志默认只打印异常类型，断言信息全丢，远程无法定位。
+    // 打开后 --log-failed 能直接给出 expected/actual。
+    testOptions {
+        unitTests.all {
+            it.testLogging.showExceptions = true
+            it.testLogging.showStackTraces = true
+            it.testLogging.exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+        }
     }
 
     packaging {
