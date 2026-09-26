@@ -421,6 +421,38 @@ class CoreSmokeTest {
     }
 
     @Test
+    fun mainSourcesUseNoMaterialComponents() {
+        // 「界面统一 MiuiX」的回归守卫：material / material3 / material-icons
+        // 于 0.9.3 全量移除（版本错配崩溃类问题的根子）。连
+        // `@file:OptIn(androidx.compose.material3...)` 这种全限定写法一起抓。
+        val forbidden = listOf(
+            "androidx.compose.material3",
+            "androidx.compose.material.icons",
+            "androidx.compose.material.",
+        )
+        // 测试工作目录可能是 android/app 或 android，向上找 src/main/java，
+        // 同时考虑中间隔一层 app/ 的情况。
+        val sourceRoot = generateSequence(File(System.getProperty("user.dir"))) { it.parentFile }
+            .flatMap { dir -> sequenceOf(File(dir, "src/main/java"), File(dir, "app/src/main/java")) }
+            .firstOrNull { it.isDirectory }
+        requireNotNull(sourceRoot) { "未找到 src/main/java（user.dir=${System.getProperty("user.dir")}）" }
+        val offenders = mutableListOf<String>()
+        sourceRoot.walkTopDown()
+            .filter { it.isFile && it.extension == "kt" }
+            .forEach { file ->
+                file.readLines().forEachIndexed { index, line ->
+                    if (forbidden.any { line.contains(it) }) {
+                        offenders += "${file.name}:${index + 1}: ${line.trim()}"
+                    }
+                }
+            }
+        assertTrue(
+            "界面必须全部使用 MiuiX，发现 material 引用：\n" + offenders.joinToString("\n"),
+            offenders.isEmpty(),
+        )
+    }
+
+    @Test
     fun darkBackgroundNeverKeepsDarkText() {
         // CUSTOM 背景配默认深色文字色（0xFF272522）曾经直接黑底黑字
         val darkBackground = Color(0xFF17191C)

@@ -16,8 +16,8 @@ android {
         applicationId = "com.example.hyperreader"
         minSdk = 26
         targetSdk = 36
-        versionCode = 12
-        versionName = "0.9.2"
+        versionCode = 13
+        versionName = "0.9.3"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -88,9 +88,7 @@ dependencies {
     implementation(libs.miuix.ui)
     implementation(libs.miuix.core)
     implementation(libs.miuix.icons)
-    implementation(libs.compose.material)
-    implementation(libs.compose.material3)
-    implementation(libs.compose.icons.extended)
+    // material / material3 / material-icons 已于 0.9.3 全量移除：界面全部走 MiuiX
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.compose)

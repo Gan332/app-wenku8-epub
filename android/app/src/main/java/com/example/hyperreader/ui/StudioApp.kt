@@ -21,15 +21,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.Icon
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Share
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -53,6 +44,7 @@ import top.yukonga.miuix.kmp.basic.BreadcrumbBar
 import top.yukonga.miuix.kmp.basic.BreadcrumbItem
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Checkbox
+import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.LinearProgressIndicator
 import top.yukonga.miuix.kmp.basic.NavigationBar
 import top.yukonga.miuix.kmp.basic.NavigationBarItem
@@ -62,6 +54,13 @@ import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.basic.TextField
+import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.Add
+import top.yukonga.miuix.kmp.icon.extended.Download
+import top.yukonga.miuix.kmp.icon.extended.Recent
+import top.yukonga.miuix.kmp.icon.extended.Search
+import top.yukonga.miuix.kmp.icon.extended.Settings
+import top.yukonga.miuix.kmp.icon.extended.Share
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.theme.ColorSchemeMode
 import top.yukonga.miuix.kmp.theme.MiuixTheme
@@ -195,10 +194,10 @@ private fun StudioApp(
         },
         bottomBar = {
             NavigationBar {
-                NavigationBarItem(selected = state.tab == StudioTab.BOOKSHELF, onClick = { viewModel.setTab(StudioTab.BOOKSHELF) }, icon = Icons.Default.History, label = "书架")
-                NavigationBarItem(selected = state.tab == StudioTab.EXPLORE, onClick = { viewModel.setTab(StudioTab.EXPLORE) }, icon = Icons.Default.Search, label = "探索")
-                NavigationBarItem(selected = state.tab == StudioTab.CREATE, onClick = { viewModel.setTab(StudioTab.CREATE) }, icon = Icons.Default.Add, label = "创建")
-                NavigationBarItem(selected = state.tab == StudioTab.SETTINGS, onClick = { viewModel.setTab(StudioTab.SETTINGS) }, icon = Icons.Default.Settings, label = "设置")
+                NavigationBarItem(selected = state.tab == StudioTab.BOOKSHELF, onClick = { viewModel.setTab(StudioTab.BOOKSHELF) }, icon = MiuixIcons.Recent, label = "书架")
+                NavigationBarItem(selected = state.tab == StudioTab.EXPLORE, onClick = { viewModel.setTab(StudioTab.EXPLORE) }, icon = MiuixIcons.Search, label = "探索")
+                NavigationBarItem(selected = state.tab == StudioTab.CREATE, onClick = { viewModel.setTab(StudioTab.CREATE) }, icon = MiuixIcons.Add, label = "创建")
+                NavigationBarItem(selected = state.tab == StudioTab.SETTINGS, onClick = { viewModel.setTab(StudioTab.SETTINGS) }, icon = MiuixIcons.Settings, label = "设置")
             }
         },
     ) { padding ->
@@ -373,8 +372,8 @@ private fun ProgressContent(job: ExportJob, viewModel: StudioViewModel) {
             JobStatus.queued, JobStatus.running -> Button(onClick = { viewModel.cancel(job.id) }, modifier = Modifier.fillMaxWidth()) { Text("取消任务") }
             JobStatus.completed -> {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Button(onClick = { viewModel.save(job.id) }, modifier = Modifier.weight(1f)) { Icon(Icons.Default.Download, "保存") }
-                    Button(onClick = { viewModel.share(job.id) }, modifier = Modifier.weight(1f)) { Icon(Icons.Default.Share, "分享") }
+                    Button(onClick = { viewModel.save(job.id) }, modifier = Modifier.weight(1f)) { Icon(MiuixIcons.Download, "保存") }
+                    Button(onClick = { viewModel.share(job.id) }, modifier = Modifier.weight(1f)) { Icon(MiuixIcons.Share, "分享") }
                 }
                 Text("已保存到 Download/EPUB，可随时再次保存。", color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.72f), fontSize = 13.sp)
             }

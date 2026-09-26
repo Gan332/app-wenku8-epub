@@ -11,7 +11,7 @@
 
 当前主要发版对象是 **Android 原生应用**。Android 版本不需要 Node.js 服务，WebView 仅用于 wenku8 登录。
 
-当前版本：`0.9.2`（versionCode 12，见 `android/app/build.gradle.kts`，以该文件为准）
+当前版本：`0.9.3`（versionCode 13，见 `android/app/build.gradle.kts`，以该文件为准）
 包名：`com.example.hyperreader`（由 `com.wenku8.epubstudio` 于 0.9.0 重命名，非原地改名，升级需数据迁移）
 
 仓库地址：`https://github.com/Gan332/app-wenku8-epub`
@@ -23,7 +23,7 @@
 - Kotlin
 - Jetpack Compose
 - MiuiX `v0.9.4`（依赖坐标 `top.yukonga.miuix.kmp:miuix-ui` + `miuix-core` + `miuix-icons`）
-- Material3（仅用于阅读器 BottomSheet 和 Slider）
+- ~~Material3~~（0.9.3 起全量移除，界面统一 MiuiX，material 依赖已从构建中断开）
 - OkHttp
 - Jsoup
 - DataStore Preferences
@@ -134,7 +134,8 @@ android/app/src/main/java/com/example/hyperreader/
 - 按钮最小触摸区域 48dp
 - 长列表使用 `LazyColumn`，不要一次性构建全部条目
 - 读图/解析类操作放 `Dispatchers.IO`
-- MiuX 组件优先，Material3 仅在需要 BottomSheet/Slider 时使用
+- MiuX 组件**唯一**：0.9.3 起 material/material3/material-icons 全量移除，
+  有单测 `mainSourcesUseNoMaterialComponents` 守卫，源码出现 material 引用直接失败
 - 主题色从 `MiuixTheme.colorScheme` 获取，不要写死颜色
 
 ### 4.5 被动触发（0.7.0 起）

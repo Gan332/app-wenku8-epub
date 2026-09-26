@@ -1,5 +1,3 @@
-@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
-
 package com.example.hyperreader.reader
 
 import android.app.Activity
@@ -43,15 +41,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.ChevronLeft
-import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.FileOpen
-import androidx.compose.material.icons.filled.MenuBook
-import androidx.compose.material.icons.filled.Tune
-import androidx.compose.material3.Icon
-import androidx.compose.material3.Slider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -83,12 +72,25 @@ import com.example.hyperreader.R
 import com.example.hyperreader.settings.ReaderBackground
 import com.example.hyperreader.settings.ReaderPageTurnMode
 import com.example.hyperreader.settings.ReaderSettings
+import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
+import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.Scaffold
+import top.yukonga.miuix.kmp.basic.Slider
+import top.yukonga.miuix.kmp.basic.SmallTitle
+import top.yukonga.miuix.kmp.basic.Switch
+import top.yukonga.miuix.kmp.basic.TabRow
 import top.yukonga.miuix.kmp.basic.Text as MiuixText
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.TopAppBar
+import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.Back
+import top.yukonga.miuix.kmp.icon.extended.ChevronBackward
+import top.yukonga.miuix.kmp.icon.extended.ChevronForward
+import top.yukonga.miuix.kmp.icon.extended.Import
+import top.yukonga.miuix.kmp.icon.extended.ListView
+import top.yukonga.miuix.kmp.icon.extended.Tune
 import top.yukonga.miuix.kmp.overlay.OverlayBottomSheet
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import java.io.File
@@ -186,15 +188,15 @@ fun ReaderScreenCore(
                         title = book?.chapters?.getOrNull(state.chapterIndex)?.title ?: "阅读器",
                         navigationIcon = {
                             IconButton(onClick = onBack, modifier = Modifier.size(TOUCH_TARGET.dp)) {
-                                Icon(Icons.Default.ArrowBack, contentDescription = "返回")
+                                Icon(MiuixIcons.Back, contentDescription = "返回")
                             }
                         },
                         actions = {
                             IconButton(onClick = { actions.showToc(true) }, modifier = Modifier.size(TOUCH_TARGET.dp)) {
-                                Icon(Icons.Default.MenuBook, contentDescription = "目录")
+                                Icon(MiuixIcons.ListView, contentDescription = "目录")
                             }
                             IconButton(onClick = { actions.showSettings(true) }, modifier = Modifier.size(TOUCH_TARGET.dp)) {
-                                Icon(Icons.Default.Tune, contentDescription = "设置")
+                                Icon(MiuixIcons.Tune, contentDescription = "设置")
                             }
                         },
                     )
@@ -290,18 +292,18 @@ private fun ReaderBottomBar(state: ReaderUiState, actions: ReaderActions) {
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
         IconButton(onClick = actions::previousChapter, enabled = hasPrevious, modifier = Modifier.size(TOUCH_TARGET.dp)) {
-            Icon(Icons.Default.ChevronLeft, contentDescription = "上一章")
+            Icon(MiuixIcons.ChevronBackward, contentDescription = "上一章")
         }
         MiuixText("${state.chapterIndex + 1} / $chapterCount", fontSize = 14.sp, maxLines = 1)
         Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
             IconButton(onClick = { actions.showToc(true) }, modifier = Modifier.size(TOUCH_TARGET.dp)) {
-                Icon(Icons.Default.MenuBook, contentDescription = "目录")
+                Icon(MiuixIcons.ListView, contentDescription = "目录")
             }
             IconButton(onClick = { actions.showSettings(true) }, modifier = Modifier.size(TOUCH_TARGET.dp)) {
-                Icon(Icons.Default.Tune, contentDescription = "设置")
+                Icon(MiuixIcons.Tune, contentDescription = "设置")
             }
             IconButton(onClick = actions::nextChapter, enabled = hasNext, modifier = Modifier.size(TOUCH_TARGET.dp)) {
-                Icon(Icons.Default.ChevronRight, contentDescription = "下一章")
+                Icon(MiuixIcons.ChevronForward, contentDescription = "下一章")
             }
         }
     }
@@ -501,12 +503,15 @@ private fun ReaderTocSheet(book: ReaderBook, current: Int, onSelect: (Int) -> Un
     // MiuiX 0.9.4 传递依赖的 material3 与本工程编译期不一致，运行期抛
     // NoSuchMethodError: ModalBottomSheet-dYc4hso（真机点设置/目录必崩）。
     OverlayBottomSheet(show = true, title = "目录", onDismissRequest = onDismiss) {
-        LazyColumn(Modifier.fillMaxWidth().heightIn(max = 520.dp), contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            itemsIndexed(book.chapters) { index, chapter ->
-                TextButton(
-                    text = "${if (index == current) "● " else ""}${index + 1}. ${chapter.title}",
+        LazyColumn(Modifier.fillMaxWidth().heightIn(max = 520.dp), contentPadding = PaddingValues(horizontal = 6.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            itemsIndexed(book.chapters, key = { index, _ -> "toc-$index" }) { index, chapter ->
+                BasicComponent(
+                    title = "${index + 1}. ${chapter.title}",
+                    endActions = {
+                        if (index == current) MiuixText("阅读中", fontSize = 12.sp, color = MiuixTheme.colorScheme.primary)
+                    },
                     onClick = { onSelect(index) },
-                    modifier = Modifier.fillMaxWidth().heightIn(min = TOUCH_TARGET.dp),
+                    modifier = Modifier.fillMaxWidth(),
                 )
             }
         }
@@ -533,14 +538,18 @@ private fun ReaderSettingsSheet(
     onResetFont: () -> Unit,
 ) {
     OverlayBottomSheet(show = true, title = "阅读设置", onDismissRequest = onDismiss) {
-        LazyColumn(Modifier.fillMaxWidth().heightIn(max = 650.dp), contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            item { MiuixText("阅读设置", fontSize = 21.sp, fontWeight = FontWeight.Bold) }
-            item { MiuixText("背景", fontSize = 13.sp, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .7f)) }
+        // 全部行容器改用 MiuiX 组件：SmallTitle 分组、BasicComponent 承载行，
+        // 滑块/开关/分段选择分别是 Slider、Switch、TabRow —— 与全局设置页同一套视觉语言。
+        LazyColumn(Modifier.fillMaxWidth().heightIn(max = 650.dp), contentPadding = PaddingValues(horizontal = 6.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            item { SmallTitle("背景") }
             // 色块预览：直接看到选中的底色与它上面文字的对比度，
             // 避免选完才发现「黑底黑字」。
             item {
                 val palette = readerPalette(settings)
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                LazyRow(
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
                     items(ReaderBackground.entries.toList()) { background ->
                         val swatch = when (background) {
                             ReaderBackground.PAPER -> Color(0xFFF4EFE6)
@@ -571,31 +580,88 @@ private fun ReaderSettingsSheet(
                     }
                 }
             }
-            item { MiuixText("字号：${settings.fontSizeSp.toInt()} sp") }
-            item { Slider(settings.fontSizeSp, { onFontSize(it) }, valueRange = 12f..32f, steps = 19) }
-            item { MiuixText("字重：${settings.fontWeight}") }
-            item { Slider(settings.fontWeight.toFloat(), { onFontWeight(it.toInt()) }, valueRange = 100f..900f, steps = 7) }
-            item { MiuixText("行高：${"%.1f".format(settings.lineHeight)}") }
-            item { Slider(settings.lineHeight, { onLineHeight(it) }, valueRange = 1.2f..2.6f, steps = 13) }
-            item { MiuixText("段距：${settings.paragraphSpacingDp} dp") }
-            item { Slider(settings.paragraphSpacingDp.toFloat(), { onSpacing(it.toInt()) }, valueRange = 0f..48f, steps = 47) }
-            item { MiuixText("左右边距：${settings.horizontalPaddingDp} dp") }
-            item { Slider(settings.horizontalPaddingDp.toFloat(), { onPadding(it.toInt()) }, valueRange = 0f..48f, steps = 47) }
-            item { MiuixText("自定义背景颜色", fontSize = 13.sp, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .7f)) }
-            item { ColorSettingRow(onColorChanged = onBackgroundColor) }
-            item { MiuixText("文字颜色", fontSize = 13.sp, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .7f)) }
-            item { ColorSettingRow(onColorChanged = onTextColor) }
+
+            item { SmallTitle("排版") }
             item {
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
-                    TextButton(text = if (settings.pageTurnMode == ReaderPageTurnMode.HORIZONTAL) "左右章节" else "上下滚动", onClick = { onPageMode(if (settings.pageTurnMode == ReaderPageTurnMode.HORIZONTAL) ReaderPageTurnMode.VERTICAL else ReaderPageTurnMode.HORIZONTAL) }, modifier = Modifier.weight(1f))
-                    TextButton(text = "导入字体", onClick = onImportFont, modifier = Modifier.weight(1f))
-                }
+                BasicComponent(title = "字号：${settings.fontSizeSp.toInt()} sp", bottomAction = {
+                    Slider(settings.fontSizeSp, { onFontSize(it) }, valueRange = 12f..32f, steps = 19)
+                })
             }
-            item { TextButton(text = "恢复默认字体", onClick = onResetFont, modifier = Modifier.fillMaxWidth()) }
-            item { TextButton(text = "导入 EPUB", onClick = onImportEpub, modifier = Modifier.fillMaxWidth()) }
-            item { TextButton(text = if (settings.keepScreenOn) "保持屏幕常亮：开" else "保持屏幕常亮：关", onClick = { onKeepScreenOn(!settings.keepScreenOn) }, modifier = Modifier.fillMaxWidth()) }
-            item { TextButton(text = if (settings.immersiveMode) "沉浸模式：开" else "沉浸模式：关", onClick = { onImmersive(!settings.immersiveMode) }, modifier = Modifier.fillMaxWidth()) }
-            item { TextButton(text = "完成", onClick = onDismiss, modifier = Modifier.fillMaxWidth().heightIn(min = TOUCH_TARGET.dp)) }
+            item {
+                BasicComponent(title = "字重：${settings.fontWeight}", bottomAction = {
+                    Slider(settings.fontWeight.toFloat(), { onFontWeight(it.toInt()) }, valueRange = 100f..900f, steps = 7)
+                })
+            }
+            item {
+                BasicComponent(title = "行高：${"%.1f".format(settings.lineHeight)}", bottomAction = {
+                    Slider(settings.lineHeight, { onLineHeight(it) }, valueRange = 1.2f..2.6f, steps = 13)
+                })
+            }
+            item {
+                BasicComponent(title = "段距：${settings.paragraphSpacingDp} dp", bottomAction = {
+                    Slider(settings.paragraphSpacingDp.toFloat(), { onSpacing(it.toInt()) }, valueRange = 0f..48f, steps = 47)
+                })
+            }
+            item {
+                BasicComponent(title = "左右边距：${settings.horizontalPaddingDp} dp", bottomAction = {
+                    Slider(settings.horizontalPaddingDp.toFloat(), { onPadding(it.toInt()) }, valueRange = 0f..48f, steps = 47)
+                })
+            }
+
+            item { SmallTitle("颜色") }
+            item {
+                BasicComponent(title = "自定义背景颜色", bottomAction = { ColorSettingRow(onColorChanged = onBackgroundColor) })
+            }
+            item {
+                BasicComponent(title = "文字颜色", bottomAction = { ColorSettingRow(onColorChanged = onTextColor) })
+            }
+
+            item { SmallTitle("翻页") }
+            item {
+                BasicComponent(title = "翻页模式", bottomAction = {
+                    TabRow(
+                        tabs = listOf("左右章节", "上下滚动"),
+                        selectedTabIndex = if (settings.pageTurnMode == ReaderPageTurnMode.HORIZONTAL) 0 else 1,
+                        onTabSelected = { index ->
+                            onPageMode(if (index == 0) ReaderPageTurnMode.HORIZONTAL else ReaderPageTurnMode.VERTICAL)
+                        },
+                    )
+                })
+            }
+
+            item { SmallTitle("开关") }
+            item {
+                BasicComponent(
+                    title = "保持屏幕常亮",
+                    endActions = { Switch(checked = settings.keepScreenOn, onCheckedChange = { onKeepScreenOn(it) }) },
+                )
+            }
+            item {
+                BasicComponent(
+                    title = "沉浸模式",
+                    summary = "隐藏系统栏，点正文呼出菜单栏",
+                    endActions = { Switch(checked = settings.immersiveMode, onCheckedChange = { onImmersive(it) }) },
+                )
+            }
+
+            item { SmallTitle("字体与导入") }
+            item { BasicComponent(title = "导入字体", summary = "TTF / OTF", onClick = onImportFont) }
+            item { BasicComponent(title = "恢复默认字体", onClick = onResetFont) }
+            item {
+                BasicComponent(
+                    title = "导入 EPUB",
+                    summary = "从文件打开另一本书",
+                    endActions = { Icon(MiuixIcons.Import, contentDescription = null, modifier = Modifier.size(20.dp)) },
+                    onClick = onImportEpub,
+                )
+            }
+            item {
+                TextButton(
+                    text = "完成",
+                    onClick = onDismiss,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = TOUCH_TARGET.dp).padding(horizontal = 10.dp),
+                )
+            }
         }
     }
 }

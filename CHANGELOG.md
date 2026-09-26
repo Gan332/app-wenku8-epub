@@ -2,6 +2,21 @@
 
 本项目遵循语义化版本。
 
+## [0.9.3] - 2026-09-26
+
+### 变更
+
+- **阅读器全面改用 MiuiX 组件**（应用户要求重写）：
+  - 设置面板改为 `SmallTitle` 分组 + `BasicComponent` 行容器，
+    滑块 `Slider`、开关 `Switch`、翻页模式 `TabRow`，与全局设置页同一套视觉语言；
+    「常亮」「沉浸模式」从文字按钮变标准开关，「翻页模式」从来回点的按钮变分段选择。
+  - 目录面板条目改为 `BasicComponent`（当前章带「阅读中」标记）。
+  - 顶栏/底栏图标：`Back` / `ChevronBackward` / `ChevronForward` / `ListView` / `Tune` / `Import`。
+- **material3 与 material-icons 全量移除**（阅读器、全局设置页、首页导航、封面查看器
+  四处清零），`material`、`material3`、`material-icons-extended` 三个依赖从构建中断开 ——
+  v0.9.0 那类 material3 版本错配崩溃（NoSuchMethodError）从依赖层面根除。
+- 新增静态守卫测试 `mainSourcesUseNoMaterialComponents`：源码里再出现 material 引用直接测试失败。
+
 ## [0.9.2] - 2026-09-26
 
 ### 修复
