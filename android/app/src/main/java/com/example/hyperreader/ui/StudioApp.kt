@@ -77,6 +77,8 @@ import com.example.hyperreader.ui.ReadingStatsScreen
 import com.example.hyperreader.ui.SearchScreen
 import com.example.hyperreader.ui.SettingsSection
 import com.example.hyperreader.ui.SettingsScreen
+import com.example.hyperreader.ui.formatEta
+import com.example.hyperreader.ui.phaseLabel
 import com.example.hyperreader.settings.AppThemeMode
 import com.example.hyperreader.model.Chapter
 import com.example.hyperreader.model.ExportJob
