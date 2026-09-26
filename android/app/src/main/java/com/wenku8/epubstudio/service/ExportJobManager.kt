@@ -24,6 +24,7 @@ import com.wenku8.epubstudio.model.JobProgress
 import com.wenku8.epubstudio.model.JobStatus
 import com.wenku8.epubstudio.model.OutputFile
 import com.wenku8.epubstudio.model.ParsedChapter
+import com.wenku8.epubstudio.ui.isOngoing
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -118,7 +119,7 @@ class ExportJobManager(private val context: Context, sessionStore: Wenku8Session
         scope.launch {
             val canceled = job.copy(status = JobStatus.canceled, finishedAt = Instant.now().toString(), error = JobError("CANCELED", "任务已取消。"), progress = job.progress.copy(phase = JobPhase.canceled, message = "任务已取消"))
             update(canceled)
-            ExportNotificationService.stop(context)
+            ExportNotificationService.finish(context, canceled.id, canceled.book.title, canceled.progress.message, canceled.status)
         }
     }
 
@@ -215,7 +216,14 @@ class ExportJobManager(private val context: Context, sessionStore: Wenku8Session
             }
         } finally {
             File(context.cacheDir, "wenku8/${job.id.replace(Regex("[^A-Za-z0-9_-]"), "_")}").deleteRecursively()
-            ExportNotificationService.stop(context)
+            // 队列是单消费者串行执行的，任务收尾时不会与其它任务的前台通知冲突。
+            // 用 finish 而非 stop，让用户能看到完成态并点击进入导出记录。
+            val finished = state.value[job.id]
+            if (finished != null && !finished.status.isOngoing()) {
+                ExportNotificationService.finish(context, finished.id, finished.book.title, finished.progress.message, finished.status)
+            } else {
+                ExportNotificationService.stop(context)
+            }
         }
     }
 

@@ -51,6 +51,7 @@ private val SETTINGS_ENTRIES = listOf(
     SettingsEntry(SettingsSection.READER, "阅读器设置", "背景、字体、字号、行距与翻页"),
     SettingsEntry(SettingsSection.STATISTICS, "阅读统计", "阅读时长、连续天数与每本书排行"),
     SettingsEntry(SettingsSection.CATALOG, "书目缓存", "搜索与探索使用的本地书目索引"),
+    SettingsEntry(SettingsSection.CONFIG, "配置导入导出", "主题与阅读器设置的备份与迁移"),
     SettingsEntry(SettingsSection.ABOUT, "关于", "版本、数据来源与使用边界"),
 )
 
@@ -63,8 +64,11 @@ fun SettingsScreen(
     viewModel: StudioViewModel,
     onImportEpub: () -> Unit,
     onImportFont: () -> Unit,
+    onExportConfig: () -> Unit,
+    onImportConfig: () -> Unit,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val configState by viewModel.configUi.collectAsStateWithLifecycle()
 
     if (state.settingsSection != SettingsSection.OVERVIEW) {
         BackHandler { viewModel.backSettings() }
@@ -76,6 +80,12 @@ fun SettingsScreen(
         SettingsSection.READER -> ReaderSection(state, viewModel, onImportFont)
         SettingsSection.STATISTICS -> ReadingStatsScreen(state.readingStats, viewModel::clearReadingStats)
         SettingsSection.CATALOG -> CatalogSection(state, viewModel, onImportEpub)
+        SettingsSection.CONFIG -> ConfigSection(
+            state = configState,
+            onBack = viewModel::backSettings,
+            onExportRequest = onExportConfig,
+            onImportRequest = onImportConfig,
+        )
         SettingsSection.ABOUT -> AboutSection(viewModel)
     }
 }

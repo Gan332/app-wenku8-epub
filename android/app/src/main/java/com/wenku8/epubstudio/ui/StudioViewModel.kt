@@ -25,6 +25,11 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.first
+import com.wenku8.epubstudio.BuildConfig
+import com.wenku8.epubstudio.settings.ConfigTransfer
+import com.wenku8.epubstudio.ui.ConfigTransferFile
+import com.wenku8.epubstudio.ui.ConfigUiState
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -45,7 +50,7 @@ enum class StudioTab { BOOKSHELF, EXPLORE, CREATE, SETTINGS }
 enum class CreateStep { SOURCE, DETAIL, CHAPTERS, EXPORT, PROGRESS }
 
 /** 设置二级界面分区。 */
-enum class SettingsSection { OVERVIEW, APPEARANCE, READER, STATISTICS, CATALOG, ABOUT }
+enum class SettingsSection { OVERVIEW, APPEARANCE, READER, STATISTICS, CATALOG, CONFIG, ABOUT }
 
 data class StudioUiState(
     val tab: StudioTab = StudioTab.BOOKSHELF,
@@ -349,6 +354,41 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
 
     fun cancel(id: String) = manager.cancel(id)
 
+    // ---- 配置导入导出（凭据安全模型见 settings/ConfigTransfer.kt）----
+
+    private val configMutable = MutableStateFlow(ConfigUiState())
+    val configUi: StateFlow<ConfigUiState> = configMutable.asStateFlow()
+
+    fun exportConfigTo(uri: android.net.Uri) = viewModelScope.launch {
+        configMutable.update { it.copy(busy = true, message = null, isError = false) }
+        val theme = settingsRepository.appTheme.first()
+        val reader = settingsRepository.readerSettings.first()
+        val text = ConfigTransfer.encode(theme, reader, BuildConfig.VERSION_NAME, System.currentTimeMillis())
+        ConfigTransferFile.write(app, uri, text).fold(
+            onSuccess = { configMutable.update { it.copy(busy = false, isError = false, message = "已导出主题与阅读器设置") } },
+            onFailure = { error -> configMutable.update { it.copy(busy = false, isError = true, message = "导出失败：${error.message ?: "未知错误"}") } },
+        )
+    }
+
+    fun importConfigFrom(uri: android.net.Uri) = viewModelScope.launch {
+        configMutable.update { it.copy(busy = true, message = null, isError = false) }
+        ConfigTransferFile.read(app, uri).fold(
+            onSuccess = { text ->
+                when (val decoded = ConfigTransfer.decode(text)) {
+                    is ConfigTransfer.DecodeResult.Rejected ->
+                        configMutable.update { it.copy(busy = false, isError = true, message = decoded.reason) }
+                    is ConfigTransfer.DecodeResult.Success -> {
+                        val plan = ConfigTransfer.plan(decoded.document)
+                        val result = ConfigTransfer.apply(settingsRepository, plan)
+                        val tail = if (result.failed > 0) "，${result.failed} 项写入失败" else ""
+                        configMutable.update { it.copy(busy = false, isError = false, message = "${plan.summary()}$tail\n${plan.details()}") }
+                    }
+                }
+            },
+            onFailure = { error -> configMutable.update { it.copy(busy = false, isError = true, message = "读取失败：${error.message ?: "未知错误"}") } },
+        )
+    }
+
     fun setShowJobHistory(show: Boolean) = mutable.update { it.copy(showJobHistory = show) }
 
     /**
@@ -356,13 +396,13 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
      * 同一个 Intent 重复投递不会产生额外跳转。
      */
     fun route(route: String?, jobId: String?) {
-        when (route) {
-            ROUTE_EXPORT_PROGRESS -> {
-                if (jobId.isNullOrBlank()) return
-                mutable.update { it.copy(tab = StudioTab.CREATE, step = CreateStep.PROGRESS, activeJobId = jobId, showJobHistory = false) }
+        when (val target = NotificationRoute.resolve(route, jobId, state.value.jobs)) {
+            null -> Unit
+            is RouteTarget.Progress -> mutable.update {
+                it.copy(tab = StudioTab.CREATE, step = CreateStep.PROGRESS, activeJobId = target.jobId, showJobHistory = false)
             }
-            ROUTE_JOB_HISTORY -> mutable.update { it.copy(tab = StudioTab.BOOKSHELF, showJobHistory = true) }
-            ROUTE_BOOKSHELF -> mutable.update { it.copy(tab = StudioTab.BOOKSHELF) }
+            RouteTarget.History -> mutable.update { it.copy(tab = StudioTab.BOOKSHELF, showJobHistory = true) }
+            RouteTarget.Bookshelf -> mutable.update { it.copy(tab = StudioTab.BOOKSHELF) }
         }
     }
 

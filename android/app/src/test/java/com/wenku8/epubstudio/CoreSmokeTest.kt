@@ -185,7 +185,7 @@ class CoreSmokeTest {
 
     @Test
     fun settingsSectionsCoverEveryCategory() {
-        assertEquals(6, SettingsSection.entries.size)
+        assertEquals(7, SettingsSection.entries.size)
         assertEquals(SettingsSection.OVERVIEW, SettingsSection.entries.first())
         assertTrue(SettingsSection.entries.contains(SettingsSection.READER))
         assertTrue(SettingsSection.entries.contains(SettingsSection.STATISTICS))

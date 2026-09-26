@@ -81,6 +81,9 @@ import java.util.zip.ZipFile
 private const val TOUCH_TARGET = 48
 private const val CONTROL_BAR_HEIGHT = 56
 
+/**
+ * EPUB 阅读界面。**签名保持不变**，实现委托给 [ReaderScreenCore]。
+ */
 @Composable
 fun ReaderScreen(
     viewModel: ReaderViewModel,
@@ -89,6 +92,34 @@ fun ReaderScreen(
     onBack: () -> Unit,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val archivePath = state.book?.archivePath.orEmpty()
+    ReaderScreenCore(
+        state = state,
+        actions = viewModel,
+        imageResolver = { block: ReaderBlock.Image -> rememberEpubImage(archivePath, block.path) },
+        onImportFont = onImportFont,
+        onImportEpub = onImportEpub,
+        onBack = onBack,
+    )
+}
+
+/**
+ * 阅读界面的真正实现：EPUB 与 wenku8 在线阅读**共用这一份**，
+ * 因此字体、背景、沉浸模式、目录面板、阅读进度回调在两种模式下行为完全一致。
+ *
+ * @param state 由各自的 ViewModel 持有。
+ * @param actions 界面回调。EPUB 侧传 `ReaderViewModel`，在线侧传 `OnlineReaderViewModel`（都实现 [ReaderActions]）。
+ * @param imageResolver 正文插图解析：EPUB 走 zip 条目，在线走 [rememberRemoteImage] 的网络图片。
+ */
+@Composable
+fun ReaderScreenCore(
+    state: ReaderUiState,
+    actions: ReaderActions,
+    imageResolver: @Composable (block: ReaderBlock.Image) -> ImageBitmap?,
+    onImportFont: () -> Unit,
+    onImportEpub: () -> Unit,
+    onBack: () -> Unit,
+) {
     val book = state.book
     val settings = state.settings
     val palette = readerPalette(settings)
@@ -98,9 +129,9 @@ fun ReaderScreen(
     ReaderSystemBarsEffect(immersive, settings.keepScreenOn)
     BackHandler {
         when {
-            state.showSettings -> viewModel.showSettings(false)
-            state.showToc -> viewModel.showToc(false)
-            state.isImmersive -> viewModel.setImmersive(false)
+            state.showSettings -> actions.showSettings(false)
+            state.showToc -> actions.showToc(false)
+            state.isImmersive -> actions.setImmersive(false)
             else -> onBack()
         }
     }
@@ -113,17 +144,17 @@ fun ReaderScreen(
                 exit = slideOutVertically(targetOffsetY = { -it }) + fadeOut(),
             ) {
                 TopAppBar(
-                    title = book?.chapters?.getOrNull(state.chapterIndex)?.title ?: "EPUB 阅读器",
+                    title = book?.chapters?.getOrNull(state.chapterIndex)?.title ?: "阅读器",
                     navigationIcon = {
                         IconButton(onClick = onBack, modifier = Modifier.size(TOUCH_TARGET.dp)) {
                             Icon(Icons.Default.ArrowBack, contentDescription = "返回")
                         }
                     },
                     actions = {
-                        IconButton(onClick = { viewModel.showToc(true) }, modifier = Modifier.size(TOUCH_TARGET.dp)) {
+                        IconButton(onClick = { actions.showToc(true) }, modifier = Modifier.size(TOUCH_TARGET.dp)) {
                             Icon(Icons.Default.MenuBook, contentDescription = "目录")
                         }
-                        IconButton(onClick = { viewModel.showSettings(true) }, modifier = Modifier.size(TOUCH_TARGET.dp)) {
+                        IconButton(onClick = { actions.showSettings(true) }, modifier = Modifier.size(TOUCH_TARGET.dp)) {
                             Icon(Icons.Default.Tune, contentDescription = "设置")
                         }
                     },
@@ -136,50 +167,64 @@ fun ReaderScreen(
                 enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
                 exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
             ) {
-                ReaderBottomBar(state, viewModel)
+                ReaderBottomBar(state, actions)
             }
         },
         containerColor = palette.background,
         contentWindowInsets = WindowInsets(0.dp),
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding).background(palette.background).pointerInput(Unit) {
-            detectTapGestures(onTap = { viewModel.toggleControls() })
+            detectTapGestures(onTap = { actions.toggleControls() })
         }) {
             when {
-                state.loading -> MiuixText("正在打开 EPUB…", Modifier.padding(24.dp))
+                state.loading -> MiuixText("正在打开…", Modifier.padding(24.dp))
                 error != null -> MiuixText(error, Modifier.padding(24.dp), color = Color(0xFFB3261E))
-                book != null -> ReaderContent(book, state, viewModel, palette)
+                book != null -> ReaderContent(book, state, actions, palette, imageResolver)
+            }
+            // 在线模式的一次性提示（如「该内容需要登录」），不遮挡已渲染的正文。
+            val notice = state.notice
+            if (notice != null && error == null) {
+                MiuixText(
+                    notice,
+                    Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(12.dp)
+                        .background(palette.background.copy(alpha = .92f))
+                        .padding(horizontal = 14.dp, vertical = 8.dp),
+                    fontSize = 13.sp,
+                    color = Color(0xFFB3261E),
+                )
             }
         }
     }
 
     if (state.showToc && book != null) {
-        ReaderTocSheet(book, state.chapterIndex, onSelect = viewModel::selectChapter, onDismiss = { viewModel.showToc(false) })
+        ReaderTocSheet(book, state.chapterIndex, onSelect = actions::selectChapter, onDismiss = { actions.showToc(false) })
     }
     if (state.showSettings) {
         ReaderSettingsSheet(
             settings = settings,
-            onDismiss = { viewModel.showSettings(false) },
-            onFontSize = viewModel::updateFontSize,
-            onFontWeight = viewModel::updateFontWeight,
-            onLineHeight = viewModel::updateLineHeight,
-            onSpacing = viewModel::updateSpacing,
-            onPadding = viewModel::updatePadding,
-            onBackground = viewModel::updateBackground,
-            onBackgroundColor = viewModel::updateBackgroundColor,
-            onTextColor = viewModel::updateTextColor,
-            onPageMode = viewModel::updatePageMode,
-            onKeepScreenOn = viewModel::updateKeepScreenOn,
-            onImmersive = viewModel::updateImmersive,
+            onDismiss = { actions.showSettings(false) },
+            onFontSize = actions::updateFontSize,
+            onFontWeight = actions::updateFontWeight,
+            onLineHeight = actions::updateLineHeight,
+            onSpacing = actions::updateSpacing,
+            onPadding = actions::updatePadding,
+            onBackground = actions::updateBackground,
+            onBackgroundColor = actions::updateBackgroundColor,
+            onTextColor = actions::updateTextColor,
+            onPageMode = actions::updatePageMode,
+            onKeepScreenOn = actions::updateKeepScreenOn,
+            onImmersive = actions::updateImmersive,
             onImportFont = onImportFont,
             onImportEpub = onImportEpub,
-            onResetFont = { viewModel.updateFontUri(null) },
+            onResetFont = { actions.updateFontUri(null) },
         )
     }
 }
 
 @Composable
-private fun ReaderBottomBar(state: ReaderUiState, viewModel: ReaderViewModel) {
+private fun ReaderBottomBar(state: ReaderUiState, actions: ReaderActions) {
     val chapterCount = state.book?.chapters?.size ?: 0
     val hasPrevious = state.chapterIndex > 0
     val hasNext = state.chapterIndex < chapterCount - 1
@@ -188,18 +233,18 @@ private fun ReaderBottomBar(state: ReaderUiState, viewModel: ReaderViewModel) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        IconButton(onClick = viewModel::previousChapter, enabled = hasPrevious, modifier = Modifier.size(TOUCH_TARGET.dp)) {
+        IconButton(onClick = actions::previousChapter, enabled = hasPrevious, modifier = Modifier.size(TOUCH_TARGET.dp)) {
             Icon(Icons.Default.ChevronLeft, contentDescription = "上一章")
         }
         MiuixText("${state.chapterIndex + 1} / $chapterCount", fontSize = 14.sp, maxLines = 1)
         Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-            IconButton(onClick = { viewModel.showToc(true) }, modifier = Modifier.size(TOUCH_TARGET.dp)) {
+            IconButton(onClick = { actions.showToc(true) }, modifier = Modifier.size(TOUCH_TARGET.dp)) {
                 Icon(Icons.Default.MenuBook, contentDescription = "目录")
             }
-            IconButton(onClick = { viewModel.showSettings(true) }, modifier = Modifier.size(TOUCH_TARGET.dp)) {
+            IconButton(onClick = { actions.showSettings(true) }, modifier = Modifier.size(TOUCH_TARGET.dp)) {
                 Icon(Icons.Default.Tune, contentDescription = "设置")
             }
-            IconButton(onClick = viewModel::nextChapter, enabled = hasNext, modifier = Modifier.size(TOUCH_TARGET.dp)) {
+            IconButton(onClick = actions::nextChapter, enabled = hasNext, modifier = Modifier.size(TOUCH_TARGET.dp)) {
                 Icon(Icons.Default.ChevronRight, contentDescription = "下一章")
             }
         }
@@ -207,23 +252,36 @@ private fun ReaderBottomBar(state: ReaderUiState, viewModel: ReaderViewModel) {
 }
 
 @Composable
-private fun ReaderContent(book: ReaderBook, state: ReaderUiState, viewModel: ReaderViewModel, palette: ReaderPalette) {
+private fun ReaderContent(
+    book: ReaderBook,
+    state: ReaderUiState,
+    actions: ReaderActions,
+    palette: ReaderPalette,
+    imageResolver: @Composable (block: ReaderBlock.Image) -> ImageBitmap?,
+) {
     val fontFamily = rememberFont(state.settings.fontUri)
     if (state.settings.pageTurnMode == ReaderPageTurnMode.HORIZONTAL) {
         val pagerState = rememberPagerState(initialPage = state.chapterIndex, pageCount = { book.chapters.size })
         LaunchedEffect(state.chapterIndex) { if (pagerState.currentPage != state.chapterIndex) pagerState.animateScrollToPage(state.chapterIndex) }
-        LaunchedEffect(pagerState.currentPage) { if (pagerState.currentPage != state.chapterIndex) viewModel.selectChapter(pagerState.currentPage) }
+        LaunchedEffect(pagerState.currentPage) { if (pagerState.currentPage != state.chapterIndex) actions.selectChapter(pagerState.currentPage) }
         HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
-            ChapterContent(book.chapters[page], state.settings, fontFamily, palette, book.archivePath) { viewModel.setParagraph(it) }
+            ChapterContent(book.chapters[page], state.settings, fontFamily, palette, imageResolver) { actions.setParagraph(it) }
         }
     } else {
         val chapter = book.chapters.getOrNull(state.chapterIndex) ?: return
-        ChapterContent(chapter, state.settings, fontFamily, palette, book.archivePath) { viewModel.setParagraph(it) }
+        ChapterContent(chapter, state.settings, fontFamily, palette, imageResolver) { actions.setParagraph(it) }
     }
 }
 
 @Composable
-private fun ChapterContent(chapter: ReaderChapter, settings: ReaderSettings, fontFamily: FontFamily, palette: ReaderPalette, archivePath: String, onParagraph: (Int) -> Unit) {
+private fun ChapterContent(
+    chapter: ReaderChapter,
+    settings: ReaderSettings,
+    fontFamily: FontFamily,
+    palette: ReaderPalette,
+    imageResolver: @Composable (block: ReaderBlock.Image) -> ImageBitmap?,
+    onParagraph: (Int) -> Unit,
+) {
     var paragraphNumber = 0
     LazyColumn(
         modifier = Modifier.fillMaxSize().background(palette.background).pointerInput(Unit) { detectTapGestures { } },
@@ -238,7 +296,7 @@ private fun ChapterContent(chapter: ReaderChapter, settings: ReaderSettings, fon
                     LaunchedEffect(paragraph) { onParagraph(paragraph) }
                     MiuixText(block.text, fontSize = settings.fontSizeSp.sp, lineHeight = (settings.fontSizeSp * settings.lineHeight).sp, fontWeight = FontWeight(settings.fontWeight), fontFamily = fontFamily, color = palette.text, softWrap = true)
                 }
-                is ReaderBlock.Image -> rememberEpubImage(archivePath, block.path)?.let { bitmap ->
+                is ReaderBlock.Image -> imageResolver(block)?.let { bitmap ->
                     Image(bitmap, contentDescription = block.alt, modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp))
                 }
             }

@@ -21,14 +21,31 @@
 
 - Kotlin
 - Jetpack Compose
-- MiuiX `v0.8.8`（依赖坐标 `top.yukonga.miuix.kmp:miuix:0.8.8`）
+- MiuiX `v0.9.4`（依赖坐标 `top.yukonga.miuix.kmp:miuix-ui` + `miuix-core` + `miuix-icons`）
 - Material3（仅用于阅读器 BottomSheet 和 Slider）
 - OkHttp
 - Jsoup
 - DataStore Preferences
 - AndroidX Security Crypto（Keystore 加密 Cookie）
-- AGP 9.1.0 / Kotlin 2.3.20 / Gradle 9.4.1 / Compile SDK 36
+- AGP 9.4.1 / Kotlin 2.4.20 / Gradle 9.6.0 / Compose Multiplatform 1.12.0
+- Compile SDK 37 / Target SDK 36 / Min SDK 26
 - JDK 21
+
+### 0.9.x 升级踩过的坑（务必先读）
+
+1. **Maven 坐标在 0.9.0 变了**。旧坐标 `top.yukonga.miuix.kmp:miuix` 在 Maven Central 上止于
+   `0.8.8`，0.9.x 只发布在新坐标 `miuix-ui` / `miuix-core`（`miuix-icons` 同版本序列）。
+2. **`platforms;android-37` 这个包不存在**。SDK 37 起平台包强制带小版本号，基础包是
+   `platforms;android-37.0`（`source.properties` 里 `ApiLevel=37.0`、`IsBaseSdk=true`，
+   安装目录 `android-37.0/`）。`build-tools` 对应 `build-tools;37.0.0`。
+3. **MiuiX 0.9.4 的 AAR 强制 `compileSdk >= 37`**，`targetSdk` 可以保持 36。
+4. **AGP 9.4.1 强制 Gradle >= 9.6.0**。`gradle-wrapper.properties` 和 workflow 里的
+   `gradle/actions/setup-gradle` 的 `gradle-version` **两处必须一致**，只改一处会在
+   `com.android.internal.version-check` 挂掉。
+5. **`kmp.extra` 包已整体删除**，`SuperDialog` → `top.yukonga.miuix.kmp.overlay.OverlayDialog`。
+6. 0.9.4 中 **`TextStyles`（14 个字段）、`ThemeController`、`ColorSchemeMode`、`MiuixTheme`
+   签名均未变化**，主题层代码不需要为升级而改。
+
 
 ### 数据源
 

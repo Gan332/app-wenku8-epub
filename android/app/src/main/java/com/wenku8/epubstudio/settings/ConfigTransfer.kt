@@ -205,10 +205,15 @@ object ConfigTransfer {
         if (theme == null) {
             skipped += "主题设置（缺失）"
         } else {
-            planEnum<AppThemeMode>("主题模式", theme.mode, changes, skipped) { mode ->
+            planEnum("主题模式", theme.mode, AppThemeMode.entries, changes, skipped) { mode ->
                 ConfigChange.SetThemeMode(mode)
             }
-            theme.useDynamicColor?.let { changes += ConfigChange.SetDynamicColor(it) } ?: skipped += "使用动态色（缺失）"
+            val dynamicColor = theme.useDynamicColor
+            if (dynamicColor == null) {
+                skipped += "使用动态色（缺失）"
+            } else {
+                changes += ConfigChange.SetDynamicColor(dynamicColor)
+            }
             planColor("强调色", theme.accentColor, changes, skipped) { color ->
                 ConfigChange.SetAccentColor(color)
             }
@@ -233,7 +238,7 @@ object ConfigTransfer {
             planNumber("左右边距", reader.horizontalPaddingDp, changes, skipped, MIN_PADDING_DP, MAX_PADDING_DP) { value ->
                 ConfigChange.SetReaderHorizontalPadding(value)
             }
-            planEnum<ReaderBackground>("阅读背景", reader.background, changes, skipped) { background ->
+            planEnum("阅读背景", reader.background, ReaderBackground.entries, changes, skipped) { background ->
                 ConfigChange.SetReaderBackground(background)
             }
             planColor("自定义背景色", reader.customBackgroundColor, changes, skipped) { color ->
@@ -242,11 +247,21 @@ object ConfigTransfer {
             planColor("文字颜色", reader.textColor, changes, skipped) { color ->
                 ConfigChange.SetReaderTextColor(color)
             }
-            planEnum<ReaderPageTurnMode>("翻页方式", reader.pageTurnMode, changes, skipped) { mode ->
+            planEnum("翻页方式", reader.pageTurnMode, ReaderPageTurnMode.entries, changes, skipped) { mode ->
                 ConfigChange.SetReaderPageTurn(mode)
             }
-            reader.keepScreenOn?.let { changes += ConfigChange.SetReaderKeepScreenOn(it) } ?: skipped += "保持屏幕常亮（缺失）"
-            reader.immersiveMode?.let { changes += ConfigChange.SetReaderImmersive(it) } ?: skipped += "沉浸模式（缺失）"
+            val keepScreenOn = reader.keepScreenOn
+            if (keepScreenOn == null) {
+                skipped += "保持屏幕常亮（缺失）"
+            } else {
+                changes += ConfigChange.SetReaderKeepScreenOn(keepScreenOn)
+            }
+            val immersive = reader.immersiveMode
+            if (immersive == null) {
+                skipped += "沉浸模式（缺失）"
+            } else {
+                changes += ConfigChange.SetReaderImmersive(immersive)
+            }
         }
 
         return ImportPlan(changes.toList(), skipped.toList())
@@ -278,9 +293,10 @@ object ConfigTransfer {
     // 内部工具
     // ---------------------------------------------------------------------
 
-    private inline fun <reified T : Enum<T>> planEnum(
+    private fun <T : Enum<T>> planEnum(
         label: String,
         raw: String?,
+        values: List<T>,
         changes: MutableList<ConfigChange>,
         skipped: MutableList<String>,
         build: (T) -> ConfigChange,
@@ -290,7 +306,7 @@ object ConfigTransfer {
             return
         }
         val normalized = raw.trim().uppercase()
-        val match = enumEntries<T>().firstOrNull { it.name == normalized }
+        val match = values.firstOrNull { it.name == normalized }
         if (match == null) {
             skipped += "$label 取值无效：$raw"
             return

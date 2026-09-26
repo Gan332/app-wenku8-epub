@@ -19,6 +19,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -87,12 +88,26 @@ fun BookshelfScreen(
     }
 
     activeEntry?.let { entry ->
+        val context = LocalContext.current
         BookActionsDialog(
             entry = entry,
             onDismiss = { activeEntry = null },
             onRead = {
                 viewModel.markShelfRead(entry.id)
                 onOpenLocal(entry)
+                activeEntry = null
+            },
+            onReadOnline = {
+                context.startActivity(
+                    com.wenku8.epubstudio.reader.onlineReaderIntent(
+                        context = context,
+                        bookId = entry.bookId,
+                        title = entry.title,
+                        author = entry.author,
+                        bookshelfId = entry.id,
+                    ),
+                )
+                viewModel.markShelfRead(entry.id)
                 activeEntry = null
             },
             onOpenRemote = {

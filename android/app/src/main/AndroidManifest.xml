@@ -36,6 +36,10 @@
             android:name=".reader.ReaderActivity"
             android:exported="false"
             android:screenOrientation="unspecified" />
+        <activity
+            android:name=".reader.OnlineReaderActivity"
+            android:exported="false"
+            android:screenOrientation="unspecified" />
 
         <service
             android:name=".service.ExportNotificationService"

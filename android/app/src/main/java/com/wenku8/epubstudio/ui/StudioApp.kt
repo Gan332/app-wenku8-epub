@@ -39,6 +39,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -103,6 +104,12 @@ class MainActivity : ComponentActivity() {
         if (path != null) studioViewModel.applyImportedFont(path)
     }
     private val loginLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { studioViewModel.refreshSession() }
+    private val exportConfigLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        if (uri != null) studioViewModel.exportConfigTo(uri)
+    }
+    private val importConfigLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) studioViewModel.importConfigFrom(uri)
+    }
     private val studioViewModel: StudioViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: android.os.Bundle?) {
@@ -157,6 +164,7 @@ private fun StudioApp(viewModel: StudioViewModel, onLogin: () -> Unit, onImportE
         SettingsSection.READER -> "阅读器设置"
         SettingsSection.STATISTICS -> "阅读统计"
         SettingsSection.CATALOG -> "书目缓存"
+        SettingsSection.CONFIG -> "配置导入导出"
         SettingsSection.ABOUT -> "关于"
     }
     Scaffold(
@@ -194,7 +202,13 @@ private fun StudioApp(viewModel: StudioViewModel, onLogin: () -> Unit, onImportE
                     viewModel.setTab(StudioTab.SETTINGS)
                     viewModel.openSettingsSection(SettingsSection.CATALOG)
                 }
-                state.tab == StudioTab.SETTINGS -> SettingsScreen(viewModel, onImportEpub, onImportFont)
+                state.tab == StudioTab.SETTINGS -> SettingsScreen(
+                    viewModel = viewModel,
+                    onImportEpub = onImportEpub,
+                    onImportFont = onImportFont,
+                    onExportConfig = { exportConfigLauncher.launch(com.wenku8.epubstudio.ui.ConfigTransferFile.suggestedName()) },
+                    onImportConfig = { importConfigLauncher.launch(com.wenku8.epubstudio.ui.ConfigTransferFile.mimeTypes) },
+                )
                 state.step == CreateStep.SOURCE -> SourceScreen(state, viewModel)
                 state.step == CreateStep.DETAIL -> state.book?.let {
                     BookDetailScreen(it, state.index?.chapters?.size ?: 0, viewModel) { tag ->
@@ -387,7 +401,11 @@ private fun BookHeader(title: String, author: String, category: String, total: I
 private fun ChapterRow(chapter: Chapter, selected: Boolean, onToggle: () -> Unit) {
     Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(horizontal = 12.dp, vertical = 4.dp), onClick = onToggle) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Checkbox(checked = selected, onCheckedChange = { onToggle() })
+            // MiuiX 0.9.4 起 Checkbox 改用 Material 风格的 ToggleableState + onClick
+            Checkbox(
+                state = if (selected) ToggleableState.On else ToggleableState.Off,
+                onClick = onToggle,
+            )
             Column(Modifier.weight(1f).padding(vertical = 6.dp)) {
                 Text(chapter.title, maxLines = 2, fontSize = 15.sp)
                 Text(chapter.volume + if (chapter.isIllustration) " · 插图章节" else "", color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.72f), fontSize = 11.sp)

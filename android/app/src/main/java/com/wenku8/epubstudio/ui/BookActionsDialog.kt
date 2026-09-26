@@ -42,6 +42,8 @@ fun BookActionsDialog(
     entry: BookshelfEntry,
     onDismiss: () -> Unit,
     onRead: () -> Unit,
+    /** wenku8 书籍的「在线阅读」。默认空实现，书架侧接上 [OnlineReaderActivity] 即可生效。 */
+    onReadOnline: () -> Unit = {},
     onOpenRemote: () -> Unit,
     onTogglePin: () -> Unit,
     onExpandAuthor: () -> Unit,
@@ -82,7 +84,13 @@ fun BookActionsDialog(
             if (entry.source == BookshelfSource.LOCAL_EPUB) {
                 ActionRow("继续阅读", onRead)
             } else {
-                ActionRow("打开详情与目录", onOpenRemote)
+                ActionRow("在线阅读", onReadOnline)
+                ActionRow("查看目录并导出 EPUB", onOpenRemote)
+                Text(
+                    "在线阅读的正文需要联网；已读过的章节会缓存，断网也能翻看。",
+                    fontSize = 12.sp,
+                    color = MiuixTheme.colorScheme.onSurface.copy(alpha = .6f),
+                )
             }
             ActionRow(if (entry.isPinned) "取消置顶" else "置顶到书架顶部", onTogglePin)
             if (entry.source == BookshelfSource.WENKU8) {

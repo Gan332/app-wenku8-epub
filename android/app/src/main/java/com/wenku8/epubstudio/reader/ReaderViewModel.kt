@@ -29,9 +29,46 @@ import kotlinx.coroutines.withContext
     val showToc: Boolean = false,
     val isImmersive: Boolean = true,
     val controlsVisible: Boolean = false,
+    /** 在线模式：正在抓取当前章节正文。EPUB 模式恒为 false。 */
+    val chapterLoading: Boolean = false,
+    /** 在线模式：一次性提示（如「该内容需要登录」）。不打断已渲染的正文。 */
+    val notice: String? = null,
 )
 
-class ReaderViewModel(application: Application) : AndroidViewModel(application) {
+/**
+ * 阅读界面用到的**纯 UI 回调**。
+ *
+ * EPUB（`ReaderViewModel`）与在线（`OnlineReaderViewModel`）各自持有状态，但共用同一份渲染界面，
+ * 因此把界面所需的回调抽成这个接口，渲染层只依赖接口而不是具体 ViewModel。
+ *
+ * 刻意**不包含** `load(uri, id)`（EPUB 专属装配）、`startSession()` / `stopSession()`
+ * （`AndroidViewModel` 生命周期职责），也不包含任何网络或缓存逻辑。
+ */
+interface ReaderActions {
+    fun selectChapter(index: Int)
+    fun nextChapter()
+    fun previousChapter()
+    fun setParagraph(index: Int)
+    fun toggleControls()
+    fun setImmersive(value: Boolean)
+    fun showSettings(show: Boolean)
+    fun showToc(show: Boolean)
+    fun closeOverlays()
+    fun updateFontSize(value: Float)
+    fun updateFontWeight(value: Int)
+    fun updateLineHeight(value: Float)
+    fun updateSpacing(value: Int)
+    fun updatePadding(value: Int)
+    fun updateBackground(value: ReaderBackground)
+    fun updateBackgroundColor(value: Int)
+    fun updateTextColor(value: Int)
+    fun updatePageMode(value: ReaderPageTurnMode)
+    fun updateKeepScreenOn(value: Boolean)
+    fun updateImmersive(value: Boolean)
+    fun updateFontUri(value: String?)
+}
+
+class ReaderViewModel(application: Application) : AndroidViewModel(application), ReaderActions {
     private val app = application as Wenku8Application
     private val repository = EpubReaderRepository(application)
     private val settingsRepository = app.settingsRepository
@@ -63,37 +100,37 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    fun selectChapter(index: Int) {
+    override fun selectChapter(index: Int) {
         val book = state.value.book ?: return
         val safe = index.coerceIn(0, book.chapters.lastIndex)
         mutable.update { it.copy(chapterIndex = safe, paragraphIndex = 0, showToc = false) }
         persistProgress()
     }
 
-    fun nextChapter() = selectChapter(state.value.chapterIndex + 1)
-    fun previousChapter() = selectChapter(state.value.chapterIndex - 1)
-    fun setParagraph(index: Int) { mutable.update { it.copy(paragraphIndex = index.coerceAtLeast(0)) }; persistProgress() }
-    fun toggleControls() = mutable.update { current ->
+    override fun nextChapter() = selectChapter(state.value.chapterIndex + 1)
+    override fun previousChapter() = selectChapter(state.value.chapterIndex - 1)
+    override fun setParagraph(index: Int) { mutable.update { it.copy(paragraphIndex = index.coerceAtLeast(0)) }; persistProgress() }
+    override fun toggleControls() = mutable.update { current ->
         val next = !current.isImmersive
         current.copy(isImmersive = next, controlsVisible = !next)
     }
-    fun setImmersive(value: Boolean) = mutable.update { it.copy(isImmersive = value, controlsVisible = !value) }
-    fun showSettings(show: Boolean) = mutable.update { it.copy(showSettings = show, isImmersive = false) }
-    fun showToc(show: Boolean) = mutable.update { it.copy(showToc = show, isImmersive = false) }
-    fun closeOverlays() = mutable.update { it.copy(showSettings = false, showToc = false) }
+    override fun setImmersive(value: Boolean) = mutable.update { it.copy(isImmersive = value, controlsVisible = !value) }
+    override fun showSettings(show: Boolean) = mutable.update { it.copy(showSettings = show, isImmersive = false) }
+    override fun showToc(show: Boolean) = mutable.update { it.copy(showToc = show, isImmersive = false) }
+    override fun closeOverlays() = mutable.update { it.copy(showSettings = false, showToc = false) }
 
-    fun updateFontSize(value: Float) { viewModelScope.launch { settingsRepository.setReaderFontSize(value); refreshSettings() } }
-    fun updateFontWeight(value: Int) { viewModelScope.launch { settingsRepository.setReaderFontWeight(value); refreshSettings() } }
-    fun updateLineHeight(value: Float) { viewModelScope.launch { settingsRepository.setReaderLineHeight(value); refreshSettings() } }
-    fun updateSpacing(value: Int) { viewModelScope.launch { settingsRepository.setReaderParagraphSpacing(value); refreshSettings() } }
-    fun updatePadding(value: Int) { viewModelScope.launch { settingsRepository.setReaderHorizontalPadding(value); refreshSettings() } }
-    fun updateBackground(value: ReaderBackground) { viewModelScope.launch { settingsRepository.setReaderBackground(value); refreshSettings() } }
-    fun updateBackgroundColor(value: Int) { viewModelScope.launch { settingsRepository.setReaderCustomBackground(value); refreshSettings() } }
-    fun updateTextColor(value: Int) { viewModelScope.launch { settingsRepository.setReaderTextColor(value); refreshSettings() } }
-    fun updatePageMode(value: ReaderPageTurnMode) { viewModelScope.launch { settingsRepository.setReaderPageTurn(value); refreshSettings() } }
-    fun updateKeepScreenOn(value: Boolean) { viewModelScope.launch { settingsRepository.setReaderKeepScreenOn(value); refreshSettings() } }
-    fun updateImmersive(value: Boolean) { viewModelScope.launch { settingsRepository.setReaderImmersive(value); setImmersive(value); refreshSettings() } }
-    fun updateFontUri(value: String?) { viewModelScope.launch { settingsRepository.setReaderFontUri(value); refreshSettings() } }
+    override fun updateFontSize(value: Float) { viewModelScope.launch { settingsRepository.setReaderFontSize(value); refreshSettings() } }
+    override fun updateFontWeight(value: Int) { viewModelScope.launch { settingsRepository.setReaderFontWeight(value); refreshSettings() } }
+    override fun updateLineHeight(value: Float) { viewModelScope.launch { settingsRepository.setReaderLineHeight(value); refreshSettings() } }
+    override fun updateSpacing(value: Int) { viewModelScope.launch { settingsRepository.setReaderParagraphSpacing(value); refreshSettings() } }
+    override fun updatePadding(value: Int) { viewModelScope.launch { settingsRepository.setReaderHorizontalPadding(value); refreshSettings() } }
+    override fun updateBackground(value: ReaderBackground) { viewModelScope.launch { settingsRepository.setReaderBackground(value); refreshSettings() } }
+    override fun updateBackgroundColor(value: Int) { viewModelScope.launch { settingsRepository.setReaderCustomBackground(value); refreshSettings() } }
+    override fun updateTextColor(value: Int) { viewModelScope.launch { settingsRepository.setReaderTextColor(value); refreshSettings() } }
+    override fun updatePageMode(value: ReaderPageTurnMode) { viewModelScope.launch { settingsRepository.setReaderPageTurn(value); refreshSettings() } }
+    override fun updateKeepScreenOn(value: Boolean) { viewModelScope.launch { settingsRepository.setReaderKeepScreenOn(value); refreshSettings() } }
+    override fun updateImmersive(value: Boolean) { viewModelScope.launch { settingsRepository.setReaderImmersive(value); setImmersive(value); refreshSettings() } }
+    override fun updateFontUri(value: String?) { viewModelScope.launch { settingsRepository.setReaderFontUri(value); refreshSettings() } }
 
     fun startSession() {
         if (sessionStartedAt == null) sessionStartedAt = android.os.SystemClock.elapsedRealtime()

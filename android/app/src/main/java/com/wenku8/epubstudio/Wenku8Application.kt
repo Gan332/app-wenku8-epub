@@ -9,6 +9,7 @@ import com.wenku8.epubstudio.data.ReadingStatsRepository
 import com.wenku8.epubstudio.core.ExploreRepository
 import com.wenku8.epubstudio.core.Wenku8DataSource
 import com.wenku8.epubstudio.settings.SettingsRepository
+import java.io.File
 
 class Wenku8Application : Application() {
     val settingsRepository: SettingsRepository by lazy { SettingsRepository(this) }
@@ -20,4 +21,5 @@ class Wenku8Application : Application() {
     val exploreRepository: ExploreRepository by lazy { ExploreRepository(Wenku8DataSource(jobManager.httpClient(), sessionStore)) }
     val catalogRepository: com.wenku8.epubstudio.core.CatalogRepository by lazy { com.wenku8.epubstudio.core.CatalogRepository(this) }
     val coverRepository: com.wenku8.epubstudio.ui.cover.CoverRepository by lazy { com.wenku8.epubstudio.ui.cover.CoverRepository(this) }
+    val onlineReaderSource: com.wenku8.epubstudio.reader.OnlineReaderSource by lazy { com.wenku8.epubstudio.reader.OnlineReaderSource(File(filesDir, "online-cache"), jobManager.httpClient()) }
 }
