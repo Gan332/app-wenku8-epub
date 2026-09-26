@@ -28,7 +28,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.hyperreader.model.BookshelfEntry
 import com.example.hyperreader.model.BookshelfSource
+import com.example.hyperreader.settings.ReadingProgress
 import com.example.hyperreader.ui.cover.CoverImage
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.Badge
 import top.yukonga.miuix.kmp.basic.Card
@@ -49,6 +51,10 @@ fun BookshelfScreen(
 ) {
     val showHistory = state.showJobHistory
     var activeEntry by remember { mutableStateOf<BookshelfEntry?>(null) }
+    // 阅读断点（第 x 章 · 第 y 段）：reader_progress_ 前缀键的全量视图
+    val readingProgress by viewModel.readingProgress.collectAsStateWithLifecycle(initialValue = emptyMap())
+    // 数据变化时刷新「N 分钟前」的基准时刻，避免长开应用后相对时间停在启动瞬间
+    val now = remember(state.bookshelf, readingProgress) { System.currentTimeMillis() }
     Column(Modifier.fillMaxWidth().padding(top = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
             TextButton(text = if (showHistory) "返回书架" else "导出记录", onClick = { viewModel.setShowJobHistory(!showHistory) })
@@ -91,7 +97,7 @@ fun BookshelfScreen(
             Box(Modifier.fillMaxWidth()) {
                 LazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(state.bookshelf, key = { it.id }) { entry ->
-                        BookshelfCard(entry) { activeEntry = it }
+                        BookshelfCard(entry, readingProgress[entry.bookId], now) { activeEntry = it }
                     }
                 }
                 VerticalScrollBar(
@@ -148,6 +154,8 @@ fun BookshelfScreen(
 @Composable
 private fun BookshelfCard(
     entry: BookshelfEntry,
+    resume: ReadingProgress?,
+    now: Long,
     onOpen: (BookshelfEntry) -> Unit,
 ) {
     Card(
@@ -177,6 +185,16 @@ private fun BookshelfCard(
                     if (entry.isPinned) {
                         Badge(containerColor = MiuixTheme.colorScheme.primary) { Text("置顶", fontSize = 10.sp) }
                     }
+                }
+                // 上次阅读时间 + 断点：未读过的书（lastReadAt=0）整行不显示
+                if (entry.lastReadAt > 0L) {
+                    val resumeText = resume?.let { " · 读到 第${it.chapterIndex + 1}章 · 第${it.paragraphIndex + 1}段" }.orEmpty()
+                    Text(
+                        "上次阅读：${formatRelativeReadTime(now, entry.lastReadAt)}$resumeText",
+                        fontSize = 12.sp,
+                        color = MiuixTheme.colorScheme.primary.copy(alpha = .9f),
+                        maxLines = 1,
+                    )
                 }
             }
         }

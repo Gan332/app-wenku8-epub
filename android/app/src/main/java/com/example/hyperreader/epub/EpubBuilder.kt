@@ -109,7 +109,7 @@ $content
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" xml:lang="zh-CN" lang="zh-CN">
 <head><meta charset="utf-8"/><title>${escape(book.title)}</title><link rel="stylesheet" href="style.css"/></head>
-<body><section class="title-page">$image<h1>${escape(book.title)}</h1><p>${escape(book.author)}</p><section><h2>内容简介</h2>$summary</section></section></body>
+<body><section class="title-page">$image<h1>${escape(book.title)}</h1><p class="author">${escape(book.author)}</p><section><h2>内容简介</h2>$summary</section></section></body>
 </html>"""
     }
 
@@ -135,6 +135,28 @@ $content
     }
 
     companion object {
-        private val CSS = """@charset "utf-8";html{font-family:"MiSans",sans-serif}body{margin:0;color:#272522;line-height:1.8}section{padding:1.2em}h1{text-align:center}p{text-indent:2em;text-align:justify}figure{text-align:center;margin:1.4em 0}figure img{max-width:100%;max-height:90vh}.title-page{text-align:center;min-height:85vh}"""
+        /**
+         * 导出样式。**不写死任何颜色**（body 不出现 color/background 属性）：
+         * 0.9.1 前是 `body{color:#272522}`，阅读器开深色模式时黑底黑字看不清 —— 文字颜色交给阅读器控。
+         * 段落给间距+首行缩进+孤行控制；图片 `height:auto` 防止阅读器拉伸变形。
+         *
+         * `internal` 供单元测试断言关键排版规则不被回退。
+         */
+        internal val CSS = """
+            @charset "utf-8";
+            html{font-family:"MiSans","Source Han Sans SC","Noto Sans CJK SC","PingFang SC",sans-serif;-webkit-text-size-adjust:100%}
+            body{margin:0;line-height:1.8}
+            section{padding:1.2em}
+            h1{font-size:1.35em;line-height:1.4;text-align:center;margin:0 0 1em}
+            h2{font-size:1.15em;margin:1.2em 0 .6em}
+            p{margin:.55em 0;text-indent:2em;text-align:justify;orphans:2;widows:2}
+            figure{margin:1.2em auto;text-align:center;max-width:100%}
+            figure img{max-width:100%;height:auto;max-height:85vh}
+            .title-page{text-align:center;min-height:85vh}
+            .title-page img{max-width:70%;height:auto;margin:0 auto 1em}
+            .title-page h1{margin-top:.8em}
+            .title-page h2{text-align:center}
+            .title-page .author{text-indent:0;text-align:center;letter-spacing:.15em;margin:.4em 0 1.6em}
+        """.trimIndent()
     }
 }

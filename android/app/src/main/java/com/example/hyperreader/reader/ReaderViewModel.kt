@@ -161,10 +161,17 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application),
     override fun updateFontUri(value: String?) { viewModelScope.launch { settingsRepository.setReaderFontUri(value); refreshSettings() } }
 
     fun startSession() {
-        if (sessionStartedAt == null) sessionStartedAt = android.os.SystemClock.elapsedRealtime()
+        if (sessionStartedAt == null) {
+            sessionStartedAt = android.os.SystemClock.elapsedRealtime()
+            // 更新书架「上次阅读时间」：之前只有在线阅读在记录，EPUB 从不更新。
+            // bookId 不在书架时 recordRead 是无操作，安全。
+            if (bookId.isNotBlank()) viewModelScope.launch { app.bookshelfRepository.recordRead(bookId) }
+        }
     }
 
     fun stopSession() {
+        // 退出前兜底保存断点：正常滚动都会落盘，这里防止最后一次位置没有滚动事件可触发。
+        persistProgress()
         val started = sessionStartedAt ?: return
         sessionStartedAt = null
         val seconds = ((android.os.SystemClock.elapsedRealtime() - started) / 1000L).coerceIn(0L, 1800L)

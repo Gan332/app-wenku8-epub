@@ -13,6 +13,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -58,6 +59,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -90,12 +92,27 @@ import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.overlay.OverlayBottomSheet
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import java.io.File
+import java.net.URLDecoder
 import java.util.zip.ZipFile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 private const val TOUCH_TARGET = 48
 private const val CONTROL_BAR_HEIGHT = 56
+
+/**
+ * 点按呼出/收起菜单栏。
+ *
+ * 必须挂在**内容节点**上（LazyColumn、正文 item）：v0.8.x 与 0.9.1 的真机实测
+ * 都证明父层 Box 收不到内容区的点击——手势在内容链路里就被消化了，
+ * 而当年吞掉点击的空 `detectTapGestures` 恰好挂在 LazyColumn 节点，
+ * 那才是这个栈里被验证生效的层级。
+ *
+ * 多层挂载是安全的：手势从子节点向父节点分发，先触发的一层会消费掉该次点击，
+ * 其余层自动取消 —— 一次点击只 toggle 一次。父层检测保留用于边距/加载/错误区域。
+ */
+private fun Modifier.readerTapToToggle(actions: ReaderActions): Modifier =
+    pointerInput(actions) { detectTapGestures { actions.toggleControls() } }
 
 /**
  * EPUB 阅读界面。**签名保持不变**，实现委托给 [ReaderScreenCore]。
@@ -131,7 +148,7 @@ fun ReaderScreen(
 fun ReaderScreenCore(
     state: ReaderUiState,
     actions: ReaderActions,
-    imageResolver: @Composable (block: ReaderBlock.Image) -> ImageBitmap?,
+    imageResolver: @Composable (block: ReaderBlock.Image) -> ReaderImage,
     onImportFont: () -> Unit,
     onImportEpub: () -> Unit,
     onBack: () -> Unit,
@@ -296,7 +313,7 @@ private fun ReaderContent(
     state: ReaderUiState,
     actions: ReaderActions,
     palette: ReaderPalette,
-    imageResolver: @Composable (block: ReaderBlock.Image) -> ImageBitmap?,
+    imageResolver: @Composable (block: ReaderBlock.Image) -> ReaderImage,
 ) {
     val fontFamily = rememberFont(state.settings.fontUri)
     if (state.settings.pageTurnMode == ReaderPageTurnMode.HORIZONTAL) {
@@ -305,7 +322,9 @@ private fun ReaderContent(
         LaunchedEffect(pagerState.currentPage) { if (pagerState.currentPage != state.chapterIndex) actions.selectChapter(pagerState.currentPage) }
         HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
             val chapter = book.chapters.getOrNull(page) ?: return@HorizontalPager
-            ChapterContent(chapter, state.settings, fontFamily, palette, imageResolver) { actions.setParagraph(it) }
+            // 只有「当前章」的页携带断点段落；其余页恒 0，直接章首，避免恢复值串页
+            val resumeParagraph = if (page == state.chapterIndex) state.paragraphIndex else 0
+            ChapterContent(chapter, resumeParagraph, state.settings, fontFamily, palette, imageResolver, actions) { actions.setParagraph(it) }
         }
     } else {
         SeamlessContent(book, state, actions, palette, imageResolver, fontFamily)
@@ -319,52 +338,64 @@ private fun SeamlessContent(
     state: ReaderUiState,
     actions: ReaderActions,
     palette: ReaderPalette,
-    imageResolver: @Composable (block: ReaderBlock.Image) -> ImageBitmap?,
+    imageResolver: @Composable (block: ReaderBlock.Image) -> ReaderImage,
     fontFamily: FontFamily,
 ) {
     val flat = remember(book.id, book.chapters.size) { flattenBook(book) }
     val listState = rememberLazyListState()
+    // 闭包里读到的必须是「当前」章节号：LaunchedEffect 的 block 只在 key 变化时重建，
+    // 直接捕获 state 会一直用第一次组合的旧值，导致 selectChapter 反复重置段落。
+    val currentChapter by rememberUpdatedState(state.chapterIndex)
+
+    // 断点恢复 + 外部跳转（目录/下一章）统一走一个定位：
+    // 必须排在追踪之前，且定位完成前 suppress 写入 —— 否则初始 snapshotFlow
+    // （firstVisibleItemIndex=0）会把恢复的章节跳回第 0 章、段落覆盖成 0，
+    // 这正是 0.9.0 摊平改造引入的竞态，导致「续读位置」从未真正生效。
+    var positioned by remember(book.id) { mutableStateOf(false) }
+    LaunchedEffect(state.chapterIndex, state.paragraphIndex, flat.size) {
+        val target = resumeTargetIndex(flat, state.chapterIndex, state.paragraphIndex)
+        if (target != null && target != listState.firstVisibleItemIndex && !listState.isScrollInProgress) {
+            listState.scrollToItem(target)
+        }
+        if (!positioned) positioned = true
+    }
 
     LaunchedEffect(listState, flat.size) {
         snapshotFlow { listState.firstVisibleItemIndex }
             .collect { index ->
+                if (!positioned) return@collect
                 val item = flat.getOrNull(index) ?: return@collect
-                if (item.chapterIndex != state.chapterIndex) actions.selectChapter(item.chapterIndex)
+                if (item.chapterIndex != currentChapter) actions.selectChapter(item.chapterIndex)
                 if (item.paragraphIndex >= 0) actions.setParagraph(item.paragraphIndex)
             }
     }
 
-    // 外部跳转（目录/进度恢复）时对齐到目标章节
-    LaunchedEffect(state.chapterIndex, flat.size) {
-        val target = flat.indexOfFirst { it.chapterIndex == state.chapterIndex }
-        if (target >= 0 && target != listState.firstVisibleItemIndex && !listState.isScrollInProgress) {
-            listState.scrollToItem(target)
-        }
-    }
-
     LazyColumn(
         state = listState,
-        modifier = Modifier.fillMaxSize().background(palette.background),
+        // 节点级点按：v0.8.x 实证唯一能收到内容区点击的层级（见 readerTapToToggle）
+        modifier = Modifier.fillMaxSize().background(palette.background).readerTapToToggle(actions),
         contentPadding = PaddingValues(horizontal = state.settings.horizontalPaddingDp.dp, vertical = 18.dp),
         verticalArrangement = Arrangement.spacedBy(state.settings.paragraphSpacingDp.dp),
     ) {
         itemsIndexed(flat, key = { _, item -> item.key }) { _, item ->
-            // 章节交界处插入章名，读者才知道自己进入了新的一章
-            if (item.isChapterStart) {
-                MiuixText(
-                    item.chapterTitle,
-                    fontSize = (state.settings.fontSizeSp + 4).sp,
-                    fontWeight = FontWeight.Bold,
-                    fontFamily = fontFamily,
-                    color = palette.text,
-                    modifier = Modifier.padding(top = 18.dp, bottom = 4.dp),
-                )
-            }
-            when (val block = item.block) {
-                is ReaderBlock.Heading -> MiuixText(block.text, fontSize = (state.settings.fontSizeSp + 6).sp, fontWeight = FontWeight.Bold, fontFamily = fontFamily, color = palette.text, modifier = Modifier.padding(top = 10.dp))
-                is ReaderBlock.Paragraph -> MiuixText(block.text, fontSize = state.settings.fontSizeSp.sp, lineHeight = (state.settings.fontSizeSp * state.settings.lineHeight).sp, fontWeight = FontWeight(state.settings.fontWeight), fontFamily = fontFamily, color = palette.text, softWrap = true)
-                is ReaderBlock.Image -> imageResolver(block)?.let { bitmap ->
-                    Image(bitmap, contentDescription = block.alt, modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp))
+            // Column 单根 + item 级点按兜底（与 LazyColumn 节点、父层 Box 三层，
+            // 消费语义保证一次点击只触发一次）
+            Column(Modifier.fillMaxWidth().readerTapToToggle(actions)) {
+                // 章节交界处插入章名，读者才知道自己进入了新的一章
+                if (item.isChapterStart) {
+                    MiuixText(
+                        item.chapterTitle,
+                        fontSize = (state.settings.fontSizeSp + 4).sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = fontFamily,
+                        color = palette.text,
+                        modifier = Modifier.padding(top = 18.dp, bottom = 4.dp),
+                    )
+                }
+                when (val block = item.block) {
+                    is ReaderBlock.Heading -> MiuixText(block.text, fontSize = (state.settings.fontSizeSp + 6).sp, fontWeight = FontWeight.Bold, fontFamily = fontFamily, color = palette.text, modifier = Modifier.padding(top = 10.dp))
+                    is ReaderBlock.Paragraph -> MiuixText(block.text, fontSize = state.settings.fontSizeSp.sp, lineHeight = (state.settings.fontSizeSp * state.settings.lineHeight).sp, fontWeight = FontWeight(state.settings.fontWeight), fontFamily = fontFamily, color = palette.text, softWrap = true)
+                    is ReaderBlock.Image -> ReaderImageBlock(imageResolver(block), block.alt, palette)
                 }
             }
         }
@@ -374,10 +405,13 @@ private fun SeamlessContent(
 @Composable
 private fun ChapterContent(
     chapter: ReaderChapter,
+    /** 断点恢复目标段落；只有「当前章」的页传真实值，其余页恒为 0（直接章首）。 */
+    resumeParagraph: Int,
     settings: ReaderSettings,
     fontFamily: FontFamily,
     palette: ReaderPalette,
-    imageResolver: @Composable (block: ReaderBlock.Image) -> ImageBitmap?,
+    imageResolver: @Composable (block: ReaderBlock.Image) -> ReaderImage,
+    actions: ReaderActions,
     onParagraph: (Int) -> Unit,
 ) {
     // 段落下标由 blocks 顺序**推导**得出。
@@ -387,30 +421,77 @@ private fun ChapterContent(
         chapter.blocks.take(blockIndex.coerceIn(0, chapter.blocks.size)).count { it is ReaderBlock.Paragraph }
 
     val listState = rememberLazyListState()
+
+    // 断点定位必须排在追踪之前：先滚到恢复的段落，定位完成前不写进度，
+    // 否则初始 snapshotFlow 会把续读段落覆盖成 0。
+    // 每章只定位**一次**：定位后 resumeParagraph 会随追踪持续变化，
+    // 若还挂在 keys 里，阅读中会反复 scrollToItem 和用户滚动打架。
+    var positioned by remember(chapter.id) { mutableStateOf(false) }
+    LaunchedEffect(listState, chapter.id) {
+        if (!positioned) {
+            val target = paragraphItemIndex(chapter, resumeParagraph)
+            if (target > 0 && !listState.isScrollInProgress) listState.scrollToItem(target)
+            positioned = true
+        }
+    }
+
     LaunchedEffect(listState, chapter.id) {
         snapshotFlow { listState.firstVisibleItemIndex }
-            .collect { onParagraph(paragraphIndexAt(it)) }
+            .collect { if (positioned) onParagraph(paragraphIndexAt(it)) }
     }
 
     LazyColumn(
         state = listState,
-        // 这里不能挂 detectTapGestures：它会吞掉全部点击，
-        // 父层的 toggleControls() 永远收不到事件，沉浸模式就成了单向陷阱。
-        modifier = Modifier.fillMaxSize().background(palette.background),
+        // 节点级点按（v0.8.x 实证生效层级），见 readerTapToToggle
+        modifier = Modifier.fillMaxSize().background(palette.background).readerTapToToggle(actions),
         contentPadding = PaddingValues(horizontal = settings.horizontalPaddingDp.dp, vertical = 18.dp),
         verticalArrangement = Arrangement.spacedBy(settings.paragraphSpacingDp.dp),
     ) {
         itemsIndexed(chapter.blocks, key = { index, block -> "${chapter.id}-$index-${block::class.simpleName}" }) { index, block ->
-            when (block) {
-                is ReaderBlock.Heading -> MiuixText(block.text, fontSize = (settings.fontSizeSp + 6).sp, fontWeight = FontWeight.Bold, fontFamily = fontFamily, color = palette.text, modifier = Modifier.padding(top = 10.dp))
-                is ReaderBlock.Paragraph -> {
-                    MiuixText(block.text, fontSize = settings.fontSizeSp.sp, lineHeight = (settings.fontSizeSp * settings.lineHeight).sp, fontWeight = FontWeight(settings.fontWeight), fontFamily = fontFamily, color = palette.text, softWrap = true)
-                }
-                is ReaderBlock.Image -> imageResolver(block)?.let { bitmap ->
-                    Image(bitmap, contentDescription = block.alt, modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp))
+            // Column 单根 + item 级点按兜底（见 readerTapToToggle 的消费语义说明）
+            Column(Modifier.fillMaxWidth().readerTapToToggle(actions)) {
+                when (block) {
+                    is ReaderBlock.Heading -> MiuixText(block.text, fontSize = (settings.fontSizeSp + 6).sp, fontWeight = FontWeight.Bold, fontFamily = fontFamily, color = palette.text, modifier = Modifier.padding(top = 10.dp))
+                    is ReaderBlock.Paragraph -> {
+                        MiuixText(block.text, fontSize = settings.fontSizeSp.sp, lineHeight = (settings.fontSizeSp * settings.lineHeight).sp, fontWeight = FontWeight(settings.fontWeight), fontFamily = fontFamily, color = palette.text, softWrap = true)
+                    }
+                    is ReaderBlock.Image -> ReaderImageBlock(imageResolver(block), block.alt, palette)
                 }
             }
         }
+    }
+}
+
+/** 正文插图的三态渲染：加载中转圈、失败占位（不再隐形空白）、成功显示。 */
+@Composable
+private fun ReaderImageBlock(image: ReaderImage, alt: String, palette: ReaderPalette) {
+    when (image) {
+        ReaderImage.Loading -> Box(
+            Modifier.fillMaxWidth().padding(vertical = 10.dp),
+            contentAlignment = Alignment.Center,
+        ) { CircularProgressIndicator(size = 22.dp) }
+
+        ReaderImage.Failed -> Box(
+            Modifier
+                .fillMaxWidth()
+                .padding(vertical = 10.dp)
+                .border(1.dp, palette.text.copy(alpha = .35f), RoundedCornerShape(8.dp))
+                .padding(vertical = 18.dp, horizontal = 12.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            MiuixText(
+                "图片无法显示：${alt.ifBlank { "(无标题)" }}",
+                color = palette.text.copy(alpha = .65f),
+                fontSize = 13.sp,
+                maxLines = 3,
+            )
+        }
+
+        is ReaderImage.Ready -> Image(
+            image.bitmap,
+            contentDescription = alt,
+            modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
+        )
     }
 }
 
@@ -582,9 +663,11 @@ private fun rememberFont(uri: String?): FontFamily {
  * 大文件多插图时会直接卡住甚至无响应。改为 IO 协程 + 内存缓存。
  */
 @Composable
-private fun rememberEpubImage(archivePath: String, path: String): ImageBitmap? {
-    val result = produceState<ImageBitmap?>(initialValue = null, archivePath, path) {
-        value = withContext(Dispatchers.IO) { decodeEpubImage(archivePath, path) }
+private fun rememberEpubImage(archivePath: String, path: String): ReaderImage {
+    val result = produceState<ReaderImage>(initialValue = ReaderImage.Loading, archivePath, path) {
+        value = withContext(Dispatchers.IO) {
+            decodeEpubImage(archivePath, path)?.let { ReaderImage.Ready(it) } ?: ReaderImage.Failed
+        }
     }
     return result.value
 }
@@ -593,15 +676,36 @@ private val epubImageCache = object : LruCache<String, ImageBitmap>(8 * 1024 * 1
     override fun sizeOf(key: String, value: ImageBitmap): Int = value.width * value.height * 4
 }
 
+/** 解码目标最长边：全尺寸解码大插图会 OOM 返回 null，界面上表现为「图片不显示」。 */
+private const val MAX_IMAGE_DIMENSION = 2048
+
 private fun decodeEpubImage(archivePath: String, path: String): ImageBitmap? {
     val key = "$archivePath::$path"
     epubImageCache.get(key)?.let { return it }
-    return runCatching {
+    val bitmap = runCatching {
         ZipFile(File(archivePath)).use { zip ->
-            val entry = zip.getEntry(path) ?: return null
-            zip.getInputStream(entry).use { BitmapFactory.decodeStream(it)?.asImageBitmap() }
+            // EPUB 里的 href 常带百分号编码（%E6%8F%92%E5%9B%BE.jpg），zip 条目名是原样字节：
+            // 先按原样查，miss 再解码查一次，否则查不到条目 → 图片静默空白。
+            val entry = zip.getEntry(path)
+                ?: zip.getEntry(decodePercentEncoding(path))
+                ?: return null
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            zip.getInputStream(entry).use { BitmapFactory.decodeStream(it, null, bounds) }
+            if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+            var sample = 1
+            val longest = maxOf(bounds.outWidth, bounds.outHeight)
+            while (longest / sample > MAX_IMAGE_DIMENSION) sample *= 2
+            val options = BitmapFactory.Options().apply { inSampleSize = sample }
+            zip.getInputStream(entry).use { BitmapFactory.decodeStream(it, null, options) }?.asImageBitmap()
         }
-    }.getOrNull()?.also { epubImageCache.put(key, it) }
+    }.getOrNull()
+    return bitmap?.also { epubImageCache.put(key, it) }
+}
+
+/** 含 `%` 才解码；`+` 在路径里是合法字符，只做百分号解码语义（URLDecoder 会把 + 变空格，先还原）。 */
+private fun decodePercentEncoding(path: String): String {
+    if ('%' !in path) return path
+    return runCatching { URLDecoder.decode(path.replace("+", "%2B"), "UTF-8") }.getOrNull() ?: path
 }
 
 @Composable

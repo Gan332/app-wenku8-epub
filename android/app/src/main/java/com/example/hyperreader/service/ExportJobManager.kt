@@ -183,6 +183,9 @@ class ExportJobManager(private val context: Context, sessionStore: Wenku8Session
                 job = job.copy(warnings = warnings.toList(), progress = job.progress.copy(phase = JobPhase.fetching, percent = (completed.toDouble() / initial.requestedChapters.size.coerceAtLeast(1) * 94).toInt().coerceAtMost(94), completed = completed, message = "已处理 $completed/${initial.requestedChapters.size} 个章节"))
                 update(job)
             }
+            // 下载失败的插图在 EpubBuilder.resolveChapters 里会被**静默丢弃**，
+            // 任务却显示成功 —— 把缺图变成明确警告（复用「查看 N 条警告」入口）。
+            warnings += missingImageWarnings(parsed, images)
             if (parsed.isEmpty()) throw Wenku8Exception("所有章节都未能成功读取。", "NO_CHAPTERS_PARSED")
             val coverUrl = job.book.coverUrl
             if (job.options.includeCover && coverUrl != null) {
@@ -240,3 +243,17 @@ class ExportJobManager(private val context: Context, sessionStore: Wenku8Session
 
     fun httpClient(): Wenku8HttpClient = http
 }
+
+/**
+ * 导出缺图警告（纯函数，可单测）。
+ *
+ * 按章对比「正文中出现的插图数」与「实际下载成功的插图数」：
+ * 少于正文数量即说明有图没进包（下载失败被 [EpubBuilder] 静默跳过）。
+ */
+internal fun missingImageWarnings(parsed: List<ParsedChapter>, images: List<DownloadedImage>): List<String> =
+    parsed.mapNotNull { chapter ->
+        val expected = chapter.imageUrls.size
+        if (expected <= 0) return@mapNotNull null
+        val missing = expected - images.count { it.sourceId == chapter.id }
+        if (missing > 0) "《${chapter.title}》有 $missing 张插图未能下载，已不包含在 EPUB 中" else null
+    }

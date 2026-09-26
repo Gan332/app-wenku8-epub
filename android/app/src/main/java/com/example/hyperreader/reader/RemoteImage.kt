@@ -4,7 +4,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
-import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
@@ -26,22 +25,31 @@ import com.example.hyperreader.Wenku8Application
 fun rememberRemoteImage(
     url: String?,
     targetWidth: Dp = 0.dp,
-): ImageBitmap? {
+): ReaderImage {
     val context = LocalContext.current
     val repository = remember(context) {
         (context.applicationContext as? Wenku8Application)?.coverRepository
-    } ?: return null
+    }
     val density = LocalDensity.current
     val targetWidthPx = remember(targetWidth, density) {
         if (targetWidth.value <= 0f) 0 else with(density) { targetWidth.roundToPx() }
     }
-    val image by produceState<ImageBitmap?>(initialValue = null, url, targetWidthPx) {
+    val image by produceState<ReaderImage>(initialValue = ReaderImage.Loading, url, targetWidthPx) {
         if (url.isNullOrBlank()) {
-            value = null
+            value = ReaderImage.Failed
             return@produceState
         }
-        // 先查缓存（不发网络），未命中再走限流客户端下载。
-        value = repository.cached(url) ?: repository.load(url, targetWidthPx)
+        val repo = repository
+        if (repo == null) {
+            value = ReaderImage.Failed
+            return@produceState
+        }
+        // 先查缓存（不发网络），未命中再走限流客户端下载；失败给 Failed 而非 null，
+        // 界面才能区分「加载中」与「永远不会出来」。
+        value = runCatching { repo.cached(url) ?: repo.load(url, targetWidthPx) }
+            .getOrNull()
+            ?.let { ReaderImage.Ready(it) }
+            ?: ReaderImage.Failed
     }
     return image
 }

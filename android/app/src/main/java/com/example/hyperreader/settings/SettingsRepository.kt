@@ -57,6 +57,18 @@ class SettingsRepository(private val context: Context) {
         prefs[progressKey(bookId)]?.let { encoded -> runCatching { json.decodeFromString(ReadingProgress.serializer(), encoded) }.getOrNull() }
     }
 
+    /**
+     * 全部阅读断点（书架「上次读到哪」展示用）：扫描 `reader_progress_` 前缀键。
+     * 解码走纯函数 [parseProgressMap]，坏数据跳过而不是拖垮整个书架。
+     */
+    fun allProgress(): Flow<Map<String, ReadingProgress>> = data.safeData().map { prefs ->
+        val raw = prefs.asMap()
+            .filterKeys { it.name.startsWith(PROGRESS_PREFIX) }
+            .mapKeys { it.key.name.removePrefix(PROGRESS_PREFIX) }
+            .mapValues { (_, value) -> value as? String }
+        parseProgressMap(raw)
+    }
+
     suspend fun setThemeMode(mode: AppThemeMode) = edit { it[THEME_MODE] = mode.name }
     suspend fun setDynamicColor(enabled: Boolean) = edit { it[USE_DYNAMIC_COLOR] = enabled }
     suspend fun setAccentColor(color: Int) = edit { it[ACCENT_COLOR] = color }
@@ -89,7 +101,7 @@ class SettingsRepository(private val context: Context) {
         data.edit { block(it) }
     }
 
-    private fun progressKey(bookId: String) = stringPreferencesKey("reader_progress_$bookId")
+    private fun progressKey(bookId: String) = stringPreferencesKey(PROGRESS_PREFIX + bookId)
 
     private companion object {
         val THEME_MODE = stringPreferencesKey("theme_mode")
@@ -112,3 +124,19 @@ class SettingsRepository(private val context: Context) {
 }
 
 private fun DataStore<Preferences>.safeData(): Flow<Preferences> = data.catch { emit(emptyPreferences()) }
+
+private const val PROGRESS_PREFIX = "reader_progress_"
+
+private val PROGRESS_JSON = Json { ignoreUnknownKeys = true }
+
+/**
+ * 纯函数：`bookId → ReadingProgress JSON` 解码（可单测）。
+ * 空键、坏 JSON 一律跳过，不让书架整体加载失败。
+ */
+internal fun parseProgressMap(raw: Map<String, String?>): Map<String, ReadingProgress> =
+    raw.entries.mapNotNull { (bookId, encoded) ->
+        if (bookId.isBlank() || encoded.isNullOrBlank()) null
+        else runCatching { PROGRESS_JSON.decodeFromString(ReadingProgress.serializer(), encoded) }
+            .getOrNull()
+            ?.let { bookId to it }
+    }.toMap()

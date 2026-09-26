@@ -101,6 +101,9 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     val state: StateFlow<StudioUiState> = mutable.asStateFlow()
     val appTheme = settingsRepository.appTheme
 
+    /** 书架「读到哪了」：bookId → 阅读断点。 */
+    val readingProgress = settingsRepository.allProgress()
+
     init {
         viewModelScope.launch {
             manager.jobs.collect { jobs ->

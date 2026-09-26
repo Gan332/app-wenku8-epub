@@ -15,9 +15,16 @@ import com.example.hyperreader.reader.ReaderChapter
 import com.example.hyperreader.reader.ReaderUiState
 import com.example.hyperreader.reader.controlsShown
 import com.example.hyperreader.reader.flattenBook
+import com.example.hyperreader.reader.paragraphItemIndex
 import com.example.hyperreader.reader.readableTextOn
 import com.example.hyperreader.reader.relativeLuminance
 import com.example.hyperreader.reader.resolveBack
+import com.example.hyperreader.reader.resumeTargetIndex
+import com.example.hyperreader.service.missingImageWarnings
+import com.example.hyperreader.settings.ReadingProgress
+import com.example.hyperreader.settings.parseProgressMap
+import com.example.hyperreader.ui.formatRelativeReadTime
+import com.example.hyperreader.model.DownloadedImage
 import com.example.hyperreader.ui.SettingsSection
 import com.example.hyperreader.ui.formatWordCount
 import androidx.compose.ui.graphics.Color
@@ -284,6 +291,132 @@ class CoreSmokeTest {
         assertEquals(BackAction.EXIT, afterShow.resolveBack())
         // 面板关闭回到「菜单栏可见」，仍然退出而不是再呼出一次
         assertEquals(BackAction.EXIT, afterShow.copy(showSettings = false).resolveBack())
+    }
+
+    @Test
+    fun resumeTargetPositionsChapterAndParagraph() {
+        val book = ReaderBook(
+            id = "b",
+            title = "书",
+            chapters = listOf(
+                ReaderChapter(
+                    id = "c1",
+                    title = "第一章",
+                    href = "h1",
+                    blocks = listOf(
+                        ReaderBlock.Heading(1, "第一章"),
+                        ReaderBlock.Paragraph("甲"),
+                        ReaderBlock.Paragraph("乙"),
+                    ),
+                ),
+                ReaderChapter(
+                    id = "c2",
+                    title = "第二章",
+                    href = "h2",
+                    blocks = listOf(
+                        ReaderBlock.Paragraph("丙"),
+                        ReaderBlock.Paragraph("丁"),
+                    ),
+                ),
+            ),
+        )
+        val flat = flattenBook(book)
+        // 摊平下标：0=标题, 1=甲, 2=乙, 3=丙, 4=丁
+        assertEquals(0, resumeTargetIndex(flat, 0, 0))
+        assertEquals(1, resumeTargetIndex(flat, 0, 1))
+        assertEquals(3, resumeTargetIndex(flat, 1, 0))
+        assertEquals(4, resumeTargetIndex(flat, 1, 1))
+        // 段落超范围 → 回章首
+        assertEquals(3, resumeTargetIndex(flat, 1, 9))
+        // 章不存在 → null（不动）
+        assertEquals(null, resumeTargetIndex(flat, 9, 0))
+    }
+
+    @Test
+    fun paragraphItemIndexMapsParagraphsToBlocks() {
+        val chapter = ReaderChapter(
+            id = "c1",
+            title = "章",
+            href = "h",
+            blocks = listOf(
+                ReaderBlock.Heading(1, "标题"),
+                ReaderBlock.Paragraph("甲"),
+                ReaderBlock.Paragraph("乙"),
+                ReaderBlock.Image("i.jpg", "插图"),
+                ReaderBlock.Paragraph("丙"),
+            ),
+        )
+        assertEquals(0, paragraphItemIndex(chapter, 0))
+        assertEquals(2, paragraphItemIndex(chapter, 1))
+        assertEquals(4, paragraphItemIndex(chapter, 2))
+        assertEquals(0, paragraphItemIndex(chapter, 3))
+        assertEquals(0, paragraphItemIndex(chapter, -1))
+    }
+
+    @Test
+    fun epubCssIsDarkModeSafeAndWellSpaced() {
+        val css = EpubBuilder.CSS
+        // 深色模式安全：不得写死任何颜色（0.9.1 前 body{color:#272522} → 黑底黑字）
+        assertFalse("CSS 不得写死颜色属性", css.contains("color:"))
+        assertFalse(css.contains("#272522"))
+        // 段落：间距 + 首行缩进
+        assertTrue(css.contains("p{margin"))
+        assertTrue(css.contains("text-indent:2em"))
+        // 图片：不拉伸、不溢出
+        assertTrue("图片必须 height:auto", css.contains("height:auto"))
+        assertTrue(css.contains("max-width:100%"))
+        // 扉页：作者行不缩进、CJK 字体回退
+        assertTrue(css.contains(".author"))
+        assertTrue(css.contains("Noto Sans CJK SC"))
+    }
+
+    @Test
+    fun missingImageWarningsReportsDroppedImages() {
+        fun chapter(id: String, title: String, images: Int) = ParsedChapter(
+            id = id,
+            title = title,
+            volume = "卷一",
+            order = 1,
+            sourceUrl = "https://example.invalid/$id",
+            imageUrls = (0 until images).map { "https://example.invalid/$id/$it.jpg" },
+        )
+        fun image(sourceId: String, index: Int) = DownloadedImage(
+            chapterId = sourceId, sourceId = sourceId, chapterIndex = index, globalIndex = index,
+            fileName = "img$index.jpg", manifestId = "img$index", mime = "image/jpeg",
+            localPath = "/tmp/img.jpg", ext = "jpg", bytes = 100L,
+        )
+        val parsed = listOf(chapter("c1", "第一章", 3), chapter("c2", "第二章", 2), chapter("c3", "第三章", 0))
+        val images = listOf(image("c1", 0), image("c1", 1), image("c2", 0))
+        val warnings = missingImageWarnings(parsed, images)
+        assertEquals(2, warnings.size)
+        assertTrue(warnings[0].contains("第一章"))
+        assertTrue(warnings[0].contains("1 张"))
+        assertTrue(warnings[1].contains("第二章"))
+        // 全部到齐 → 无警告；没有插图的章节不产生噪音
+        assertTrue(missingImageWarnings(listOf(chapter("c1", "一", 1)), listOf(image("c1", 0))).isEmpty())
+        assertTrue(missingImageWarnings(listOf(chapter("c3", "三", 0)), emptyList()).isEmpty())
+    }
+
+    @Test
+    fun progressMapSkipsBrokenEntries() {
+        val good = """{"bookId":"b1","chapterId":"c1","chapterIndex":4,"paragraphIndex":7,"updatedAt":123}"""
+        val result = parseProgressMap(mapOf("b1" to good, "b2" to "not-json", "b3" to null, "" to good))
+        assertEquals(1, result.size)
+        assertEquals(4, result["b1"]?.chapterIndex)
+        assertEquals(7, result["b1"]?.paragraphIndex)
+    }
+
+    @Test
+    fun relativeReadTimeFormats() {
+        val now = 1_700_000_000_000L
+        assertEquals("", formatRelativeReadTime(now, 0))
+        assertEquals("刚刚", formatRelativeReadTime(now, now - 30_000L))
+        assertEquals("5 分钟前", formatRelativeReadTime(now, now - 300_000L))
+        assertEquals("3 小时前", formatRelativeReadTime(now, now - 3 * 3_600_000L))
+        assertEquals("昨天", formatRelativeReadTime(now, now - 86_400_000L))
+        assertEquals("3 天前", formatRelativeReadTime(now, now - 3 * 86_400_000L))
+        val old = formatRelativeReadTime(now, now - 100 * 86_400_000L)
+        assertTrue("日期格式不正确：$old", old.matches(Regex("""\d{1,4}年?\d{1,2}月\d{1,2}日""")))
     }
 
     @Test
