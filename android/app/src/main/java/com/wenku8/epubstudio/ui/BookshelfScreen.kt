@@ -39,11 +39,11 @@ fun BookshelfScreen(
     onOpenLocal: (BookshelfEntry) -> Unit,
     onOpenRemote: (BookshelfEntry) -> Unit,
 ) {
-    var showHistory by remember { mutableStateOf(false) }
+    val showHistory = state.showJobHistory
     var activeEntry by remember { mutableStateOf<BookshelfEntry?>(null) }
     Column(Modifier.fillMaxWidth().padding(top = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-            TextButton(text = if (showHistory) "返回书架" else "导出记录", onClick = { showHistory = !showHistory })
+            TextButton(text = if (showHistory) "返回书架" else "导出记录", onClick = { viewModel.setShowJobHistory(!showHistory) })
         }
         if (showHistory) {
             Text("导出记录", fontSize = 25.sp, fontWeight = FontWeight.Bold)
@@ -67,6 +67,11 @@ fun BookshelfScreen(
         Text("书架", fontSize = 25.sp, fontWeight = FontWeight.Bold)
         Text("在线书籍和本地 EPUB 都可以在这里继续阅读。", color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f), fontSize = 13.sp)
         Button(onClick = onImportEpub, modifier = Modifier.fillMaxWidth()) { Text("导入 EPUB") }
+        ActiveExportSection(
+            jobs = state.jobs,
+            onOpen = { jobId -> viewModel.route(StudioViewModel.ROUTE_EXPORT_PROGRESS, jobId) },
+            onCancel = { jobId -> viewModel.cancel(jobId) },
+        )
         if (state.bookshelf.isEmpty()) {
             Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(18.dp)) {
                 Text("书架还是空的。\n可以从“探索”加入 Wenku8 书籍，或导入本地 EPUB。", fontSize = 14.sp, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .8f))
