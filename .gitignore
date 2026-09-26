@@ -16,3 +16,9 @@ android/**/build/
 .kotlin/
 .idea/
 *.iml
+
+# release 签名密钥：本地备份，绝不入库（AGENTS.md §10）
+.signing/
+*.jks
+*.keystore
+*.p12

@@ -11,8 +11,8 @@
 
 当前主要发版对象是 **Android 原生应用**。Android 版本不需要 Node.js 服务，WebView 仅用于 wenku8 登录。
 
-当前版本：`0.8.1`（versionCode 9）
-包名：`com.example.hyperreader`（由 `com.wenku8.epubstudio` 于 0.9.0 重命名）
+当前版本：`0.9.1`（versionCode 11，见 `android/app/build.gradle.kts`，以该文件为准）
+包名：`com.example.hyperreader`（由 `com.wenku8.epubstudio` 于 0.9.0 重命名，非原地改名，升级需数据迁移）
 
 仓库地址：`https://github.com/Gan332/app-wenku8-epub`
 
@@ -60,18 +60,22 @@
 
 ```text
 android/app/src/main/java/com/example/hyperreader/
-├── MainActivity.kt              入口 Activity，ActivityResult 启动器
 ├── Wenku8Application.kt         依赖容器：设置、书架、统计、数据源、任务
-├── core/                        URL 白名单、HTTP、Cookie、解析、探索数据源
+├── auth/                        wenku8 登录 WebView（LoginActivity）
+├── core/                        URL 白名单、HTTP、Cookie、解析、书目索引、探索数据源
 ├── data/                        DataStore：设置、书架、阅读统计
 ├── epub/                        EPUB 3 + NCX 打包
 ├── file/                        EPUB 保存、分享、字体导入
+├── http/                        全局限流 HttpRateLimiter
 ├── model/                       业务模型（Book、Chapter、BookshelfEntry 等）
-├── reader/                      EPUB 解析、阅读器、进度、设置
-├── service/                     导出任务队列、进度通知
-├── settings/                    设置模型与 DataStore 仓储
-└── ui/                          Compose 页面和 ViewModel
+├── reader/                      EPUB 解析、阅读器（Reader/OnlineReader Activity）、进度
+├── service/                     导出任务队列、前台进度通知
+├── settings/                    设置模型与 DataStore 仓储、配置导入导出
+└── ui/                          Compose 页面、ViewModel、封面缓存（ui/cover/）
 ```
+
+入口：Manifest 声明的启动 Activity 是 `.MainActivity`，但它**不是独立文件**，类定义在
+`ui/StudioApp.kt`（`proguard-rules.pro` 的 keep 规则也指向它）。找入口别搜 `MainActivity.kt`。
 
 页面：书架（含书籍操作二级界面）、探索、创建流程（源站/详情/章节/导出/进度）、设置（二级：主题与外观/阅读器设置/阅读统计/书目缓存/关于）。
 
@@ -154,16 +158,28 @@ OkHttp 客户端，从而绕过 `Wenku8HttpClient` 的全局 1 秒限流与 429 
 
 ## 5. 构建与验证
 
-### 5.1 不要在本地编译 Android
+### 5.1 Web 版（Node，改动 `src/` / `public/` / `server.js` 时）
+
+```powershell
+npm ci            # Node >= 20
+npm run verify    # = npm run check && npm test && npm run smoke:epub
+npm start         # 或 npm run dev（--watch），http://127.0.0.1:3210
+```
+
+- 单个测试文件：`node --test test/parsers.test.js`；`npm test` 强制 `--test-concurrency=1`
+- `npm run test:live` 会访问真实 wenku8 源站，只在需要验证源站时运行
+- 仓库**没有** ESLint / Prettier / tsc 等校验：`npm run check` 只是 `node --check` 语法检查
+
+### 5.2 不要在本地编译 Android
 
 本项目 **不在本地执行 Gradle 构建**，所有 Android 编译和测试通过 GitHub Actions 完成。
 
 工作流：`.github/workflows/android-apk.yml`
 
-- 推送到 `main`：构建 + 单元测试 + 上传 Artifact
+- 推送到 `main`（含 PR）：单元测试 + debug APK + 有签名 Secrets 时的 release APK + 上传 Artifact
 - 推送 `v*` 标签：额外附加 APK 到 Release
 
-### 5.2 提交后必须跟踪 CI
+### 5.3 提交后必须跟踪 CI
 
 推送后用 `gh` 跟踪，失败时读取失败日志并修复：
 
@@ -182,7 +198,7 @@ OkHttp 客户端，从而绕过 `Wenku8HttpClient` 的全局 1 秒限流与 429 
 5. 重新跟踪新的 run
 6. 直到 `conclusion == "success"`
 
-### 5.3 单元测试
+### 5.4 单元测试
 
 测试位于 `android/app/src/test/java/com/example/hyperreader/`，覆盖：
 
@@ -194,7 +210,7 @@ OkHttp 客户端，从而绕过 `Wenku8HttpClient` 的全局 1 秒限流与 429 
 
 新增解析逻辑时，必须同时新增测试夹具。
 
-### 5.4 Release 签名与 R8（0.9.0 起）
+### 5.5 Release 签名与 R8（0.9.0 起）
 
 release 变体开启 `isMinifyEnabled` + `isShrinkResources`，签名配置**全部来自环境变量**，
 密钥与口令**绝不进入版本库**。CI 需要的 4 个仓库 Secret：
@@ -208,6 +224,10 @@ release 变体开启 `isMinifyEnabled` + `isShrinkResources`，签名配置**全
 
 未配置时 CI 会在脚本内**跳过** release 构建（打印 notice 后 `exit 0`），
 **不回退到 debug 签名**，避免产出「看起来正常」的假包。
+
+注意 Secret 与 env 变量名不同：Secret `HYPERREADER_KEYSTORE` 是 base64 内容，workflow 把它
+解码到临时文件后，以 `HYPERREADER_KEYSTORE=<文件路径>`（另有 `HYPERREADER_KEYSTORE_B64`）传给
+Gradle；`build.gradle.kts` 读的是**文件路径**，不是 base64。
 
 两个必须知道的坑：
 
@@ -261,7 +281,10 @@ release 变体开启 `isMinifyEnabled` + `isShrinkResources`，签名配置**全
 
 版本规则：语义化版本，不覆盖已发布标签。
 
-## 8. 提交信息
+## 8. 分支与提交信息
+
+分支：`docs/ENGINEERING_SOP.md` 写了 develop/feature 分支流程，但 `develop` 已落后 `main`
+80+ 提交且不再使用 —— **直接在 `main` 上工作**，推送 main（含 PR）即触发 CI。
 
 Conventional Commits：
 
