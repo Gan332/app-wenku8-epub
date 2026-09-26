@@ -321,9 +321,10 @@ class CoreSmokeTest {
             ),
         )
         val flat = flattenBook(book)
-        // 摊平下标：0=标题, 1=甲, 2=乙, 3=丙, 4=丁
+        // 摊平下标：0=标题, 1=甲(p0), 2=乙(p1), 3=丙(p0), 4=丁(p1)
         assertEquals(0, resumeTargetIndex(flat, 0, 0))
-        assertEquals(1, resumeTargetIndex(flat, 0, 1))
+        // paragraphIndex 是 0 基：1 = 乙 → 摊平下标 2
+        assertEquals(2, resumeTargetIndex(flat, 0, 1))
         assertEquals(3, resumeTargetIndex(flat, 1, 0))
         assertEquals(4, resumeTargetIndex(flat, 1, 1))
         // 段落超范围 → 回章首
@@ -416,7 +417,7 @@ class CoreSmokeTest {
         assertEquals("昨天", formatRelativeReadTime(now, now - 86_400_000L))
         assertEquals("3 天前", formatRelativeReadTime(now, now - 3 * 86_400_000L))
         val old = formatRelativeReadTime(now, now - 100 * 86_400_000L)
-        assertTrue("日期格式不正确：$old", old.matches(Regex("""\d{1,4}年?\d{1,2}月\d{1,2}日""")))
+        assertTrue("日期格式不正确：$old", old.matches(Regex("""(\d{4}年)?\d{1,2}月\d{1,2}日""")))
     }
 
     @Test
