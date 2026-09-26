@@ -2,6 +2,16 @@
 
 本项目遵循语义化版本。
 
+## [0.8.1] - 2026-09-26
+
+扩充 MiuiX 0.9.4 组件的使用：
+
+- `Badge`：书架卡片置顶标记，从纯文字改为徽标
+- `HorizontalDivider`：书架与设置列表分组分隔
+- `VerticalScrollBar` + `rememberScrollBarAdapter`：书架长列表滚动条
+- `BreadcrumbBar`：创建流程步骤指示（源站 → 详情 → 章节 → 导出 → 进度）
+- `NumberPicker`：阅读器字号精确输入，与滑块粗调互补
+
 ## [0.8.0] - 2026-09-26
 
 ### 依赖升级
