@@ -229,16 +229,22 @@ class CoreSmokeTest {
         )
         val flat = flattenBook(book)
         assertEquals(5, flat.size)
+        // 第一章：标题 + 两个段落
         assertEquals(0, flat[0].chapterIndex)
         assertTrue(flat[0].isChapterStart)
-        assertEquals(1, flat[1].chapterIndex)
-        assertTrue(flat[1].isChapterStart)
-        // 第一章两个段落 -> 下标 0/1；第二章段落 -> 下标 0（每章重新计数）
+        assertEquals(-1, flat[0].paragraphIndex)
         assertEquals(0, flat[1].paragraphIndex)
         assertEquals(1, flat[2].paragraphIndex)
+        assertEquals(0, flat[2].chapterIndex)
+        assertFalse(flat[2].isChapterStart)
+        // 第二章从摊平列表的第 3 项开始，段落下标在章内重新计数
+        assertEquals(1, flat[3].chapterIndex)
+        assertTrue(flat[3].isChapterStart)
         assertEquals(0, flat[3].paragraphIndex)
         // 非段落块没有段落下标
         assertEquals(-1, flat[4].paragraphIndex)
+        assertEquals(1, flat[4].chapterIndex)
+        assertFalse(flat[4].isChapterStart)
         // 键必须唯一且稳定，否则 LazyColumn 重组会错位
         assertEquals(flat.size, flat.map { it.key }.toSet().size)
         assertEquals(flat.map { it.key }, flattenBook(book).map { it.key })
