@@ -28,7 +28,7 @@ import com.wenku8.epubstudio.ui.cover.CoverImage
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
-import top.yukonga.miuix.kmp.extra.SuperDialog
+import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 private val ACTION_ROW_HEIGHT = 48.dp
@@ -50,7 +50,7 @@ fun BookActionsDialog(
     BackHandler(onBack = onDismiss)
     var confirmRemove by remember { mutableStateOf(false) }
 
-    SuperDialog(
+    OverlayDialog(
         show = true,
         title = "书籍操作",
         onDismissRequest = onDismiss,
