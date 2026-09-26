@@ -148,7 +148,9 @@ object Wenku8Parser {
                         }
                         tag in setOf("p", "div", "li", "h1", "h2", "h3", "h4", "h5", "h6") -> {
                             node.childNodes().forEach { walk(it) }
-                            builder.append('\n')
+                            // 双换行 = 段落边界（normalizeRichLines 按空行 flush）；
+                            // 单换行只表示块内软换行，与原版 root.text() 的行为对齐
+                            builder.append("\n\n")
                         }
                         else -> node.childNodes().forEach { walk(it) }
                     }

@@ -58,10 +58,11 @@ class ExportPipelineTest {
 
         // 无强调的普通段落保持纯文本，不无谓引入 HTML
         val texts = parsed.blocks.filterIsInstance<ContentBlock.Text>()
-        assertTrue(texts.any { it.value.contains("普通段落") })
+        assertEquals("段落必须按 p 边界切分（否则全书合并成一段）", 2, texts.size)
+        assertTrue("普通段落应保持 Text，实际：$texts", texts.any { it.value.contains("普通段落") })
         // 注入段：a 标签展开为纯文本，内容保留、属性剥净
-        assertTrue(texts.any { it.value.contains("注入") })
-        assertTrue(texts.none { it.value.contains("<") })
+        assertTrue("注入段应保持 Text，实际：$texts", texts.any { it.value.contains("注入") })
+        assertTrue("Text 不得含标签：$texts", texts.none { it.value.contains("<") })
         // 字数统计走 strip，不受标签影响
         assertTrue("textLength 应按纯文本计", parsed.textLength > 10)
     }
