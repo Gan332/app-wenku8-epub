@@ -63,16 +63,20 @@ jobs:
 
       - name: Build signed release APK (R8)
         working-directory: android
-        # 缺签名 Secrets 时跳过，而不是产出一个装不上的包、或退回 debug 签名冒充。
-        # 需要的 4 个 Secret 见 AGENTS.md §7。
-        if: ${{ secrets.HYPERREADER_KEYSTORE != '' && secrets.HYPERREADER_STORE_PASSWORD != '' && secrets.HYPERREADER_KEY_ALIAS != '' && secrets.HYPERREADER_KEY_PASSWORD != '' }}
+        # 签名口令一律走 env，不直接插值进脚本（避免脚本注入）。
+        # 未配置 Secrets 时在脚本内跳过，不退回 debug 签名冒充。
         env:
           HYPERREADER_KEYSTORE: ${{ runner.temp }}/release.keystore
+          HYPERREADER_KEYSTORE_B64: ${{ secrets.HYPERREADER_KEYSTORE }}
           HYPERREADER_STORE_PASSWORD: ${{ secrets.HYPERREADER_STORE_PASSWORD }}
           HYPERREADER_KEY_ALIAS: ${{ secrets.HYPERREADER_KEY_ALIAS }}
           HYPERREADER_KEY_PASSWORD: ${{ secrets.HYPERREADER_KEY_PASSWORD }}
         run: |
-          printf '%s' "${{ secrets.HYPERREADER_KEYSTORE }}" | base64 -d > "$HYPERREADER_KEYSTORE"
+          if [ -z "$HYPERREADER_KEYSTORE_B64" ] || [ -z "$HYPERREADER_STORE_PASSWORD" ] || [ -z "$HYPERREADER_KEY_ALIAS" ]; then
+            echo "::notice::未配置签名 Secrets（HYPERREADER_*），跳过 release 构建"
+            exit 0
+          fi
+          printf '%s' "$HYPERREADER_KEYSTORE_B64" | base64 -d > "$HYPERREADER_KEYSTORE"
           gradle assembleRelease --no-daemon --stacktrace
           rm -f "$HYPERREADER_KEYSTORE"
 
