@@ -65,7 +65,7 @@ object NotificationRoute {
      * 通知没有显式携带路由时的默认决策：进行中进该任务，已结束进导出记录。
      */
     fun defaultFor(percent: Int, status: JobStatus? = null): String = when {
-        status != null && !status.isOngoing -> ROUTE_JOB_HISTORY
+        status != null && !status.isOngoing() -> ROUTE_JOB_HISTORY
         percent >= 100 -> ROUTE_JOB_HISTORY
         else -> ROUTE_EXPORT_PROGRESS
     }
