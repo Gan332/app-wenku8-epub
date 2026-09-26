@@ -111,6 +111,7 @@ class MainActivity : ComponentActivity() {
         if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
             notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
+        handleRoute(intent)
         setContent {
             AppMiuixTheme {
                 StudioApp(
@@ -121,6 +122,28 @@ class MainActivity : ComponentActivity() {
                 )
             }
         }
+    }
+
+    /**
+     * launchMode=singleTask 时，应用已在前台时通知点击走 onNewIntent 而不会再走 onCreate。
+     * 缺少这行会导致热启动时点了通知没反应。
+     */
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleRoute(intent)
+    }
+
+    /**
+     * 消费 Intent 里的路由后立即清除 extras，
+     * 避免旋转屏幕触发 onCreate 时重复跳转。
+     */
+    private fun handleRoute(source: android.content.Intent?) {
+        val route = source?.getStringExtra(StudioViewModel.EXTRA_ROUTE) ?: return
+        val jobId = source.getStringExtra(StudioViewModel.EXTRA_JOB_ID)
+        source.removeExtra(StudioViewModel.EXTRA_ROUTE)
+        source.removeExtra(StudioViewModel.EXTRA_JOB_ID)
+        studioViewModel.route(route, jobId)
     }
 }
 

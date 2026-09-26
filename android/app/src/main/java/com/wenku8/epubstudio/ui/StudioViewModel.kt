@@ -59,6 +59,7 @@ data class StudioUiState(
     val busy: Boolean = false,
     val message: String? = null,
     val activeJobId: String? = null,
+    val showJobHistory: Boolean = false,
     val jobs: List<ExportJob> = emptyList(),
     val searchQuery: String = "",
     val searchField: SearchField = SearchField.TITLE,
@@ -347,6 +348,32 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun cancel(id: String) = manager.cancel(id)
+
+    fun setShowJobHistory(show: Boolean) = mutable.update { it.copy(showJobHistory = show) }
+
+    /**
+     * 通知栏点击路由。未知或缺失的路由一律忽略，幂等：
+     * 同一个 Intent 重复投递不会产生额外跳转。
+     */
+    fun route(route: String?, jobId: String?) {
+        when (route) {
+            ROUTE_EXPORT_PROGRESS -> {
+                if (jobId.isNullOrBlank()) return
+                mutable.update { it.copy(tab = StudioTab.CREATE, step = CreateStep.PROGRESS, activeJobId = jobId, showJobHistory = false) }
+            }
+            ROUTE_JOB_HISTORY -> mutable.update { it.copy(tab = StudioTab.BOOKSHELF, showJobHistory = true) }
+            ROUTE_BOOKSHELF -> mutable.update { it.copy(tab = StudioTab.BOOKSHELF) }
+        }
+    }
+
+    companion object {
+        const val ROUTE_EXPORT_PROGRESS = "export_progress"
+        const val ROUTE_JOB_HISTORY = "history"
+        const val ROUTE_BOOKSHELF = "bookshelf"
+        const val EXTRA_ROUTE = "route"
+        const val EXTRA_JOB_ID = "job_id"
+    }
+
     fun save(id: String) {
         runCatching { manager.save(id) }
             .onFailure { error -> mutable.update { it.copy(message = error.message ?: "保存失败。") } }
