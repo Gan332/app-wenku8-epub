@@ -1,5 +1,6 @@
 package com.example.hyperreader.ui
 
+import com.example.hyperreader.model.JobPhase
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
@@ -52,4 +53,29 @@ private fun sameYear(a: Long, b: Long): Boolean {
     val ca = Calendar.getInstance().apply { timeInMillis = a }
     val cb = Calendar.getInstance().apply { timeInMillis = b }
     return ca.get(Calendar.YEAR) == cb.get(Calendar.YEAR)
+}
+
+/**
+ * 导出剩余时间（纯函数，可单测）。
+ *
+ * - 秒数 < 0 → 空串（调用方隐藏）
+ * - < 60：「N 秒」；< 3600：「N 分钟」；否则「N 小时」
+ */
+fun formatEta(seconds: Int): String = when {
+    seconds < 0 -> ""
+    seconds < 60 -> "$seconds 秒"
+    seconds < 3600 -> "${seconds / 60} 分钟"
+    else -> "${seconds / 3600} 小时"
+}
+
+/** 导出阶段的中文名（纯函数，可单测）。 */
+fun phaseLabel(phase: JobPhase): String = when (phase) {
+    JobPhase.queued -> "排队中"
+    JobPhase.fetching -> "抓取章节"
+    JobPhase.images -> "下载插图"
+    JobPhase.cover -> "下载封面"
+    JobPhase.packaging -> "打包 EPUB"
+    JobPhase.completed -> "已完成"
+    JobPhase.failed -> "失败"
+    JobPhase.canceled -> "已取消"
 }

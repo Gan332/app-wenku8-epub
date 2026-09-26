@@ -72,7 +72,12 @@ object Wenku8Parser {
         return BookIndex(document.title().substringBefore(" - ").trim().ifBlank { "未命名轻小说" }, finalUrl, bookId ?: Wenku8Url.sourceIds(java.net.URI(finalUrl)).bookId, chapters)
     }
 
-    fun parseChapter(html: String, chapter: Chapter, pageUrl: String): ParsedChapter {
+    /**
+     * @param preserveInlineFormat true 时保留正文**内联强调**（粗/斜/下划线等，
+     *   见 [ContentBlock.Rich]），仅导出链路使用；在线阅读保持默认 false，
+     *   行为与旧版完全一致（纯文本），零回归风险。
+     */
+    fun parseChapter(html: String, chapter: Chapter, pageUrl: String, preserveInlineFormat: Boolean = false): ParsedChapter {
         Wenku8Url.assertAllowed(chapter.url)
         if (looksLikeChallenge(html)) throw Wenku8Exception("源站要求浏览器验证。", "UPSTREAM_CHALLENGE")
         val document = Jsoup.parse(html, pageUrl)
@@ -96,11 +101,104 @@ object Wenku8Parser {
         }
         root.select("br").forEach { it.before(TextNode("\n")); it.remove() }
         root.select("p").forEach { it.append("\n") }
-        val blocks = normalizeBlocks(root.text(), imageUrls.size)
-        val plain = blocks.filterIsInstance<ContentBlock.Text>().joinToString("") { it.value }
+        val blocks = if (preserveInlineFormat) {
+            normalizeRichLines(extractRichLines(root), imageUrls.size)
+        } else {
+            normalizeBlocks(root.text(), imageUrls.size)
+        }
+        val plain = blocks.filterIsInstance<ContentBlock.Text>().joinToString("") { it.value } +
+            blocks.filterIsInstance<ContentBlock.Rich>().joinToString("") { stripRichHtml(it.html) }
         if (plain.length < 10 && imageUrls.isEmpty()) throw Wenku8Exception("章节正文为空：${chapter.title}", "EMPTY_CHAPTER")
         return ParsedChapter(chapter.id, chapter.title, chapter.volume, chapter.order, pageUrl, imageUrls, blocks, plain.length)
     }
+
+    /** 强调白名单：输出的标签**全部由代码生成**，结构上不存在属性注入面。 */
+    private val EMPHASIS_TAGS = setOf("b", "strong", "i", "em", "u", "s", "sup", "sub")
+
+    /**
+     * 把清理后的正文 DOM 提取为「`\n` 分隔的行，行内为转义文本 + 白名单强调标签」。
+     *
+     * - 文本节点：空白折叠 + `&<>` 转义（后续原样写入 XHTML，安全）
+     * - 强调标签（b/i/…）与带强调 style 的元素（`font-weight:bold→b` 等）保留
+     * - 其余元素一律**展开**（a/span/font 等只留内容，属性全部丢弃）
+     * - 块级（p/div/li/标题）展开内容并断行，还原网页段落结构
+     */
+    private fun extractRichLines(root: Element): String {
+        val builder = StringBuilder()
+        fun appendText(text: String) {
+            builder.append(text.replace(Regex("\\s+"), " ").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"))
+        }
+        fun walk(node: org.jsoup.nodes.Node) {
+            when (node) {
+                is TextNode -> appendText(node.text())
+                is Element -> {
+                    val tag = node.tagName().lowercase()
+                    val styleTags = styleEmphasisTags(node.attr("style"))
+                    when {
+                        tag == "br" -> builder.append('\n')
+                        tag in EMPHASIS_TAGS -> {
+                            builder.append('<').append(tag).append('>')
+                            node.childNodes().forEach { walk(it) }
+                            builder.append("</").append(tag).append('>')
+                        }
+                        styleTags.isNotEmpty() -> {
+                            styleTags.forEach { builder.append('<').append(it).append('>') }
+                            node.childNodes().forEach { walk(it) }
+                            styleTags.asReversed().forEach { builder.append("</").append(it).append('>') }
+                        }
+                        tag in setOf("p", "div", "li", "h1", "h2", "h3", "h4", "h5", "h6") -> {
+                            node.childNodes().forEach { walk(it) }
+                            builder.append('\n')
+                        }
+                        else -> node.childNodes().forEach { walk(it) }
+                    }
+                }
+                else -> Unit // Comment / 其他节点忽略
+            }
+        }
+        root.childNodes().forEach { walk(it) }
+        return builder.toString()
+    }
+
+    /** style 属性 → 强调标签（按 权重/斜体/下划线 顺序，可嵌套）。 */
+    private fun styleEmphasisTags(style: String): List<String> {
+        if (style.isBlank()) return emptyList()
+        val s = style.lowercase()
+        val tags = mutableListOf<String>()
+        if ("font-weight" in s && Regex("bold|[7-9]00|bolder").containsMatchIn(s)) tags += "b"
+        if ("font-style" in s && "italic" in s) tags += "i"
+        if ("text-decoration" in s && "underline" in s) tags += "u"
+        return tags
+    }
+
+    /** 与 [normalizeBlocks] 同构，但行内保留白名单 HTML；含标签的段落产出 [ContentBlock.Rich]。 */
+    private fun normalizeRichLines(lines: String, imageCount: Int): List<ContentBlock> {
+        val blocks = mutableListOf<ContentBlock>()
+        val paragraph = StringBuilder()
+        fun flush() {
+            val value = paragraph.toString().trim()
+            if (value.isNotEmpty()) {
+                blocks += if ('<' in value) ContentBlock.Rich(value) else ContentBlock.Text(value)
+            }
+            paragraph.setLength(0)
+        }
+        lines.replace("\r", "").replace(' ', ' ').split('\n').forEach { raw ->
+            val line = raw.trim()
+            val marker = Regex("^@@WENKU8_IMAGE_(\\d+)@@$").matchEntire(line)
+            if (marker != null) {
+                flush()
+                marker.groupValues[1].toInt().takeIf { it < imageCount }?.let { blocks += ContentBlock.Image(it) }
+            } else if (line.isBlank()) flush() else {
+                if (paragraph.isNotEmpty()) paragraph.append(' ')
+                paragraph.append(line)
+            }
+        }
+        flush()
+        return blocks
+    }
+
+    /** 去标签取纯文本（在线端降级与字数统计共用）。 */
+    internal fun stripRichHtml(html: String): String = Jsoup.parseBodyFragment(html).text().trim()
 
     private fun normalizeBlocks(text: String, imageCount: Int): List<ContentBlock> {
         val blocks = mutableListOf<ContentBlock>()

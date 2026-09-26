@@ -86,6 +86,26 @@ fun ExportProgressRow(
                 progress = percent / 100f,
                 modifier = Modifier.fillMaxWidth(),
             )
+            // 阶段 + 预计剩余：阶段是结构化状态，比 message 更稳（message 含具体章节名）
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    phaseLabel(progress.phase),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MiuixTheme.colorScheme.primary,
+                )
+                if (progress.etaSeconds >= 0) {
+                    Text(
+                        "剩余约 ${formatEta(progress.etaSeconds)}",
+                        fontSize = 12.sp,
+                        color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                    )
+                }
+            }
             if (progress.message.isNotBlank()) {
                 Text(
                     progress.message,
@@ -107,7 +127,15 @@ fun ExportProgressRow(
                         append(if (progress.total > 0) progress.total else job.chapterCount)
                         append(" · 插图 ")
                         append(progress.imageCompleted)
+                        if (progress.imageTotal > 0) {
+                            append("/")
+                            append(progress.imageTotal)
+                        }
                         append(" 张")
+                        if (progress.cacheHits > 0) {
+                            append(" · 缓存命中 ")
+                            append(progress.cacheHits)
+                        }
                     },
                     fontSize = 12.sp,
                     color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f),

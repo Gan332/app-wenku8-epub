@@ -46,6 +46,16 @@ sealed class ContentBlock {
 
     @Serializable
     data class Image(val index: Int) : ContentBlock()
+
+    /**
+     * 携带**已 sanitize 的内联 HTML** 的富文本段落（仅导出链路产生，
+     * 见 `Wenku8Parser.parseChapter(preserveInlineFormat = true)`）。
+     *
+     * 白名单只允许 b/strong/i/em/u/s/sup/sub 等强调标签；
+     * 在线阅读端出现时降级为纯文本（Jsoup.text()），EPUB 导出端原样写入。
+     */
+    @Serializable
+    data class Rich(val html: String) : ContentBlock()
 }
 
 @Serializable
@@ -75,6 +85,12 @@ data class JobProgress(
     val imageCompleted: Int = 0,
     val message: String = "等待开始…",
     val currentTitle: String = "",
+    /** 插图总数（随章节抓取逐步累计为真实值）；0 = 尚未知。 */
+    val imageTotal: Int = 0,
+    /** 预计剩余秒数；-1 = 尚不可估。 */
+    val etaSeconds: Int = -1,
+    /** 命中导出缓存的项数（正文页 + 插图），命中即 0 请求。 */
+    val cacheHits: Int = 0,
 )
 
 @Serializable

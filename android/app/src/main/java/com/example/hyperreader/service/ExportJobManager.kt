@@ -25,6 +25,7 @@ import com.example.hyperreader.model.JobStatus
 import com.example.hyperreader.model.OutputFile
 import com.example.hyperreader.model.ParsedChapter
 import com.example.hyperreader.ui.isOngoing
+import com.example.hyperreader.ui.formatEta
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -152,23 +153,55 @@ class ExportJobManager(private val context: Context, sessionStore: Wenku8Session
         var completed = 0
         var globalImage = 0
         var cover: DownloadedImage? = null
+        // 导出缓存（URL 内容寻址）：正文页与插图命中即 0 请求 —— 重复导出接近秒级完成。
+        val cache = ExportCache(File(context.cacheDir, "wenku8-export"))
+        // 同一 URL 的插图在本次任务内只落盘/下载一次（跨章复用）。
+        val assets = HashMap<String, ImageAsset>()
+        var cacheHits = 0
+        var imageTotal = 0
         ExportNotificationService.start(context, job.id, job.book.title, job.progress.message, job.progress.percent)
         try {
             for (chapter in initial.requestedChapters) {
                 val baseline = completed.toDouble() / initial.requestedChapters.size.coerceAtLeast(1)
-                job = job.copy(progress = job.progress.copy(phase = JobPhase.fetching, percent = (baseline * 94).toInt(), completed = completed, currentTitle = chapter.title, message = "正在下载：${chapter.title}"))
+                job = job.copy(progress = job.progress.copy(phase = JobPhase.fetching, percent = (baseline * 94).toInt(), completed = completed, currentTitle = chapter.title, message = "正在下载：${chapter.title}", cacheHits = cacheHits))
                 update(job)
                 try {
-                    val page = http.fetchText(chapter.url, job.id)
-                    val parsedChapter = Wenku8Parser.parseChapter(page.html, chapter, page.finalUrl)
+                    // 缓存命中直接解析缓存原文；未命中走网络，成功后存**原始 HTML**
+                    //（存 raw 而非解析结果：解析逻辑升级后缓存依然有效）。
+                    val parsedChapter = cache.page(chapter.url)?.let { cachedHtml ->
+                        cacheHits++
+                        Wenku8Parser.parseChapter(cachedHtml, chapter, chapter.url, preserveInlineFormat = true)
+                    } ?: run {
+                        val page = http.fetchText(chapter.url, job.id)
+                        val fresh = Wenku8Parser.parseChapter(page.html, chapter, page.finalUrl, preserveInlineFormat = true)
+                        cache.putPage(chapter.url, page.html)
+                        fresh
+                    }
                     parsed += parsedChapter
+                    imageTotal += parsedChapter.imageUrls.size
                     parsedChapter.imageUrls.forEachIndexed { index, imageUrl ->
                         val progress = index.toDouble() / parsedChapter.imageUrls.size.coerceAtLeast(1)
-                        job = job.copy(progress = job.progress.copy(phase = JobPhase.images, percent = (baseline * 92 + progress * 92 / initial.requestedChapters.size.coerceAtLeast(1)).toInt().coerceAtMost(92), imageCompleted = images.size, message = "正在下载插图 ${index + 1}/${parsedChapter.imageUrls.size}"))
+                        job = job.copy(progress = job.progress.copy(
+                            phase = JobPhase.images,
+                            percent = (baseline * 92 + progress * 92 / initial.requestedChapters.size.coerceAtLeast(1)).toInt().coerceAtMost(92),
+                            imageCompleted = images.size,
+                            imageTotal = imageTotal,
+                            cacheHits = cacheHits,
+                            message = "正在下载插图 ${index + 1}/${parsedChapter.imageUrls.size}",
+                        ))
                         update(job)
                         runCatching {
-                            val downloaded = http.downloadImage(imageUrl, parsedChapter.sourceUrl, job.id, "chapter-${globalImage + index + 1}")
-                            images += DownloadedImage(parsedChapter.id, parsedChapter.id, index, globalImage + index, "image-${String.format("%04d", globalImage + index + 1)}.${downloaded.ext}", "image-${globalImage + index + 1}", downloaded.mime, downloaded.path, downloaded.ext, downloaded.bytes)
+                            val asset = assets.getOrPut(imageUrl) {
+                                cache.image(imageUrl)?.let { cachedFile ->
+                                    cacheHits++
+                                    ImageAsset(cachedFile.absolutePath, cachedFile.extension, imageMimeFor(cachedFile.extension), cachedFile.length())
+                                } ?: run {
+                                    val downloaded = http.downloadImage(imageUrl, parsedChapter.sourceUrl, job.id, "chapter-${globalImage + index + 1}")
+                                    val stored = cache.putImage(imageUrl, File(downloaded.path), downloaded.ext)
+                                    ImageAsset(stored?.absolutePath ?: downloaded.path, downloaded.ext, downloaded.mime, downloaded.bytes)
+                                }
+                            }
+                            images += DownloadedImage(parsedChapter.id, parsedChapter.id, index, globalImage + index, "image-${String.format("%04d", globalImage + index + 1)}.${asset.ext}", "image-${globalImage + index + 1}", asset.mime, asset.localPath, asset.ext, asset.bytes)
                         }.onFailure { error ->
                             if (error is CancellationException) throw error
                             warnings += "插图 ${index + 1}/${parsedChapter.imageUrls.size}：${error.message ?: "下载失败"}"
@@ -180,7 +213,7 @@ class ExportJobManager(private val context: Context, sessionStore: Wenku8Session
                     warnings += "${chapter.title}：${error.message ?: "章节处理失败"}"
                 }
                 completed += 1
-                job = job.copy(warnings = warnings.toList(), progress = job.progress.copy(phase = JobPhase.fetching, percent = (completed.toDouble() / initial.requestedChapters.size.coerceAtLeast(1) * 94).toInt().coerceAtMost(94), completed = completed, message = "已处理 $completed/${initial.requestedChapters.size} 个章节"))
+                job = job.copy(warnings = warnings.toList(), progress = job.progress.copy(phase = JobPhase.fetching, percent = (completed.toDouble() / initial.requestedChapters.size.coerceAtLeast(1) * 94).toInt().coerceAtMost(94), completed = completed, imageTotal = imageTotal, cacheHits = cacheHits, message = "已处理 $completed/${initial.requestedChapters.size} 个章节"))
                 update(job)
             }
             // 下载失败的插图在 EpubBuilder.resolveChapters 里会被**静默丢弃**，
@@ -189,14 +222,21 @@ class ExportJobManager(private val context: Context, sessionStore: Wenku8Session
             if (parsed.isEmpty()) throw Wenku8Exception("所有章节都未能成功读取。", "NO_CHAPTERS_PARSED")
             val coverUrl = job.book.coverUrl
             if (job.options.includeCover && coverUrl != null) {
-                job = job.copy(progress = job.progress.copy(phase = JobPhase.cover, percent = 94, message = "正在下载书籍封面…"))
+                job = job.copy(progress = job.progress.copy(phase = JobPhase.cover, percent = 94, cacheHits = cacheHits, imageTotal = imageTotal, message = "正在下载书籍封面…"))
                 update(job)
                 runCatching {
-                    val downloaded = http.downloadImage(coverUrl, job.book.bookUrl, job.id, "cover")
-                    cover = DownloadedImage("", "", 0, 0, "cover.${downloaded.ext}", "cover-image", downloaded.mime, downloaded.path, downloaded.ext, downloaded.bytes, true)
+                    val asset = cache.image(coverUrl)?.let { cachedFile ->
+                        cacheHits++
+                        ImageAsset(cachedFile.absolutePath, cachedFile.extension, imageMimeFor(cachedFile.extension), cachedFile.length())
+                    } ?: run {
+                        val downloaded = http.downloadImage(coverUrl, job.book.bookUrl, job.id, "cover")
+                        val stored = cache.putImage(coverUrl, File(downloaded.path), downloaded.ext)
+                        ImageAsset(stored?.absolutePath ?: downloaded.path, downloaded.ext, downloaded.mime, downloaded.bytes)
+                    }
+                    cover = DownloadedImage("", "", 0, 0, "cover.${asset.ext}", "cover-image", asset.mime, asset.localPath, asset.ext, asset.bytes, true)
                 }.onFailure { warnings += "封面：${it.message ?: "下载失败"}" }
             }
-            job = job.copy(progress = job.progress.copy(phase = JobPhase.packaging, percent = 97, message = "正在写入 EPUB 容器…"))
+            job = job.copy(progress = job.progress.copy(phase = JobPhase.packaging, percent = 97, cacheHits = cacheHits, imageTotal = imageTotal, message = "正在写入 EPUB 容器…"))
             update(job)
             val output = File(outputDirectory, "${bookSafeName(job.book.title)}-${job.id}.epub")
             val built = epubBuilder.build(job.book, parsed, images, cover, output)
@@ -210,6 +250,8 @@ class ExportJobManager(private val context: Context, sessionStore: Wenku8Session
                 progress = job.progress.copy(phase = JobPhase.completed, percent = 100, completed = completed, imageCompleted = images.size, currentTitle = "", message = "EPUB 已生成"),
             )
             update(job)
+            // 成功后裁剪缓存容量；失败不裁剪，让重试继续命中。
+            runCatching { cache.trim(CACHE_TRIM_BYTES) }
         } catch (error: Throwable) {
             if (error is CancellationException) {
                 update(job.copy(status = JobStatus.canceled, finishedAt = Instant.now().toString(), error = JobError("CANCELED", "任务已取消。"), warnings = warnings.toList(), progress = job.progress.copy(phase = JobPhase.canceled, message = "任务已取消")))
@@ -232,11 +274,53 @@ class ExportJobManager(private val context: Context, sessionStore: Wenku8Session
 
     private fun bookSafeName(value: String): String = Normalizer.normalize(value, Normalizer.Form.NFKC).replace(Regex("[<>:\"/\\\\|?*\\u0000-\\u001f]"), "_").trim().take(90).ifBlank { "轻小说" }
 
+    /**
+     * 进度落盘/通知节流。
+     *
+     * 内存 `state` **每次即时更新**（UI 不受影响）；DataStore 全量 JSON 写与通知 IPC
+     * 最多每 [PERSIST_INTERVAL_MS] 一次 —— 旧实现每张插图各落盘一次，
+     * 大图册光是序列化与通知开销就相当可观。阶段变化与终态强制立即落盘。
+     */
+    private var lastPersistedAt = 0L
+    private var lastPersistedPhase = JobPhase.queued
+
     private suspend fun update(job: ExportJob) {
-        val next = job.copy(updatedAt = Instant.now().toString())
-        repository.save(next)
+        val eta = if (job.status.isOngoing() && job.progress.phase != JobPhase.packaging) {
+            estimateEtaSeconds(job.progress.completed, job.chapterCount, job.progress.imageCompleted, job.progress.imageTotal)
+        } else {
+            -1
+        }
+        val next = job.copy(updatedAt = Instant.now().toString(), progress = job.progress.copy(etaSeconds = eta))
         state.value = state.value + (next.id to next)
-        if (next.status == JobStatus.running || next.status == JobStatus.queued) ExportNotificationService.update(context, next.id, next.book.title, next.progress.message, next.progress.percent)
+        val terminal = !next.status.isOngoing()
+        val phaseChanged = next.progress.phase != lastPersistedPhase
+        val due = terminal || phaseChanged || System.currentTimeMillis() - lastPersistedAt >= PERSIST_INTERVAL_MS
+        if (!due) return
+        lastPersistedAt = System.currentTimeMillis()
+        lastPersistedPhase = next.progress.phase
+        repository.save(next)
+        if (next.status == JobStatus.running || next.status == JobStatus.queued) {
+            val notificationMessage = if (eta >= 0) "${next.progress.message}（剩余约 ${formatEta(eta)}）" else next.progress.message
+            ExportNotificationService.update(context, next.id, next.book.title, notificationMessage, next.progress.percent)
+        }
+    }
+
+    /**
+     * 预计剩余秒数（纯函数，可单测）：剩余请求数 × 限流节奏（~1s/请求）+ 打包余量。
+     * 图片总数是**累计已知值**（边抓边加），因此前期估算偏乐观、后期收敛。
+     * 无剩余请求时返回 -1（不可估）。
+     */
+    internal companion object {
+        const val PERSIST_INTERVAL_MS = 250L
+
+        /** 导出缓存上限：512MB（成功导出后按新旧淘汰）。 */
+        const val CACHE_TRIM_BYTES = 512L * 1024 * 1024
+
+        fun estimateEtaSeconds(completedChapters: Int, totalChapters: Int, imageCompleted: Int, imageTotal: Int): Int {
+            val remaining = (totalChapters - completedChapters).coerceAtLeast(0) +
+                (imageTotal - imageCompleted).coerceAtLeast(0)
+            return if (remaining <= 0) -1 else remaining + 3
+        }
     }
 
     fun get(id: String): ExportJob? = state.value[id]
@@ -257,3 +341,6 @@ internal fun missingImageWarnings(parsed: List<ParsedChapter>, images: List<Down
         val missing = expected - images.count { it.sourceId == chapter.id }
         if (missing > 0) "《${chapter.title}》有 $missing 张插图未能下载，已不包含在 EPUB 中" else null
     }
+
+/** 已就绪的插图资产（磁盘路径 + 元数据）；同一 URL 在任务内复用，跨章去重。 */
+private data class ImageAsset(val localPath: String, val ext: String, val mime: String, val bytes: Long)

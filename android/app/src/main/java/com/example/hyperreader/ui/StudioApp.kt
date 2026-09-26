@@ -359,11 +359,23 @@ private fun ProgressContent(job: ExportJob, viewModel: StudioViewModel) {
                 Text(job.book.title, fontSize = 24.sp, fontWeight = FontWeight.Bold)
                 Text(job.progress.message, color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.72f))
                 LinearProgressIndicator(progress = progress, modifier = Modifier.fillMaxWidth())
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(phaseLabel(job.progress.phase), fontSize = 13.sp, fontWeight = FontWeight.Bold, color = MiuixTheme.colorScheme.primary)
+                    if (job.progress.etaSeconds >= 0) {
+                        Text("剩余约 ${formatEta(job.progress.etaSeconds)}", fontSize = 13.sp, color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                    }
+                }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text("${job.progress.percent}%", fontWeight = FontWeight.Bold, color = MiuixTheme.colorScheme.primary)
                     Text("章节 ${job.progress.completed}/${job.progress.total}", fontSize = 13.sp)
                 }
-                Text("插图 ${job.progress.imageCompleted} 张", fontSize = 13.sp)
+                Text(
+                    if (job.progress.imageTotal > 0) "插图 ${job.progress.imageCompleted}/${job.progress.imageTotal} 张" else "插图 ${job.progress.imageCompleted} 张",
+                    fontSize = 13.sp,
+                )
+                if (job.progress.cacheHits > 0) {
+                    Text("缓存命中 ${job.progress.cacheHits} 项（0 请求）", fontSize = 13.sp, color = MiuixTheme.colorScheme.primary)
+                }
                 if (job.progress.currentTitle.isNotBlank()) Text("当前：${job.progress.currentTitle}", fontSize = 13.sp, maxLines = 2)
             }
         }

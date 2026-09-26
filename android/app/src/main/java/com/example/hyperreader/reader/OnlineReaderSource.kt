@@ -339,6 +339,9 @@ fun ParsedChapter.toReaderBlocks(): List<ReaderBlock> {
     for (block in blocks) {
         when (block) {
             is ContentBlock.Text -> block.value.trim().takeIf { it.isNotEmpty() }?.let { result += ReaderBlock.Paragraph(it) }
+            // 防御分支：在线链路默认不产生 Rich（parseChapter 默认 preserveInlineFormat=false），
+            // 万一出现也只降级为纯文本 —— Compose Text 不渲染 HTML，绝不能把标签显示给用户。
+            is ContentBlock.Rich -> Wenku8Parser.stripRichHtml(block.html).takeIf { it.isNotEmpty() }?.let { result += ReaderBlock.Paragraph(it) }
             is ContentBlock.Image -> imageUrls.getOrNull(block.index)?.let {
                 result += ReaderBlock.Image(path = it, alt = "插图 ${block.index + 1}")
             }
