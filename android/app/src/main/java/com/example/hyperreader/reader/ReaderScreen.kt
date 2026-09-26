@@ -22,12 +22,17 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -135,50 +140,59 @@ fun ReaderScreenCore(
     val settings = state.settings
     val palette = readerPalette(settings)
     val error = state.error
-    val immersive = state.isImmersive && !state.showSettings && !state.showToc
+    // 系统栏：沉浸设置决定（面板打开时临时显示）。**不随点按翻转**，避免系统栏抖动。
+    val systemImmersive = state.isImmersive && !state.showSettings && !state.showToc
+    // 菜单栏：只看 controlsShown() —— 只看 isImmersive 会让点正文呼出失效。
+    val showControls = state.controlsShown()
 
-    ReaderSystemBarsEffect(immersive, settings.keepScreenOn)
+    ReaderSystemBarsEffect(systemImmersive, settings.keepScreenOn)
     BackHandler {
-        when {
-            state.showSettings -> actions.showSettings(false)
-            state.showToc -> actions.showToc(false)
-            state.isImmersive -> actions.setImmersive(false)
-            else -> onBack()
+        when (state.resolveBack()) {
+            BackAction.CLOSE_SETTINGS -> actions.showSettings(false)
+            BackAction.CLOSE_TOC -> actions.showToc(false)
+            BackAction.SHOW_CONTROLS -> actions.toggleControls()
+            BackAction.EXIT -> onBack()
         }
     }
 
     Scaffold(
         topBar = {
             AnimatedVisibility(
-                visible = !immersive,
+                visible = showControls,
                 enter = slideInVertically(initialOffsetY = { -it }) + fadeIn(),
                 exit = slideOutVertically(targetOffsetY = { -it }) + fadeOut(),
             ) {
-                TopAppBar(
-                    title = book?.chapters?.getOrNull(state.chapterIndex)?.title ?: "阅读器",
-                    navigationIcon = {
-                        IconButton(onClick = onBack, modifier = Modifier.size(TOUCH_TARGET.dp)) {
-                            Icon(Icons.Default.ArrowBack, contentDescription = "返回")
-                        }
-                    },
-                    actions = {
-                        IconButton(onClick = { actions.showToc(true) }, modifier = Modifier.size(TOUCH_TARGET.dp)) {
-                            Icon(Icons.Default.MenuBook, contentDescription = "目录")
-                        }
-                        IconButton(onClick = { actions.showSettings(true) }, modifier = Modifier.size(TOUCH_TARGET.dp)) {
-                            Icon(Icons.Default.Tune, contentDescription = "设置")
-                        }
-                    },
-                )
+                // edge-to-edge 下系统栏可见时给状态栏让位，否则按钮压在状态栏触摸区点不到；
+                // 系统栏隐藏时 inset 为 0，沉浸布局不变。
+                Box(Modifier.windowInsetsPadding(WindowInsets.statusBars.only(WindowInsetsSides.Top))) {
+                    TopAppBar(
+                        title = book?.chapters?.getOrNull(state.chapterIndex)?.title ?: "阅读器",
+                        navigationIcon = {
+                            IconButton(onClick = onBack, modifier = Modifier.size(TOUCH_TARGET.dp)) {
+                                Icon(Icons.Default.ArrowBack, contentDescription = "返回")
+                            }
+                        },
+                        actions = {
+                            IconButton(onClick = { actions.showToc(true) }, modifier = Modifier.size(TOUCH_TARGET.dp)) {
+                                Icon(Icons.Default.MenuBook, contentDescription = "目录")
+                            }
+                            IconButton(onClick = { actions.showSettings(true) }, modifier = Modifier.size(TOUCH_TARGET.dp)) {
+                                Icon(Icons.Default.Tune, contentDescription = "设置")
+                            }
+                        },
+                    )
+                }
             }
         },
         bottomBar = {
             AnimatedVisibility(
-                visible = !immersive,
+                visible = showControls,
                 enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
                 exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
             ) {
-                ReaderBottomBar(state, actions)
+                Box(Modifier.windowInsetsPadding(WindowInsets.navigationBars.only(WindowInsetsSides.Bottom))) {
+                    ReaderBottomBar(state, actions)
+                }
             }
         },
         containerColor = palette.background,

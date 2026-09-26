@@ -8,12 +8,16 @@ import com.example.hyperreader.core.Wenku8Parser
 import com.example.hyperreader.core.Wenku8Url
 import com.example.hyperreader.core.Wenku8Urls
 import com.example.hyperreader.model.ReadingStats
+import com.example.hyperreader.reader.BackAction
 import com.example.hyperreader.reader.ReaderBlock
 import com.example.hyperreader.reader.ReaderBook
 import com.example.hyperreader.reader.ReaderChapter
+import com.example.hyperreader.reader.ReaderUiState
+import com.example.hyperreader.reader.controlsShown
 import com.example.hyperreader.reader.flattenBook
 import com.example.hyperreader.reader.readableTextOn
 import com.example.hyperreader.reader.relativeLuminance
+import com.example.hyperreader.reader.resolveBack
 import com.example.hyperreader.ui.SettingsSection
 import com.example.hyperreader.ui.formatWordCount
 import androidx.compose.ui.graphics.Color
@@ -249,6 +253,37 @@ class CoreSmokeTest {
         // 键必须唯一且稳定，否则 LazyColumn 重组会错位
         assertEquals(flat.size, flat.map { it.key }.toSet().size)
         assertEquals(flat.map { it.key }, flattenBook(book).map { it.key })
+    }
+
+    @Test
+    fun controlsShownFollowsControlsAndPanels() {
+        // 默认沉浸态：菜单栏必须隐藏
+        assertFalse(ReaderUiState().controlsShown())
+        // 点正文呼出（controlsVisible=true）——曾经这里只看 isImmersive，导致呼不出
+        assertTrue(ReaderUiState(controlsVisible = true).controlsShown())
+        // 面板打开时菜单栏也在，关掉面板后仍然可见
+        assertTrue(ReaderUiState(showSettings = true, controlsVisible = false).controlsShown())
+        assertTrue(ReaderUiState(showToc = true, controlsVisible = false).controlsShown())
+        assertTrue(ReaderUiState(showSettings = false, controlsVisible = true).controlsShown())
+        // 沉浸设置本身不决定菜单栏（isImmersive=false 但 controlsVisible=false 时应为隐藏——
+        // 不会出现，因为 setImmersive 两者同步；这里只断言判据不依赖 isImmersive）
+        assertFalse(ReaderUiState(isImmersive = false, controlsVisible = false).controlsShown())
+    }
+
+    @Test
+    fun backDispatchMatchesLegacyBehaviourWithoutLooping() {
+        // 面板优先于其它分支
+        assertEquals(BackAction.CLOSE_SETTINGS, ReaderUiState(showSettings = true).resolveBack())
+        assertEquals(BackAction.CLOSE_TOC, ReaderUiState(showToc = true).resolveBack())
+        // 沉浸默认（菜单栏隐藏）：返回键先呼出菜单栏，与 0.8.x 行为一致
+        assertEquals(BackAction.SHOW_CONTROLS, ReaderUiState().resolveBack())
+        // 菜单栏可见：返回键退出
+        assertEquals(BackAction.EXIT, ReaderUiState(controlsVisible = true).resolveBack())
+        // 无死循环：SHOW_CONTROLS 执行 toggleControls 后（controlsVisible 翻真），下一次必须是 EXIT
+        val afterShow = ReaderUiState().copy(controlsVisible = true)
+        assertEquals(BackAction.EXIT, afterShow.resolveBack())
+        // 面板关闭回到「菜单栏可见」，仍然退出而不是再呼出一次
+        assertEquals(BackAction.EXIT, afterShow.copy(showSettings = false).resolveBack())
     }
 
     @Test

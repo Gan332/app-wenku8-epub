@@ -150,14 +150,12 @@ class OnlineReaderViewModel(application: Application) : AndroidViewModel(applica
         persistProgress()
     }
 
-    override fun toggleControls() = mutable.update { current ->
-        val next = !current.isImmersive
-        current.copy(isImmersive = next, controlsVisible = !next)
-    }
+    // 与 ReaderViewModel 保持一致：只切 controlsVisible，不翻转持久化的沉浸设置
+    override fun toggleControls() = mutable.update { it.copy(controlsVisible = !it.controlsVisible) }
 
     override fun setImmersive(value: Boolean) = mutable.update { it.copy(isImmersive = value, controlsVisible = !value) }
-    override fun showSettings(show: Boolean) = mutable.update { it.copy(showSettings = show, isImmersive = false) }
-    override fun showToc(show: Boolean) = mutable.update { it.copy(showToc = show, isImmersive = false) }
+    override fun showSettings(show: Boolean) = mutable.update { it.copy(showSettings = show, controlsVisible = true) }
+    override fun showToc(show: Boolean) = mutable.update { it.copy(showToc = show, controlsVisible = true) }
     override fun closeOverlays() = mutable.update { it.copy(showSettings = false, showToc = false) }
 
     // ReaderActions 声明返回 Unit，因此这里必须用块体；表达式体会把 launch 的 Job 暴露成返回类型

@@ -35,6 +35,32 @@ import kotlinx.coroutines.withContext
     val notice: String? = null,
 )
 
+/** [resolveBack] 的返回值：返回键该做什么。 */
+enum class BackAction { CLOSE_SETTINGS, CLOSE_TOC, SHOW_CONTROLS, EXIT }
+
+/**
+ * 顶部/底部菜单栏是否可见。
+ *
+ * 曾经 UI 只看 `isImmersive`、`controlsVisible` 成了只写不读的死状态，
+ * 导致点正文呼出菜单栏失效（默认沉浸态下菜单栏永远出不来）。
+ * 面板打开时菜单栏也必须在（关掉面板后菜单栏还在）。
+ */
+fun ReaderUiState.controlsShown(): Boolean = controlsVisible || showSettings || showToc
+
+/**
+ * 返回键的决策。纯函数，可单测。
+ *
+ * 规则与 0.8.x 行为等价：面板打开先关面板；菜单栏可见则退出；
+ * 菜单栏隐藏则先呼出——**不修改 `isImmersive` 持久设置**，
+ * 也不会出现「隐藏→显示→隐藏」的死循环。
+ */
+fun ReaderUiState.resolveBack(): BackAction = when {
+    showSettings -> BackAction.CLOSE_SETTINGS
+    showToc -> BackAction.CLOSE_TOC
+    controlsVisible -> BackAction.EXIT
+    else -> BackAction.SHOW_CONTROLS
+}
+
 /**
  * 阅读界面用到的**纯 UI 回调**。
  *
