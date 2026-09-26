@@ -62,6 +62,7 @@ data class StudioUiState(
     val search: String = "",
     val includeCover: Boolean = true,
     val busy: Boolean = false,
+    val detailError: String? = null,
     val message: String? = null,
     val activeJobId: String? = null,
     val showJobHistory: Boolean = false,
@@ -292,8 +293,37 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
                 .onFailure { error -> mutable.update { it.copy(searchBusy = false, searchMessage = error.message ?: "搜索失败。", loggedIn = app.sessionStore.hasSession()) } }
         }
     }
+    /**
+     * 探索页点书：**直接进详情页**，不再先落到 URL 输入页。
+     * SearchBook 已含标题/作者/封面/字数，先用它拼一份预览 Book 立刻渲染，
+     * 章节目录在后台补齐，详情页原地更新。
+     */
     fun openSearchBook(book: SearchBook) {
-        mutable.update { it.copy(sourceUrl = book.sourceUrl, tab = StudioTab.CREATE, step = CreateStep.SOURCE, book = null, index = null) }
+        val preview = Book(
+            id = book.id,
+            title = book.title,
+            author = book.author.ifBlank { "未知作者" },
+            category = book.category.ifBlank { "轻小说" },
+            status = book.status,
+            updatedAt = book.updatedAt,
+            wordCount = book.wordCount,
+            latestChapter = book.latestChapter,
+            coverUrl = book.coverUrl,
+            sourceUrl = book.sourceUrl,
+            bookUrl = book.sourceUrl,
+        )
+        mutable.update {
+            it.copy(
+                sourceUrl = book.sourceUrl,
+                tab = StudioTab.CREATE,
+                step = CreateStep.DETAIL,
+                book = preview,
+                index = null,
+                selectedIds = emptySet(),
+                busy = true,
+                message = null,
+            )
+        }
         parseSource()
     }
     fun setThemeMode(mode: com.wenku8.epubstudio.settings.AppThemeMode) { viewModelScope.launch { settingsRepository.setThemeMode(mode) } }
@@ -319,11 +349,21 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         val value = state.value.sourceUrl.trim()
         if (value.isEmpty()) { mutable.update { it.copy(message = "请输入书籍或目录网址。") }; return }
         viewModelScope.launch {
-            mutable.update { it.copy(busy = true, message = null) }
+            mutable.update { it.copy(busy = true, message = null, detailError = null) }
             runCatching { manager.parseSource(value) }
-                .onSuccess { (book, index) -> mutable.update { it.copy(busy = false, book = book, index = index, selectedIds = index.chapters.map { chapter -> chapter.id }.toSet(), step = CreateStep.DETAIL) } }
-                .onFailure { error -> mutable.update { it.copy(busy = false, message = error.message ?: "解析失败。") } }
+                .onSuccess { (book, index) ->
+                    mutable.update { it.copy(busy = false, detailError = null, book = book, index = index, selectedIds = index.chapters.map { chapter -> chapter.id }.toSet(), step = CreateStep.DETAIL) }
+                }
+                .onFailure { error ->
+                    // 详情页已经用预览数据渲染出来了，失败时就地提示，不要退回解析页
+                    mutable.update { it.copy(busy = false, detailError = error.message ?: "解析失败。") }
+                }
         }
+    }
+
+    /** 详情页目录加载失败后的重试。 */
+    fun retryLoadIndex() {
+        if (state.value.sourceUrl.isNotBlank()) parseSource()
     }
 
     fun selectAll() = mutable.update { current -> current.copy(selectedIds = current.index?.chapters?.map { it.id }?.toSet() ?: emptySet()) }

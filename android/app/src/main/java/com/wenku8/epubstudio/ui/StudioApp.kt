@@ -222,7 +222,13 @@ private fun StudioApp(
                 )
                 state.step == CreateStep.SOURCE -> SourceScreen(state, viewModel)
                 state.step == CreateStep.DETAIL -> state.book?.let {
-                    BookDetailScreen(it, state.index?.chapters?.size ?: 0, viewModel) { tag ->
+                    BookDetailScreen(
+                        book = it,
+                        chapterCount = state.index?.chapters?.size ?: 0,
+                        viewModel = viewModel,
+                        loading = state.busy,
+                        loadError = state.detailError,
+                    ) { tag ->
                         viewModel.setSearchField(SearchField.TITLE)
                         viewModel.setSearchQuery(tag)
                         viewModel.setTab(StudioTab.EXPLORE)

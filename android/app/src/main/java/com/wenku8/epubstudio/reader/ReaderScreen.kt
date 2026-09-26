@@ -71,6 +71,7 @@ import com.wenku8.epubstudio.R
 import com.wenku8.epubstudio.settings.ReaderBackground
 import com.wenku8.epubstudio.settings.ReaderPageTurnMode
 import com.wenku8.epubstudio.settings.ReaderSettings
+import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.Text as MiuixText
@@ -182,7 +183,14 @@ fun ReaderScreenCore(
             detectTapGestures(onTap = { actions.toggleControls() })
         }) {
             when {
-                state.loading -> MiuixText("正在打开…", Modifier.padding(24.dp))
+                state.loading -> Row(
+                    modifier = Modifier.align(Alignment.Center),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    CircularProgressIndicator(size = 24.dp)
+                    MiuixText("正在打开…", color = palette.text, fontSize = 14.sp)
+                }
                 error != null -> MiuixText(error, Modifier.padding(24.dp), color = Color(0xFFB3261E))
                 book != null -> ReaderContent(book, state, actions, palette, imageResolver)
             }

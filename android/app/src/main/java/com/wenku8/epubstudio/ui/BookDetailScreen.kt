@@ -31,6 +31,7 @@ import com.wenku8.epubstudio.ui.cover.CoverImage
 import com.wenku8.epubstudio.ui.cover.CoverViewerDialog
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.theme.MiuixTheme
@@ -43,6 +44,8 @@ fun BookDetailScreen(
     book: Book,
     chapterCount: Int,
     viewModel: StudioViewModel,
+    loading: Boolean = false,
+    loadError: String? = null,
     onTagClick: (String) -> Unit = {},
 ) {
     var showCover by remember { mutableStateOf(false) }
@@ -128,18 +131,34 @@ fun BookDetailScreen(
 
         item(key = "actions") {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Button(
-                    onClick = viewModel::toChapters,
-                    enabled = chapterCount > 0,
-                    modifier = Modifier.fillMaxWidth().heightIn(min = STAT_ROW_HEIGHT),
-                ) { Text("选择章节并导出") }
-                val onShelf = viewModel.state.value.bookshelf.any { it.bookId == (book.id ?: "") }
-                TextButton(
-                    text = if (onShelf) "已在书架" else "加入书架",
-                    onClick = { if (!onShelf) viewModel.addToShelf(book, chapterCount) },
-                    enabled = !onShelf,
-                    modifier = Modifier.fillMaxWidth().heightIn(min = STAT_ROW_HEIGHT),
-                )
+                when {
+                    loadError != null -> {
+                        Text("目录加载失败：$loadError", fontSize = 13.sp, color = MiuixTheme.colorScheme.error)
+                        TextButton(text = "重试", onClick = viewModel::retryLoadIndex, modifier = Modifier.fillMaxWidth().heightIn(min = STAT_ROW_HEIGHT))
+                    }
+                    loading -> Row(
+                        modifier = Modifier.fillMaxWidth().heightIn(min = STAT_ROW_HEIGHT),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        CircularProgressIndicator(size = 22.dp)
+                        Text("正在获取章节目录…", fontSize = 14.sp, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .75f))
+                    }
+                    else -> {
+                        Button(
+                            onClick = viewModel::toChapters,
+                            enabled = chapterCount > 0,
+                            modifier = Modifier.fillMaxWidth().heightIn(min = STAT_ROW_HEIGHT),
+                        ) { Text("选择章节并导出") }
+                        val onShelf = viewModel.state.value.bookshelf.any { it.bookId == (book.id ?: "") }
+                        TextButton(
+                            text = if (onShelf) "已在书架" else "加入书架",
+                            onClick = { if (!onShelf) viewModel.addToShelf(book, chapterCount) },
+                            enabled = !onShelf,
+                            modifier = Modifier.fillMaxWidth().heightIn(min = STAT_ROW_HEIGHT),
+                        )
+                    }
+                }
             }
         }
     }
