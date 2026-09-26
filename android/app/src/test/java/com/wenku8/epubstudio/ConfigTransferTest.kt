@@ -391,7 +391,7 @@ class ConfigTransferTest {
     @Test
     fun exportFileNameIsDerivedFromInjectedTime() {
         val name = configExportFileName(1_730_000_000_000L, ZoneId.of("UTC"))
-        assertTrue(name.matches(Regex("wenku8-settings-\\d{8}-\\d{6}\\.json")), name)
+        assertTrue(name, name.matches(Regex("wenku8-settings-\\d{8}-\\d{6}\\.json")))
         // 时间可注入：不同时间得到不同文件名，命名不含任何凭据或路径
         assertTrue(name != configExportFileName(1_730_000_000_001L, ZoneId.of("UTC")))
         assertFalse(name.contains("/"))
