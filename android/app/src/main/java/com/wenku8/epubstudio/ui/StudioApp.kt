@@ -49,6 +49,8 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import top.yukonga.miuix.kmp.basic.Button
+import top.yukonga.miuix.kmp.basic.BreadcrumbBar
+import top.yukonga.miuix.kmp.basic.BreadcrumbItem
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Checkbox
 import top.yukonga.miuix.kmp.basic.LinearProgressIndicator
@@ -230,6 +232,23 @@ private fun StudioApp(
                 state.step == CreateStep.CHAPTERS -> ChaptersScreen(state, viewModel)
                 state.step == CreateStep.EXPORT -> ExportScreen(state, viewModel)
                 state.step == CreateStep.PROGRESS -> ProgressScreen(state, viewModel)
+            }
+
+            if (state.tab == StudioTab.CREATE) {
+                val steps = listOf(
+                    CreateStep.SOURCE to "源站",
+                    CreateStep.DETAIL to "详情",
+                    CreateStep.CHAPTERS to "章节",
+                    CreateStep.EXPORT to "导出",
+                    CreateStep.PROGRESS to "进度",
+                )
+                BreadcrumbBar(
+                    items = steps.map { BreadcrumbItem(path = it.first.name, text = it.second) },
+                    onItemClick = { },
+                    highlightIndex = steps.indexOfFirst { it.first == state.step }.coerceAtLeast(0),
+                    enabled = false,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                )
             }
         }
     }

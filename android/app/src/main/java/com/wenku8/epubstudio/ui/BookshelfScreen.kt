@@ -2,14 +2,17 @@ package com.wenku8.epubstudio.ui
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -27,9 +30,13 @@ import com.wenku8.epubstudio.model.BookshelfEntry
 import com.wenku8.epubstudio.model.BookshelfSource
 import com.wenku8.epubstudio.ui.cover.CoverImage
 import top.yukonga.miuix.kmp.basic.Button
+import top.yukonga.miuix.kmp.basic.Badge
 import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.HorizontalDivider
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
+import top.yukonga.miuix.kmp.basic.VerticalScrollBar
+import top.yukonga.miuix.kmp.basic.rememberScrollBarAdapter
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 @Composable
@@ -73,16 +80,24 @@ fun BookshelfScreen(
             onOpen = { jobId -> viewModel.route(StudioViewModel.ROUTE_EXPORT_PROGRESS, jobId) },
             onCancel = { jobId -> viewModel.cancel(jobId) },
         )
+        HorizontalDivider(Modifier.fillMaxWidth())
         if (state.bookshelf.isEmpty()) {
             Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(18.dp)) {
                 Text("书架还是空的。\n可以从“探索”加入 Wenku8 书籍，或导入本地 EPUB。", fontSize = 14.sp, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .8f))
             }
         } else {
             Text("共 ${state.bookshelf.size} 本", color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f), fontSize = 13.sp)
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(state.bookshelf, key = { it.id }) { entry ->
-                    BookshelfCard(entry) { activeEntry = it }
+            val listState = rememberLazyListState()
+            Box(Modifier.fillMaxWidth()) {
+                LazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(state.bookshelf, key = { it.id }) { entry ->
+                        BookshelfCard(entry) { activeEntry = it }
+                    }
                 }
+                VerticalScrollBar(
+                    rememberScrollBarAdapter(listState),
+                    Modifier.align(Alignment.TopEnd).fillMaxHeight(),
+                )
             }
         }
     }
@@ -156,9 +171,13 @@ private fun BookshelfCard(
                     add(if (entry.source == BookshelfSource.LOCAL_EPUB) "本地 EPUB" else "Wenku8")
                     entry.wordCount?.let { add("${formatWordCount(it)} 字") }
                     if (entry.chapterCount > 0) add("${entry.chapterCount} 章")
-                    if (entry.isPinned) add("置顶")
                 }
-                Text(meta.joinToString(" · "), fontSize = 12.sp, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .6f), maxLines = 1)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(meta.joinToString(" · "), fontSize = 12.sp, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .6f), maxLines = 1)
+                    if (entry.isPinned) {
+                        Badge(containerColor = MiuixTheme.colorScheme.primary) { Text("置顶", fontSize = 10.sp) }
+                    }
+                }
             }
         }
     }

@@ -33,6 +33,8 @@ import com.wenku8.epubstudio.settings.ReaderBackground
 import com.wenku8.epubstudio.settings.ReaderPageTurnMode
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.ColorPicker
+import top.yukonga.miuix.kmp.basic.HorizontalDivider
+import top.yukonga.miuix.kmp.basic.NumberPicker
 import top.yukonga.miuix.kmp.basic.Switch
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
@@ -111,6 +113,7 @@ private fun SettingsOverview(state: StudioUiState, viewModel: StudioViewModel) {
                     Text("›", color = MiuixTheme.colorScheme.onSurface.copy(alpha = .5f), fontSize = 20.sp)
                 }
             }
+            HorizontalDivider(Modifier.fillMaxWidth())
         }
     }
 }
@@ -185,6 +188,16 @@ private fun ReaderSection(state: StudioUiState, viewModel: StudioViewModel, onIm
         { ColorSwatchRow { viewModel.setReaderTextColor(it) } },
         { SectionTitle("字号：${settings.fontSizeSp.toInt()} sp") },
         { Slider(settings.fontSizeSp, { viewModel.setReaderFontSize(it) }, valueRange = 12f..32f, steps = 19) },
+        {
+            // 精确输入：滑块适合粗调，字号这类需要对准的场景用 NumberPicker
+            Text("精确设置字号", fontSize = 12.sp, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .7f))
+            NumberPicker(
+                value = settings.fontSizeSp.toInt(),
+                onValueChange = { viewModel.setReaderFontSize(it.toFloat()) },
+                range = 12..32,
+                modifier = Modifier.fillMaxWidth().height(150.dp),
+            )
+        },
         { SectionTitle("字重：${settings.fontWeight}") },
         { Slider(settings.fontWeight.toFloat(), { viewModel.setReaderFontWeight(it.toInt()) }, valueRange = 100f..900f, steps = 7) },
         { SectionTitle("行高：${"%.1f".format(settings.lineHeight)}") },
