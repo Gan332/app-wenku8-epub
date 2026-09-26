@@ -11,7 +11,8 @@
 
 当前主要发版对象是 **Android 原生应用**。Android 版本不需要 Node.js 服务，WebView 仅用于 wenku8 登录。
 
-当前版本：`0.8.0`（versionCode 8）
+当前版本：`0.8.1`（versionCode 9）
+包名：`com.example.hyperreader`（由 `com.wenku8.epubstudio` 于 0.9.0 重命名）
 
 仓库地址：`https://github.com/Gan332/app-wenku8-epub`
 
@@ -58,7 +59,7 @@
 ## 3. 目录结构
 
 ```text
-android/app/src/main/java/com/wenku8/epubstudio/
+android/app/src/main/java/com/example/hyperreader/
 ├── MainActivity.kt              入口 Activity，ActivityResult 启动器
 ├── Wenku8Application.kt         依赖容器：设置、书架、统计、数据源、任务
 ├── core/                        URL 白名单、HTTP、Cookie、解析、探索数据源
@@ -183,7 +184,7 @@ OkHttp 客户端，从而绕过 `Wenku8HttpClient` 的全局 1 秒限流与 429 
 
 ### 5.3 单元测试
 
-测试位于 `android/app/src/test/java/com/wenku8/epubstudio/`，覆盖：
+测试位于 `android/app/src/test/java/com/example/hyperreader/`，覆盖：
 
 - URL 白名单和书籍 ID 规范化
 - 目录、插图标记、书籍元数据和字数解析
@@ -192,6 +193,34 @@ OkHttp 客户端，从而绕过 `Wenku8HttpClient` 的全局 1 秒限流与 429 
 - EPUB mimetype、OPF 与阅读器回读
 
 新增解析逻辑时，必须同时新增测试夹具。
+
+### 5.4 Release 签名与 R8（0.9.0 起）
+
+release 变体开启 `isMinifyEnabled` + `isShrinkResources`，签名配置**全部来自环境变量**，
+密钥与口令**绝不进入版本库**。CI 需要的 4 个仓库 Secret：
+
+| Secret | 内容 |
+| --- | --- |
+| `HYPERREADER_KEYSTORE` | keystore 文件的 base64 编码 |
+| `HYPERREADER_STORE_PASSWORD` | keystore 口令 |
+| `HYPERREADER_KEY_ALIAS` | 密钥别名 |
+| `HYPERREADER_KEY_PASSWORD` | 密钥口令 |
+
+未配置时 CI 会在脚本内**跳过** release 构建（打印 notice 后 `exit 0`），
+**不回退到 debug 签名**，避免产出「看起来正常」的假包。
+
+两个必须知道的坑：
+
+1. **不要在 step 级 `if:` 里用 `secrets` 上下文** —— 会导致整个 workflow 校验失败、
+   run 没有任何 job（total_count = 0）、`run view --log` 报 `log not found`。
+   判断要放在 `run:` 脚本里做。
+2. **AGP 9.x 的默认 ProGuard 文件名是 `proguard-android-optimize.txt`**，
+   旧的 `proguard-optimize.txt` 会在**配置期**直接报
+   `Supplied proguard configuration file name is unsupported`。
+
+**R8 只能在运行期证伪**：`assembleRelease` 通过不代表包能用。被裁掉的
+`@Serializable` 生成器、反射读取的 DTO、JSoup 反射都会编译期无感、运行期崩。
+改了 `proguard-rules.pro` 或引了新库之后，**release APK 必须真机冒烟**。
 
 ## 6. 推送方式（重要）
 
