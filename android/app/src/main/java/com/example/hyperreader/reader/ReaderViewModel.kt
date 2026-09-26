@@ -141,10 +141,10 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application),
      * 之前翻转 isImmersive（持久设置）会让系统栏跟着反复 hide/show，
      * 与 Scaffold 底栏互相打架，表现为控件闪现、进得去出不来。
      */
-    override fun toggleControls() = mutable.update { it.copy(controlsVisible = !it.controlsVisible) }
+    override fun toggleControls() = mutable.update { logReaderEvent("vm.toggleControls -> ${!it.controlsVisible}"); it.copy(controlsVisible = !it.controlsVisible) }
     override fun setImmersive(value: Boolean) = mutable.update { it.copy(isImmersive = value, controlsVisible = !value) }
-    override fun showSettings(show: Boolean) = mutable.update { it.copy(showSettings = show, controlsVisible = true) }
-    override fun showToc(show: Boolean) = mutable.update { it.copy(showToc = show, controlsVisible = true) }
+    override fun showSettings(show: Boolean) = mutable.update { logReaderEvent("vm.showSettings($show)"); it.copy(showSettings = show, controlsVisible = true) }
+    override fun showToc(show: Boolean) = mutable.update { logReaderEvent("vm.showToc($show)"); it.copy(showToc = show, controlsVisible = true) }
     override fun closeOverlays() = mutable.update { it.copy(showSettings = false, showToc = false) }
 
     override fun updateFontSize(value: Float) { viewModelScope.launch { settingsRepository.setReaderFontSize(value); refreshSettings() } }

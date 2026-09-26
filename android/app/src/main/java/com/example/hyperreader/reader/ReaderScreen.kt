@@ -103,6 +103,28 @@ private const val TOUCH_TARGET = 48
 private const val CONTROL_BAR_HEIGHT = 56
 
 /**
+ * 阅读器交互诊断日志。
+ *
+ * 「按钮无响应」这种**不崩溃**的缺陷在普通 logcat 里没有任何输出，
+ * 静态分析也已经连续三轮落空（见 release notes 0.9.1/0.9.2/0.9.3）。
+ * 因此这里把每个交互点与相关状态变化显式打到 logcat，用
+ * `adb logcat -s ReaderTrace` 就能确定事件到底断在哪一层。
+ *
+ * 定位完成后应连同所有调用点一并移除。
+ */
+internal fun logReaderEvent(name: String) {
+    android.util.Log.i("ReaderTrace", name)
+}
+
+internal fun logReaderState(tag: String, state: ReaderUiState) {
+    android.util.Log.i(
+        "ReaderTrace",
+        "$tag controls=${state.controlsVisible} toc=${state.showToc} settings=${state.showSettings} " +
+            "chapter=${state.chapterIndex}/${state.book?.chapters?.size} paragraph=${state.paragraphIndex} loading=${state.loading}",
+    )
+}
+
+/**
  * 点按呼出/收起菜单栏。
  *
  * 必须挂在**内容节点**上（LazyColumn、正文 item）：v0.8.x 与 0.9.1 的真机实测
@@ -159,6 +181,11 @@ fun ReaderScreenCore(
     val settings = state.settings
     val palette = readerPalette(settings)
     val error = state.error
+
+    // 诊断：状态每次变化都记录，区分「事件没触发」与「触发了但状态没变」
+    LaunchedEffect(state.controlsVisible, state.showToc, state.showSettings, state.chapterIndex, state.paragraphIndex, state.loading) {
+        logReaderState("state", state)
+    }
     // 系统栏：沉浸设置决定（面板打开时临时显示）。**不随点按翻转**，避免系统栏抖动。
     val systemImmersive = state.isImmersive && !state.showSettings && !state.showToc
     // 菜单栏：只看 controlsShown() —— 只看 isImmersive 会让点正文呼出失效。
@@ -187,15 +214,15 @@ fun ReaderScreenCore(
                     TopAppBar(
                         title = book?.chapters?.getOrNull(state.chapterIndex)?.title ?: "阅读器",
                         navigationIcon = {
-                            IconButton(onClick = onBack, modifier = Modifier.size(TOUCH_TARGET.dp)) {
+                            IconButton(onClick = { logReaderEvent("nav.back"); onBack() }, modifier = Modifier.size(TOUCH_TARGET.dp)) {
                                 Icon(MiuixIcons.Back, contentDescription = "返回")
                             }
                         },
                         actions = {
-                            IconButton(onClick = { actions.showToc(true) }, modifier = Modifier.size(TOUCH_TARGET.dp)) {
+                            IconButton(onClick = { logReaderEvent("top.toc"); actions.showToc(true) }, modifier = Modifier.size(TOUCH_TARGET.dp)) {
                                 Icon(MiuixIcons.ListView, contentDescription = "目录")
                             }
-                            IconButton(onClick = { actions.showSettings(true) }, modifier = Modifier.size(TOUCH_TARGET.dp)) {
+                            IconButton(onClick = { logReaderEvent("top.settings"); actions.showSettings(true) }, modifier = Modifier.size(TOUCH_TARGET.dp)) {
                                 Icon(MiuixIcons.Tune, contentDescription = "设置")
                             }
                         },
@@ -218,7 +245,7 @@ fun ReaderScreenCore(
         contentWindowInsets = WindowInsets(0.dp),
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding).background(palette.background).pointerInput(Unit) {
-            detectTapGestures(onTap = { actions.toggleControls() })
+            detectTapGestures(onTap = { logReaderEvent("body.tap"); actions.toggleControls() })
         }) {
             // Crossfade 而非硬切换：打开、加载失败、就绪之间过渡更连贯
             Crossfade(targetState = when {
@@ -257,9 +284,11 @@ fun ReaderScreenCore(
     }
 
     if (state.showToc && book != null) {
+        logReaderEvent("render:ReaderTocSheet")
         ReaderTocSheet(book, state.chapterIndex, onSelect = actions::selectChapter, onDismiss = { actions.showToc(false) })
     }
     if (state.showSettings) {
+        logReaderEvent("render:ReaderSettingsSheet")
         ReaderSettingsSheet(
             settings = settings,
             onDismiss = { actions.showSettings(false) },
@@ -291,18 +320,18 @@ private fun ReaderBottomBar(state: ReaderUiState, actions: ReaderActions) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        IconButton(onClick = actions::previousChapter, enabled = hasPrevious, modifier = Modifier.size(TOUCH_TARGET.dp)) {
+        IconButton(onClick = { logReaderEvent("bottom.prev"); actions.previousChapter() }, enabled = hasPrevious, modifier = Modifier.size(TOUCH_TARGET.dp)) {
             Icon(MiuixIcons.ChevronBackward, contentDescription = "上一章")
         }
         MiuixText("${state.chapterIndex + 1} / $chapterCount", fontSize = 14.sp, maxLines = 1)
         Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-            IconButton(onClick = { actions.showToc(true) }, modifier = Modifier.size(TOUCH_TARGET.dp)) {
+            IconButton(onClick = { logReaderEvent("bottom.toc"); actions.showToc(true) }, modifier = Modifier.size(TOUCH_TARGET.dp)) {
                 Icon(MiuixIcons.ListView, contentDescription = "目录")
             }
-            IconButton(onClick = { actions.showSettings(true) }, modifier = Modifier.size(TOUCH_TARGET.dp)) {
+            IconButton(onClick = { logReaderEvent("bottom.settings"); actions.showSettings(true) }, modifier = Modifier.size(TOUCH_TARGET.dp)) {
                 Icon(MiuixIcons.Tune, contentDescription = "设置")
             }
-            IconButton(onClick = actions::nextChapter, enabled = hasNext, modifier = Modifier.size(TOUCH_TARGET.dp)) {
+            IconButton(onClick = { logReaderEvent("bottom.next"); actions.nextChapter() }, enabled = hasNext, modifier = Modifier.size(TOUCH_TARGET.dp)) {
                 Icon(MiuixIcons.ChevronForward, contentDescription = "下一章")
             }
         }
