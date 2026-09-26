@@ -44,6 +44,33 @@ android {
     packaging {
         resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
     }
+
+    // 签名配置全部来自环境变量（CI 由 GitHub Secrets 注入），
+    // 密钥与口令绝不进入版本库（AGENTS.md §10）。
+    signingConfigs {
+        create("release") {
+            val store = System.getenv("HYPERREADER_KEYSTORE")
+            val storePassword = System.getenv("HYPERREADER_STORE_PASSWORD")
+            val keyAlias = System.getenv("HYPERREADER_KEY_ALIAS")
+            val keyPassword = System.getenv("HYPERREADER_KEY_PASSWORD")
+            if (!store.isNullOrBlank() && !storePassword.isNullOrBlank() && !keyAlias.isNullOrBlank() && !keyPassword.isNullOrBlank()) {
+                storeFile = file(store)
+                this.storePassword = storePassword
+                this.keyAlias = keyAlias
+                this.keyPassword = keyPassword
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-optimize.txt"), "proguard-rules.pro")
+            // 缺 Secrets 时不静默降级成 debug 签名，避免产出「看起来正常」的假包
+            signingConfig = signingConfigs.getByName("release")
+        }
+    }
 }
 
 kotlin {
