@@ -126,6 +126,8 @@ class MainActivity : ComponentActivity() {
                     onLogin = { loginLauncher.launch(android.content.Intent(this, LoginActivity::class.java)) },
                     onImportEpub = { epubPicker.launch(arrayOf("application/epub+zip", "application/octet-stream", "application/zip", "*/*")) },
                     onImportFont = { fontPicker.launch(arrayOf("font/ttf", "font/otf", "application/x-font-ttf", "application/octet-stream")) },
+                    onExportConfig = { exportConfigLauncher.launch(com.wenku8.epubstudio.ui.ConfigTransferFile.suggestedName()) },
+                    onImportConfig = { importConfigLauncher.launch(com.wenku8.epubstudio.ui.ConfigTransferFile.mimeTypes) },
                 )
             }
         }
@@ -155,7 +157,14 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun StudioApp(viewModel: StudioViewModel, onLogin: () -> Unit, onImportEpub: () -> Unit, onImportFont: () -> Unit) {
+private fun StudioApp(
+    viewModel: StudioViewModel,
+    onLogin: () -> Unit,
+    onImportEpub: () -> Unit,
+    onImportFont: () -> Unit,
+    onExportConfig: () -> Unit,
+    onImportConfig: () -> Unit,
+) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val settingsTitle = when (state.settingsSection) {
@@ -206,8 +215,8 @@ private fun StudioApp(viewModel: StudioViewModel, onLogin: () -> Unit, onImportE
                     viewModel = viewModel,
                     onImportEpub = onImportEpub,
                     onImportFont = onImportFont,
-                    onExportConfig = { exportConfigLauncher.launch(com.wenku8.epubstudio.ui.ConfigTransferFile.suggestedName()) },
-                    onImportConfig = { importConfigLauncher.launch(com.wenku8.epubstudio.ui.ConfigTransferFile.mimeTypes) },
+                    onExportConfig = onExportConfig,
+                    onImportConfig = onImportConfig,
                 )
                 state.step == CreateStep.SOURCE -> SourceScreen(state, viewModel)
                 state.step == CreateStep.DETAIL -> state.book?.let {

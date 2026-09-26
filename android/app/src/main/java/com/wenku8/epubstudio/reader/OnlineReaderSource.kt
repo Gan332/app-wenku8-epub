@@ -130,7 +130,11 @@ class OnlineReaderSource(
 
     /** 只要 ReaderBook 的便捷入口。 */
     suspend fun loadBook(bookId: String, title: String = "", author: String = ""): OnlineReaderResult<ReaderBook> =
-        loadIndex(bookId, title, author).flatMap { it.book }
+        when (val result = loadIndex(bookId, title, author)) {
+            is OnlineReaderResult.Ready -> OnlineReaderResult.Ready(result.value.book, result.fromCache)
+            is OnlineReaderResult.NeedsLogin -> result
+            is OnlineReaderResult.Failed -> result
+        }
 
     // ---- 章节 ----
 

@@ -160,18 +160,19 @@ class OnlineReaderViewModel(application: Application) : AndroidViewModel(applica
     override fun showToc(show: Boolean) = mutable.update { it.copy(showToc = show, isImmersive = false) }
     override fun closeOverlays() = mutable.update { it.copy(showSettings = false, showToc = false) }
 
-    override fun updateFontSize(value: Float) = viewModelScope.launch { settingsRepository.setReaderFontSize(value); refreshSettings() }
-    override fun updateFontWeight(value: Int) = viewModelScope.launch { settingsRepository.setReaderFontWeight(value); refreshSettings() }
-    override fun updateLineHeight(value: Float) = viewModelScope.launch { settingsRepository.setReaderLineHeight(value); refreshSettings() }
-    override fun updateSpacing(value: Int) = viewModelScope.launch { settingsRepository.setReaderParagraphSpacing(value); refreshSettings() }
-    override fun updatePadding(value: Int) = viewModelScope.launch { settingsRepository.setReaderHorizontalPadding(value); refreshSettings() }
-    override fun updateBackground(value: ReaderBackground) = viewModelScope.launch { settingsRepository.setReaderBackground(value); refreshSettings() }
-    override fun updateBackgroundColor(value: Int) = viewModelScope.launch { settingsRepository.setReaderCustomBackground(value); refreshSettings() }
-    override fun updateTextColor(value: Int) = viewModelScope.launch { settingsRepository.setReaderTextColor(value); refreshSettings() }
-    override fun updatePageMode(value: ReaderPageTurnMode) = viewModelScope.launch { settingsRepository.setReaderPageTurn(value); refreshSettings() }
-    override fun updateKeepScreenOn(value: Boolean) = viewModelScope.launch { settingsRepository.setReaderKeepScreenOn(value); refreshSettings() }
-    override fun updateImmersive(value: Boolean) = viewModelScope.launch { settingsRepository.setReaderImmersive(value); setImmersive(value); refreshSettings() }
-    override fun updateFontUri(value: String?) = viewModelScope.launch { settingsRepository.setReaderFontUri(value) }
+    // ReaderActions 声明返回 Unit，因此这里必须用块体；表达式体会把 launch 的 Job 暴露成返回类型
+    override fun updateFontSize(value: Float) { viewModelScope.launch { settingsRepository.setReaderFontSize(value); refreshSettings() } }
+    override fun updateFontWeight(value: Int) { viewModelScope.launch { settingsRepository.setReaderFontWeight(value); refreshSettings() } }
+    override fun updateLineHeight(value: Float) { viewModelScope.launch { settingsRepository.setReaderLineHeight(value); refreshSettings() } }
+    override fun updateSpacing(value: Int) { viewModelScope.launch { settingsRepository.setReaderParagraphSpacing(value); refreshSettings() } }
+    override fun updatePadding(value: Int) { viewModelScope.launch { settingsRepository.setReaderHorizontalPadding(value); refreshSettings() } }
+    override fun updateBackground(value: ReaderBackground) { viewModelScope.launch { settingsRepository.setReaderBackground(value); refreshSettings() } }
+    override fun updateBackgroundColor(value: Int) { viewModelScope.launch { settingsRepository.setReaderCustomBackground(value); refreshSettings() } }
+    override fun updateTextColor(value: Int) { viewModelScope.launch { settingsRepository.setReaderTextColor(value); refreshSettings() } }
+    override fun updatePageMode(value: ReaderPageTurnMode) { viewModelScope.launch { settingsRepository.setReaderPageTurn(value); refreshSettings() } }
+    override fun updateKeepScreenOn(value: Boolean) { viewModelScope.launch { settingsRepository.setReaderKeepScreenOn(value); refreshSettings() } }
+    override fun updateImmersive(value: Boolean) { viewModelScope.launch { settingsRepository.setReaderImmersive(value); setImmersive(value); refreshSettings() } }
+    override fun updateFontUri(value: String?) { viewModelScope.launch { settingsRepository.setReaderFontUri(value) } }
 
     fun startSession() {
         if (sessionStartedAt == null) sessionStartedAt = SystemClock.elapsedRealtime()
