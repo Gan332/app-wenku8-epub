@@ -25,6 +25,7 @@ import com.example.hyperreader.model.Chapter
 import com.example.hyperreader.model.ContentBlock
 import com.example.hyperreader.model.ParsedChapter
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
