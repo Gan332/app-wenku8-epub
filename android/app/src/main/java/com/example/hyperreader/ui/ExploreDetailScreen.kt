@@ -87,8 +87,11 @@ fun ExploreDetailScreen(
             TextButton(text = "‹ 返回探索", onClick = onBack)
         }
 
-        // 加载中且还没有任何数据：整屏 loading，避免闪一屏空卡片
-        if (loading && detail == null && seed == null) {
+        // 加载中且还没有任何数据：只渲染 loading 卡片，避免闪一屏空卡片。
+        // 用条件分支包住后续 item，而不是 `return@LazyColumn` —— 后者的标签
+        // 指向 LazyListScope 的非内联 lambda，写起来脆且不利于阅读。
+        val emptyLoading = loading && detail == null && seed == null
+        if (emptyLoading) {
             item(key = "loading-full") {
                 Row(
                     modifier = Modifier.fillMaxWidth().heightIn(min = DETAIL_ROW_HEIGHT).padding(top = 24.dp),
@@ -99,130 +102,131 @@ fun ExploreDetailScreen(
                     Text("正在获取书籍信息…", fontSize = 14.sp, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .75f))
                 }
             }
-            return@LazyColumn
         }
 
-        item(key = "cover") {
-            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                Box(
-                    modifier = Modifier
-                        .width(160.dp)
-                        .aspectRatio(0.75f)
-                        .clip(RoundedCornerShape(8.dp))
-                        .clickable(enabled = coverUrl != null) { showCover = true },
-                ) {
-                    CoverImage(
-                        url = coverUrl,
-                        contentDescription = title,
-                        modifier = Modifier.fillMaxWidth().aspectRatio(0.75f),
-                        targetWidthDp = 480,
-                    )
-                }
-            }
-        }
-
-        item(key = "title") {
-            Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                Text(title.ifBlank { "未命名" }, fontSize = 23.sp, fontWeight = FontWeight.Bold)
-                if (author.isNotBlank()) Text("作者：$author", fontSize = 15.sp)
-                if (category.isNotBlank()) {
-                    Text(category, color = MiuixTheme.colorScheme.primary, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                }
-                // 接口回来后给一个「已是最新」的轻提示；加载中显示进度，不阻塞已渲染的内容
-                if (loading) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        CircularProgressIndicator(size = 16.dp)
-                        Text("正在通过接口刷新详情…", fontSize = 12.sp, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f))
-                    }
-                }
-            }
-        }
-
-        // 书籍信息全部来自 articleinfo.php 一个接口
-        item(key = "stats") {
-            Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(vertical = 2.dp)) {
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    if (status.isNotBlank()) DetailRow("状态", status)
-                    wordCount?.let { DetailRow("全文字数", "${formatWordCount(it)} 字") }
-                    if (updatedAt.isNotBlank()) DetailRow("最后更新", updatedAt)
-                    // 章节数来自目录页
-                    when {
-                        detail != null && detail.chapterCount > 0 -> DetailRow("章节数", "${detail.chapterCount}")
-                        loading -> DetailRow("章节数", "获取中…")
-                        else -> DetailRow("章节数", "未知")
-                    }
-                    DetailRow("来源", "Wenku8")
-                }
-            }
-        }
-
-        // 目录页单独失败：书籍信息仍可用，就地提示 + 重试，不整页报错
-        if (error != null) {
-            item(key = "error") {
-                Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(14.dp)) {
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text("部分信息加载失败", fontSize = 15.sp, fontWeight = FontWeight.Bold)
-                        Text(error, fontSize = 13.sp, color = MiuixTheme.colorScheme.error)
-                        TextButton(
-                            text = "重试",
-                            onClick = onRetry,
-                            modifier = Modifier.fillMaxWidth().heightIn(min = DETAIL_ROW_HEIGHT),
+        if (!emptyLoading) {
+            item(key = "cover") {
+                Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    Box(
+                        modifier = Modifier
+                            .width(160.dp)
+                            .aspectRatio(0.75f)
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable(enabled = coverUrl != null) { showCover = true },
+                    ) {
+                        CoverImage(
+                            url = coverUrl,
+                            contentDescription = title,
+                            modifier = Modifier.fillMaxWidth().aspectRatio(0.75f),
+                            targetWidthDp = 480,
                         )
                     }
                 }
             }
-        }
 
-        if (tags.isNotEmpty()) {
-            item(key = "tags") {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("标签", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        items(tags) { tag -> TextButton(text = tag, onClick = { onTagClick(tag) }) }
+            item(key = "title") {
+                Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                    Text(title.ifBlank { "未命名" }, fontSize = 23.sp, fontWeight = FontWeight.Bold)
+                    if (author.isNotBlank()) Text("作者：$author", fontSize = 15.sp)
+                    if (category.isNotBlank()) {
+                        Text(category, color = MiuixTheme.colorScheme.primary, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                    // 接口回来后给一个「已是最新」的轻提示；加载中显示进度，不阻塞已渲染的内容
+                    if (loading) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            CircularProgressIndicator(size = 16.dp)
+                            Text("正在通过接口刷新详情…", fontSize = 12.sp, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f))
+                        }
                     }
                 }
             }
-        }
 
-        item(key = "summary") {
-            Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(14.dp)) {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("内容简介", fontWeight = FontWeight.Bold)
-                    Text(
-                        text = summary.ifBlank { if (loading) "正在获取简介…" else "源站没有提供简介。" },
-                        color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.8f),
-                        fontSize = 14.sp,
-                    )
+            // 书籍信息全部来自 articleinfo.php 一个接口
+            item(key = "stats") {
+                Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(vertical = 2.dp)) {
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        if (status.isNotBlank()) DetailRow("状态", status)
+                        wordCount?.let { DetailRow("全文字数", "${formatWordCount(it)} 字") }
+                        if (updatedAt.isNotBlank()) DetailRow("最后更新", updatedAt)
+                        // 章节数来自目录页
+                        when {
+                            detail != null && detail.chapterCount > 0 -> DetailRow("章节数", "${detail.chapterCount}")
+                            loading -> DetailRow("章节数", "获取中…")
+                            else -> DetailRow("章节数", "未知")
+                        }
+                        DetailRow("来源", "Wenku8")
+                    }
                 }
             }
-        }
 
-        item(key = "actions") {
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                if (detail != null || !loading) {
-                    Button(
-                        onClick = onReadOnline,
-                        enabled = bookId.isNotBlank(),
-                        modifier = Modifier.fillMaxWidth().heightIn(min = DETAIL_ROW_HEIGHT),
-                    ) { Text("在线阅读") }
-                    TextButton(
-                        text = "加入书架",
-                        onClick = onAddToShelf,
-                        enabled = detail != null,
-                        modifier = Modifier.fillMaxWidth().heightIn(min = DETAIL_ROW_HEIGHT),
-                    )
-                    TextButton(
-                        text = "查看同作者作品",
-                        onClick = onSameAuthor,
-                        enabled = detail != null,
-                        modifier = Modifier.fillMaxWidth().heightIn(min = DETAIL_ROW_HEIGHT),
+            // 目录页单独失败：书籍信息仍可用，就地提示 + 重试，不整页报错
+            if (error != null) {
+                item(key = "error") {
+                    Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(14.dp)) {
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text("部分信息加载失败", fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                            Text(error, fontSize = 13.sp, color = MiuixTheme.colorScheme.error)
+                            TextButton(
+                                text = "重试",
+                                onClick = onRetry,
+                                modifier = Modifier.fillMaxWidth().heightIn(min = DETAIL_ROW_HEIGHT),
+                            )
+                        }
+                    }
+                }
+            }
+
+            if (tags.isNotEmpty()) {
+                item(key = "tags") {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("标签", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            items(tags) { tag -> TextButton(text = tag, onClick = { onTagClick(tag) }) }
+                        }
+                    }
+                }
+            }
+
+            item(key = "summary") {
+                Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(14.dp)) {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text("内容简介", fontWeight = FontWeight.Bold)
+                        Text(
+                            text = summary.ifBlank { if (loading) "正在获取简介…" else "源站没有提供简介。" },
+                            color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.8f),
+                            fontSize = 14.sp,
+                        )
+                    }
+                }
+            }
+
+            item(key = "actions") {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    if (detail != null || !loading) {
+                        Button(
+                            onClick = onReadOnline,
+                            enabled = bookId.isNotBlank(),
+                            modifier = Modifier.fillMaxWidth().heightIn(min = DETAIL_ROW_HEIGHT),
+                        ) { Text("在线阅读") }
+                        TextButton(
+                            text = "加入书架",
+                            onClick = onAddToShelf,
+                            enabled = detail != null,
+                            modifier = Modifier.fillMaxWidth().heightIn(min = DETAIL_ROW_HEIGHT),
+                        )
+                        TextButton(
+                            text = "查看同作者作品",
+                            onClick = onSameAuthor,
+                            enabled = detail != null,
+                            modifier = Modifier.fillMaxWidth().heightIn(min = DETAIL_ROW_HEIGHT),
+                        )
+                    }
+                    Text(
+                        "本页面只读取源站公开信息，不经过导出解析流程。",
+                        fontSize = 12.sp,
+                        color = MiuixTheme.colorScheme.onSurface.copy(alpha = .6f),
                     )
                 }
-                Text(
-                    "本页面只读取源站公开信息，不经过导出解析流程。",
-                    fontSize = 12.sp,
-                    color = MiuixTheme.colorScheme.onSurface.copy(alpha = .6f),
-                )
             }
         }
     }

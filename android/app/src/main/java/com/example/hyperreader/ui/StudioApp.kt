@@ -83,6 +83,7 @@ import com.example.hyperreader.reader.onlineReaderIntent
 import com.example.hyperreader.ui.AppMiuixTheme
 import com.example.hyperreader.ui.BookDetailScreen
 import com.example.hyperreader.ui.BookshelfScreen
+import com.example.hyperreader.ui.ExploreDetailScreen
 import com.example.hyperreader.ui.ExploreScreen
 import com.example.hyperreader.ui.ReadingStatsScreen
 import com.example.hyperreader.ui.SearchScreen
@@ -240,15 +241,18 @@ private fun StudioApp(
                     onRetry = viewModel::retryExploreDetail,
                     onAddToShelf = viewModel::addExploreDetailToShelf,
                     onReadOnline = {
-                        val book = state.exploreDetail?.book ?: return@ExploreDetailScreen
-                        context.startActivity(
-                            onlineReaderIntent(
-                                context = context,
-                                bookId = book.id.orEmpty(),
-                                title = book.title,
-                                author = book.author,
+                        // 用 ?.let 而非 `?: return@ExploreDetailScreen`：后者依赖非内联 lambda
+                        // 的函数名标签推断，在部分编译器/增量场景下会解析失败。
+                        state.exploreDetail?.book?.let { book ->
+                            context.startActivity(
+                                onlineReaderIntent(
+                                    context = context,
+                                    bookId = book.id.orEmpty(),
+                                    title = book.title,
+                                    author = book.author,
+                                )
                             )
-                        )
+                        }
                     },
                     onSameAuthor = { state.exploreDetail?.book?.id?.let(viewModel::expandAuthor) },
                     onTagClick = { tag ->
