@@ -2,6 +2,71 @@
 
 本项目遵循语义化版本。
 
+## [0.10.0] - 2026-09-27
+
+### MiuiX 动效与组件全面化
+
+#### 页面与列表动效
+
+- **tab/流程转场**：主界面切页（书架/探索/创建/设置 + 创建流程步骤）接入
+  `AnimatedContent`，横向滑入 + 淡入，缓动 `DecelerateEasing`（MiuiX anim 包）。
+- **列表项动画**：书架、导出记录、搜索结果、探索列表、目录面板全部接入
+  `Modifier.animateItem()`，删除/重排平滑过渡。
+- **阅读器设置数值联动**：字号/字重/行高/段距/边距的数值用 `AnimatedContent`
+  淡变（行是 fill 宽，`animateContentSize` 不会触发——已换更有效的实现）。
+
+#### 阅读器动效
+
+- 控件栏收展换 **MiuiX folme 弹簧**（`folmeSpring(damping=1.0, response=0.35)`）
+- 插图加载 → 就绪**纯淡入**（不缩放尺寸，避免排版跳动）
+- 翻页模式切换 `Crossfade` 过渡（原为整块硬切）
+- 上下滚动模式的目录跳转改**动画滚动**（断点恢复仍瞬时精准落位；>50 项大跨度仍瞬时）
+
+#### 组件补齐
+
+- **SearchBar**：搜索页输入框接入 MiuiX `SearchBar` 容器，历史词作为展开内容
+ （初始展开 = 与旧布局等价，无回归）
+- **Snackbar**：根消息从内联错误卡改为 `SnackbarHost`（可滑走、自动消失、
+  显示后 `clearMessage()`）
+- **书架操作菜单**：点卡片主体**直接打开**（本地进阅读器/远程进详情），
+  行尾「更多」按钮弹 **Popup + BasicComponent** 操作菜单（在线阅读/同作者/
+  置顶/移出），删除旧全屏操作弹窗 `BookActionsDialog`
+- 按压反馈与回弹**已全局生效**（`MiuixTheme` 注入 `MiuixIndication` 与
+  `MiuixOverscrollFactory`，0.9.3 起即存在——本轮核验确认，无需重复挂载）
+
+#### 主动降级（如实记录）
+
+- 下拉刷新未引入：书架/探索均为 DataStore 实时订阅数据，**没有真实的
+  刷新动作可执行**，假转圈不如不做
+- 章节选择页的过滤框保持 `TextField`：语义是列表内过滤而非搜索栏，
+  套 SearchBar 需要凭空造展开内容
+
+### Rust EPUB 解析核心（`rust/epub-core`）
+
+- **新增 Rust 原生库** `libepub_core.so`（cargo-ndk 交叉编译 arm64/armv7/x86_64）：
+  手写结构解析（container/OPF/nav/NCX + 按 spine 读出章节 HTML），
+  参考 plato（1705★）语义自写、零上游依赖（原候选 epub crate 仓库已 404）。
+- **职责边界**：Rust 只做结构解析；HTML→内容块仍走 Kotlin Jsoup（现有测试
+  原样有效），图片字节仍走 Kotlin ZipFile。
+- **JNI 契约**：`EpubNative.parse` 返回 JSON，**任何失败返回 null → 自动回退
+  legacy zip+Jsoup 路径** —— native 是加速路径不是单点依赖；so 缺失
+ （本地开发）同样自动回退。
+- **安全限额与 legacy 对齐**：单条目 ≤30MB、解压累计 ≤200MB（AGENTS 约束）。
+- **R8**：`EpubNative` 显式 keep（native 符号按类名+方法名查找）。
+- **CI**：新增 Rust 工具链（dtolnay/rust-toolchain）、cargo 缓存、
+  `cargo test`、cargo-ndk 构建三 ABI so → `src/main/jniLibs/`（不入库，
+  `.gitignore`）。
+- **测试**：Rust 侧 5 个（结构/toc/nav/NCX 回退/损坏包拒绝/JSON 契约/路径语义）；
+  Kotlin 侧 2 个（native JSON → ReaderBook 映射含图片路径归一、无 so 时 legacy 回退）。
+
+### 修复
+
+- **图片路径双前缀（0.9.x 遗留）**：阅读器解析 `img src` 时在相对路径归一后
+  又拼了一次 packageDir，产出 `EPUB/EPUB/images/…` —— zip 查不到条目，
+  **自家导出的 EPUB 在阅读器里图片全不显示**（外部阅读器不受影响，
+  因为其写入的相对路径本身正确）。native 与 legacy 两路共用同一函数，一处修复覆盖。
+  正是新增的 native JSON 映射测试断言出的失败暴露了它。
+
 ## [0.9.5] - 2026-09-26
 
 ### 导出 EPUB 模块重写
