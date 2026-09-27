@@ -22,3 +22,7 @@ android/**/build/
 *.jks
 *.keystore
 *.p12
+
+# Rust 构建产物与 CI 生成的 so（jniLibs 由 cargo-ndk 在构建期产出，不入库）
+rust/target/
+android/app/src/main/jniLibs/

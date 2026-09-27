@@ -46,7 +46,37 @@ jobs:
           # MiuiX 0.9.4 要求 compileSdk 37。注意 SDK 37 引入小版本号，
           # 公共仓库里没有 platforms;android-37，基础包是 platforms;android-37.0
           # （其 source.properties 为 ApiLevel=37.0 / IsBaseSdk=true）。
-          "$SDKMANAGER" 'platform-tools' 'platforms;android-37.0' 'build-tools;37.0.0'
+          # NDK：cargo-ndk 交叉编译 rust/epub-core（libepub_core.so）需要。
+          "$SDKMANAGER" 'platform-tools' 'platforms;android-37.0' 'build-tools;37.0.0' 'ndk;27.2.12479018'
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
+
+      - name: Cache Rust
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.cargo/bin
+            rust/target
+          key: rust-${{ runner.os }}-${{ hashFiles('rust/**/Cargo.toml') }}
+
+      - name: Rust tests
+        working-directory: rust
+        run: cargo test --locked || cargo test
+
+      - name: Build native epub core
+        working-directory: rust
+        # cargo-ndk 装一次后进缓存（~/.cargo/bin）；产物 so 拷进 jniLibs（不入库），
+        # gradle 自动打包；本地无 so 时 Kotlin 侧 available=false 走 legacy 回退。
+        run: |
+          command -v cargo-ndk >/dev/null || cargo install cargo-ndk --locked
+          cargo ndk -t arm64-v8a -t armv7-linux-androideabi -t x86_64-linux-android \
+            -o ../android/app/src/main/jniLibs \
+            build --release -p epub-core
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4

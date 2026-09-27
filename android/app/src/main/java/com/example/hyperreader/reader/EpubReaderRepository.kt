@@ -37,6 +37,30 @@ class EpubReaderRepository(private val context: Context? = null) {
     }
 
     internal fun parseArchive(bookId: String, file: File): ReaderBook {
+        // 1) 优先走 Rust 结构解析（快路径）：so 存在且 JSON 解析成功才用；
+        //    任何一步失败（so 缺失/结构异常/解码失败/限额拒绝）都回退 legacy ——
+        //    native 是加速路径，不是单点依赖。
+        if (EpubNative.available) {
+            val json = runCatching { EpubNative.parse(file.absolutePath) }.getOrNull()
+            if (json != null) {
+                runCatching { fromNativeJson(bookId, json, file) }.getOrNull()?.let { return it }
+            }
+        }
+        return parseArchiveLegacy(bookId, file)
+    }
+
+    /** native JSON → ReaderBook；HTML→blocks 复用同一套 Jsoup 逻辑，与 legacy 行为一致。 */
+    internal fun fromNativeJson(bookId: String, json: String, file: File): ReaderBook {
+        val parsed = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+            .decodeFromString(NativeEpubJson.serializer(), json)
+        if (parsed.chapters.isEmpty()) throw Wenku8Exception("EPUB 没有可阅读章节。", "EPUB_NO_CHAPTERS")
+        val chapters = parsed.chapters.map { chapter ->
+            ReaderChapter(chapter.id, chapter.title, chapter.href, parseBlocks(chapter.html, chapter.href, parsed.packageDir))
+        }
+        return ReaderBook(bookId, parsed.title, parsed.author, parsed.language, chapters, file.absolutePath)
+    }
+
+    private fun parseArchiveLegacy(bookId: String, file: File): ReaderBook {
         ZipFile(file).use { zip ->
             val entries = linkedMapOf<String, ByteArray>()
             var total = 0L

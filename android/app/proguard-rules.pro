@@ -22,6 +22,9 @@
 -keep class com.example.hyperreader.reader.OnlineReaderActivity { *; }
 -keep class com.example.hyperreader.service.ExportNotificationService { *; }
 
+# ---- Rust JNI 入口（libepub_core.so 按类名+方法名查找 native 符号）----
+-keep class com.example.hyperreader.reader.EpubNative { *; }
+
 # ---- 反射读取的 DTO ----
 # CoreSmokeTest 里的 transferModelTypesCannotHoldCredentialsOrCollections
 # 会遍历 declaredFields，字段被裁掉会让安全断言失去意义。

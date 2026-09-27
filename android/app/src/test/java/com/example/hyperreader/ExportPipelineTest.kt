@@ -7,6 +7,8 @@ import com.example.hyperreader.model.Chapter
 import com.example.hyperreader.model.ContentBlock
 import com.example.hyperreader.model.JobPhase
 import com.example.hyperreader.model.ParsedChapter
+import com.example.hyperreader.reader.EpubNative
+import com.example.hyperreader.reader.EpubReaderRepository
 import com.example.hyperreader.reader.ReaderBlock
 import com.example.hyperreader.reader.toReaderBlocks
 import com.example.hyperreader.service.ExportCache
@@ -172,5 +174,50 @@ class ExportPipelineTest {
         assertEquals("抓取章节", phaseLabel(JobPhase.fetching))
         assertEquals("下载插图", phaseLabel(JobPhase.images))
         assertEquals("打包 EPUB", phaseLabel(JobPhase.packaging))
+    }
+
+    @Test
+    fun nativeJsonMapsToReaderBook() {
+        // Rust 侧（libepub_core.so）返回的 JSON → ReaderBook 映射：
+        // HTML→blocks 复用 Jsoup parseBlocks，图片相对路径与 legacy 同一算法
+        val json = """
+            {"packageDir":"EPUB","title":"书名","author":"作者","language":"zh-CN","chapters":[
+              {"id":"c1","title":"第一章","href":"EPUB/text/ch1.xhtml",
+               "html":"<html><body><h1>第一章</h1><p>正文一段。</p><img src=\"../images/a.jpg\" alt=\"图1\"/></body></html>"},
+              {"id":"c2","title":"第二章","href":"EPUB/text/ch2.xhtml","html":"<html><body><p>正文二。</p></body></html>"}
+            ]}
+        """.trimIndent()
+        val book = EpubReaderRepository().fromNativeJson("local:test", json, File("/tmp/any.epub"))
+        assertEquals("书名", book.title)
+        assertEquals("作者", book.author)
+        assertEquals(2, book.chapters.size)
+        assertEquals("第一章", book.chapters[0].title)
+        val image = book.chapters[0].blocks.filterIsInstance<ReaderBlock.Image>().single()
+        // 图片路径：EPUB/text + ../images → 归一为 EPUB/images/a.jpg（与 legacy resolvePath 一致）
+        assertEquals("EPUB/images/a.jpg", image.path)
+        assertTrue(book.chapters[1].blocks.any { it is ReaderBlock.Paragraph })
+    }
+
+    @Test
+    fun parseArchiveFallsBackToLegacyWithoutNative() {
+        // JVM 单测环境没有 libepub_core.so → available=false → 必须走 legacy zip+Jsoup 且成功
+        assertFalse("JVM 单测不应加载 native so", EpubNative.available)
+        val dir = Files.createTempDirectory("epub-fallback").toFile()
+        val output = File(dir, "book.epub")
+        val book = Book(
+            title = "回退测试书",
+            sourceUrl = "https://www.wenku8.net/book/1.htm",
+            bookUrl = "https://www.wenku8.net/book/1.htm",
+        )
+        val chapters = listOf(
+            ParsedChapter("c1", "第一章", "卷一", 1, "https://www.wenku8.net/novel/2/1/1.html", blocks = listOf(ContentBlock.Text("正文甲。"))),
+            ParsedChapter("c2", "第二章", "卷一", 2, "https://www.wenku8.net/novel/2/1/2.html", blocks = listOf(ContentBlock.Text("正文乙。"))),
+        )
+        EpubBuilder().build(book, chapters, emptyList(), null, output)
+        val parsed = EpubReaderRepository().parseArchive("local:fb", output)
+        assertEquals("回退测试书", parsed.title)
+        assertEquals(2, parsed.chapters.size)
+        assertEquals("第一章", parsed.chapters[0].title)
+        assertTrue(parsed.chapters[0].blocks.any { it is ReaderBlock.Paragraph })
     }
 }
