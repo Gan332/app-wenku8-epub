@@ -277,7 +277,35 @@ Gradle；`build.gradle.kts` 读的是**文件路径**，不是 base64。
 
 `gh` 可执行文件：`D:\SW\gh\gh.exe`
 
-注意：脚本中某个 `gh api` 响应可能为空导致 `unexpected end of JSON input`，此时先检查远端 SHA 是否已更新，再决定是否重试，避免重复提交。
+**已有脚本**：`scripts/push-via-api.sh`，封装了上面 6 步，用法：
+
+```bash
+# 首次推送（LOCAL_BASE = 内容等价于远端 main 的本地提交）
+LOCAL_BASE=9bce89f bash scripts/push-via-api.sh
+
+# 之后每次增量推送，LOCAL_BASE 用「上一次推送时本地对应的那个提交」
+LOCAL_BASE=eee860e bash scripts/push-via-api.sh
+```
+
+### 6.1 API 推送会让远端 SHA 与本地分叉（最容易踩）
+
+API 创建的 commit **SHA 与本地不同**（内容等价，但换行可能被归一化成 CRLF）。
+后果：
+
+- `git merge-base --is-ancestor <remote> <local>` **会失败**，不能用它判祖先；
+- 不能用「远端 SHA == 本地 SHA」判断是否需要推送；
+- 必须以**远端 tree** 作 `base_tree`，并以一个「内容等价的本地提交」作 diff 基准，
+  否则会把 CRLF 差异回冲到本地内容上。
+
+脚本已内置这个策略（`LOCAL_BASE` 环境变量），增量推送只需改这一个值。
+
+### 6.2 其它已知坑
+
+- `gh api ... --input -` + stdin 管道、bash 进程替换 `<(...)` 在本机 Git Bash 下**不可用**
+  （`open /proc/<pid>/fd/63: cannot find the path`）。必须先把 JSON 写进临时文件再 `--input <文件>`。
+- Node `spawnSync` 调 `gh.exe` 会偶发 `EBUSY`（安全软件锁文件），**改用 bash 直接调用**更稳定。
+- 某个 `gh api` 响应可能为空导致 `unexpected end of JSON input`，此时先检查远端 SHA 是否已更新，
+  再决定是否重试，避免重复提交。
 
 ## 7. 发版流程
 
