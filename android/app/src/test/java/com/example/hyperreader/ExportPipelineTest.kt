@@ -216,8 +216,10 @@ class ExportPipelineTest {
         EpubBuilder().build(book, chapters, emptyList(), null, output)
         val parsed = EpubReaderRepository().parseArchive("local:fb", output)
         assertEquals("回退测试书", parsed.title)
-        assertEquals(2, parsed.chapters.size)
-        assertEquals("第一章", parsed.chapters[0].title)
-        assertTrue(parsed.chapters[0].blocks.any { it is ReaderBlock.Paragraph })
+        // spine 全量进章节（含扉页 title.xhtml）——与阅读器现状一致
+        assertEquals(3, parsed.chapters.size)
+        assertEquals("书籍信息", parsed.chapters[0].title)
+        assertEquals("第一章", parsed.chapters[1].title)
+        assertTrue(parsed.chapters[1].blocks.any { it is ReaderBlock.Paragraph })
     }
 }

@@ -55,7 +55,7 @@ class EpubReaderRepository(private val context: Context? = null) {
             .decodeFromString(NativeEpubJson.serializer(), json)
         if (parsed.chapters.isEmpty()) throw Wenku8Exception("EPUB 没有可阅读章节。", "EPUB_NO_CHAPTERS")
         val chapters = parsed.chapters.map { chapter ->
-            ReaderChapter(chapter.id, chapter.title, chapter.href, parseBlocks(chapter.html, chapter.href, parsed.packageDir))
+            ReaderChapter(chapter.id, chapter.title, chapter.href, parseBlocks(chapter.html, chapter.href))
         }
         return ReaderBook(bookId, parsed.title, parsed.author, parsed.language, chapters, file.absolutePath)
     }
@@ -91,7 +91,7 @@ class EpubReaderRepository(private val context: Context? = null) {
                 if (!item.mediaType.contains("html", true)) return@mapNotNull null
                 val chapterTitle = toc[item.href] ?: item.href.substringAfterLast('/')
                 val html = text(entries, item.href)
-                ReaderChapter(item.id, chapterTitle, item.href, parseBlocks(html, item.href, packageDir))
+                ReaderChapter(item.id, chapterTitle, item.href, parseBlocks(html, item.href))
             }
             if (chapters.isEmpty()) throw Wenku8Exception("EPUB 没有可阅读章节。", "EPUB_NO_CHAPTERS")
             return ReaderBook(bookId, title, author, language, chapters, file.absolutePath)
@@ -114,7 +114,7 @@ class EpubReaderRepository(private val context: Context? = null) {
         }
     }
 
-    private fun parseBlocks(html: String, chapterPath: String, packageDir: String): List<ReaderBlock> {
+    private fun parseBlocks(html: String, chapterPath: String): List<ReaderBlock> {
         val document = Jsoup.parse(html, chapterPath, Parser.htmlParser())
         document.select("script,style,noscript,iframe,object,embed").remove()
         val body = document.body() ?: return emptyList()
@@ -125,7 +125,7 @@ class EpubReaderRepository(private val context: Context? = null) {
                 "p" -> blocks += ReaderBlock.Paragraph(element.text().trim())
                 "img" -> {
                     val src = element.attr("src")
-                    if (src.isNotBlank() && !src.startsWith("data:")) blocks += ReaderBlock.Image(resolvePath(packageDir, resolveRelative(chapterPath, src)), element.attr("alt"))
+                    if (src.isNotBlank() && !src.startsWith("data:")) blocks += ReaderBlock.Image(resolveImage(chapterPath, src), element.attr("alt"))
                 }
                 else -> {
                     val text = element.text().trim()
@@ -138,6 +138,19 @@ class EpubReaderRepository(private val context: Context? = null) {
             if (text.isNotBlank()) blocks += ReaderBlock.Paragraph(text)
         }
         return blocks.filter { it !is ReaderBlock.Paragraph || it.text.isNotBlank() }
+    }
+
+    /**
+     * 图片条目路径：`chapterPath` 已是 zip 根相对全路径，src 相对它归一即可。
+     *
+     * 0.9.x 曾在 resolveRelative 之后**再**拼一次 packageDir，产出
+     * `EPUB/EPUB/images/…` 双重前缀 —— zip 查不到条目，
+     * 表现为「导出的 EPUB 在阅读器里图片不显示」。
+     */
+    private fun resolveImage(chapterPath: String, src: String): String {
+        if (src.startsWith("/")) return normalizePath(src)
+        val base = chapterPath.substringBeforeLast('/', "")
+        return normalizePath("$base/$src")
     }
 
     private fun text(entries: Map<String, ByteArray>, path: String): String = entries[normalizePath(path)]?.toString(Charsets.UTF_8)
@@ -160,11 +173,6 @@ class EpubReaderRepository(private val context: Context? = null) {
     private fun resolvePath(baseDir: String, href: String): String {
         if (href.startsWith("/")) return normalizePath(href)
         return normalizePath("$baseDir/$href")
-    }
-
-    private fun resolveRelative(chapterPath: String, href: String): String {
-        val base = chapterPath.substringBeforeLast('/', "")
-        return "$base/$href"
     }
 
     private fun readLimited(input: InputStream, maxBytes: Int): ByteArray {
