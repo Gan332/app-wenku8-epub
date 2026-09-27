@@ -25,9 +25,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
 import com.example.hyperreader.model.BookshelfEntry
@@ -126,10 +127,12 @@ fun BookshelfScreen(
                                 }
                             }
                             if (menuEntryId == entry.id) {
+                                // Popup(alignment, offset) 的 offset 是 IntOffset（像素），需按 density 换算
+                                val menuOffset = with(LocalDensity.current) { IntOffset(0, 120.dp.roundToPx()) }
                                 Popup(
                                     onDismissRequest = { menuEntryId = null },
                                     alignment = Alignment.TopEnd,
-                                    offset = DpOffset(0.dp, 120.dp),
+                                    offset = menuOffset,
                                 ) {
                                     BookEntryMenu(
                                         entry = entry,
