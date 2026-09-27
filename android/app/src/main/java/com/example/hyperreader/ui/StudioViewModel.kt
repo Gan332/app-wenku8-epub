@@ -86,6 +86,19 @@ data class StudioUiState(
     val localResults: List<CatalogEntry> = emptyList(),
     val settingsSection: SettingsSection = SettingsSection.OVERVIEW,
     val readerSettings: com.example.hyperreader.settings.ReaderSettings = com.example.hyperreader.settings.ReaderSettings(),
+    /**
+     * 探索页书籍详情（全屏独立页面）。
+     *
+     * 与创建流程的 [book]/[index] **完全分开**：这条链路只走公开 API
+     * （[com.example.hyperreader.core.ExploreDetailRepository]），不经过解析管线，
+     * 因此打开探索详情不会触碰 `CreateStep`、也不会改动创建流程里的半成品状态。
+     */
+    val exploreDetailId: String? = null,
+    val exploreDetail: com.example.hyperreader.core.ExploreBookDetail? = null,
+    /** 进入详情页时手头已有的字段（榜单/本地索引），用于接口回来前先渲染一屏。 */
+    val exploreDetailSeed: com.example.hyperreader.core.ExploreBookSeed? = null,
+    val exploreDetailLoading: Boolean = false,
+    val exploreDetailError: String? = null,
 )
 
 class StudioViewModel(application: Application) : AndroidViewModel(application) {
@@ -97,6 +110,8 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     private val readingStatsRepository = app.readingStatsRepository
     private val exploreRepository = app.exploreRepository
     private val catalogRepository = app.catalogRepository
+    /** 探索详情专用：只走公开 API，不经过解析管线。 */
+    private val exploreDetailRepository = app.exploreDetailRepository
     private val mutable = MutableStateFlow(StudioUiState())
     val state: StateFlow<StudioUiState> = mutable.asStateFlow()
     val appTheme = settingsRepository.appTheme
@@ -297,38 +312,87 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
     /**
-     * 探索页点书：**直接进详情页**，不再先落到 URL 输入页。
-     * SearchBook 已含标题/作者/封面/字数，先用它拼一份预览 Book 立刻渲染，
-     * 章节目录在后台补齐，详情页原地更新。
+     * 探索页点书：打开**独立的书籍详情页**。
+     *
+     * 刻意**不走** `parseSource()` / `CreateStep`：那条链路属于「创建导出」流程，
+     * 会做导出前置校验并吃满 1 秒/请求 的批量节流，点一下要等很久。
+     * 这里改由 [exploreDetailRepository] 直接调公开 API（`articleinfo.php` + 目录页），
+     * 交互档节流 + 内存缓存，且不改动创建流程的任何状态。
      */
     fun openSearchBook(book: SearchBook) {
-        val preview = Book(
+        val seed = com.example.hyperreader.core.ExploreBookSeed(
             id = book.id,
             title = book.title,
-            author = book.author.ifBlank { "未知作者" },
-            category = book.category.ifBlank { "轻小说" },
+            author = book.author,
+            category = book.category,
             status = book.status,
             updatedAt = book.updatedAt,
             wordCount = book.wordCount,
-            latestChapter = book.latestChapter,
             coverUrl = book.coverUrl,
             sourceUrl = book.sourceUrl,
-            bookUrl = book.sourceUrl,
         )
+        // 先进入详情页并置 loading：页面用 seed 立刻渲染出标题/作者，接口回来再补齐
         mutable.update {
             it.copy(
-                sourceUrl = book.sourceUrl,
-                tab = StudioTab.CREATE,
-                step = CreateStep.DETAIL,
-                book = preview,
-                index = null,
-                selectedIds = emptySet(),
-                busy = true,
-                message = null,
+                exploreDetailId = book.id,
+                exploreDetail = null,
+                exploreDetailLoading = true,
+                exploreDetailError = null,
+                exploreDetailSeed = seed,
             )
         }
-        parseSource()
+        loadExploreDetail(book.id, seed)
     }
+
+    private fun loadExploreDetail(bookId: String, seed: com.example.hyperreader.core.ExploreBookSeed? = null) {
+        viewModelScope.launch {
+            mutable.update { it.copy(exploreDetailLoading = true, exploreDetailError = null) }
+            runCatching { exploreDetailRepository.load(bookId, seed) }
+                .onSuccess { detail ->
+                    mutable.update { it.copy(exploreDetailLoading = false, exploreDetail = detail, exploreDetailError = detail.indexError) }
+                }
+                .onFailure { error ->
+                    mutable.update { it.copy(exploreDetailLoading = false, exploreDetailError = error.message ?: "详情加载失败。") }
+                }
+        }
+    }
+
+    /** 详情页「重试」：先清缓存再拉，避免拿到失败前的旧结果。 */
+    fun retryExploreDetail() {
+        val id = state.value.exploreDetailId ?: return
+        viewModelScope.launch {
+            exploreDetailRepository.invalidate(id)
+            loadExploreDetail(id, state.value.exploreDetailSeed)
+        }
+    }
+
+    fun closeExploreDetail() = mutable.update {
+        it.copy(exploreDetailId = null, exploreDetail = null, exploreDetailLoading = false, exploreDetailError = null, exploreDetailSeed = null)
+    }
+
+    /** 详情页「加入书架」（探索来源）。 */
+    fun addExploreDetailToShelf() {
+        val detail = state.value.exploreDetail ?: return
+        val book = detail.book
+        viewModelScope.launch {
+            bookshelfRepository.add(
+                BookshelfEntry(
+                    id = "wenku8:${book.id}",
+                    bookId = book.id.orEmpty(),
+                    title = book.title,
+                    author = book.author,
+                    source = BookshelfSource.WENKU8,
+                    sourceUrl = book.sourceUrl,
+                    coverUrl = book.coverUrl,
+                    chapterCount = detail.chapterCount,
+                    wordCount = book.wordCount,
+                )
+            )
+            mutable.update { it.copy(message = "已加入书架") }
+        }
+    }
+
+    fun isOnShelf(bookId: String): Boolean = state.value.bookshelf.any { it.bookId == bookId }
     fun setThemeMode(mode: com.example.hyperreader.settings.AppThemeMode) { viewModelScope.launch { settingsRepository.setThemeMode(mode) } }
     fun setDynamicColor(enabled: Boolean) { viewModelScope.launch { settingsRepository.setDynamicColor(enabled) } }
     fun setAccentColor(color: Int) { viewModelScope.launch { settingsRepository.setAccentColor(color) } }

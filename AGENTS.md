@@ -11,7 +11,7 @@
 
 当前主要发版对象是 **Android 原生应用**。Android 版本不需要 Node.js 服务，WebView 仅用于 wenku8 登录。
 
-当前版本：`0.10.0`（versionCode 16，见 `android/app/build.gradle.kts`，以该文件为准）
+当前版本：`0.11.0`（versionCode 18，见 `android/app/build.gradle.kts`，以该文件为准）
 包名：`com.example.hyperreader`（由 `com.wenku8.epubstudio` 于 0.9.0 重命名，非原地改名，升级需数据迁移）
 
 仓库地址：`https://github.com/Gan332/app-wenku8-epub`
@@ -147,7 +147,28 @@ android/app/src/main/java/com/example/hyperreader/
 - 打开未缓存书籍必须由用户点击「加载完整详情」后才请求
 - `CatalogRepository.ensureBook` / `expandAuthor` 不得在页面加载路径上自动调用
 
-### 4.6 封面加载
+### 4.6 探索详情 ≠ 创建导出（0.11.0 起）
+
+「看一眼书」和「导出这本书」是两条**互不相干**的链路，不要互相调用：
+
+| | 探索详情 | 创建导出 |
+| --- | --- | --- |
+| 入口 | 探索页点书 → `StudioViewModel.openSearchBook` | 粘贴 URL / 书架在线阅读 |
+| 数据 | `ExploreDetailRepository`（`articleinfo.php` + 目录页） | `ExportJobManager.parseSource` |
+| 节奏 | `HttpRateLimiter.Mode.INTERACTIVE` | `Mode.BATCH`（默认） |
+| 状态 | `StudioUiState.exploreDetail*` | `CreateStep` / `book` / `index` |
+| 产物 | `ExploreBookDetail`（展示用） | `Book` + `BookIndex`（选章导出） |
+
+硬约束：
+
+- 探索详情**不得**调用 `parseSource()`，也**不得**改动 `CreateStep` 相关状态
+- 探索详情走 `Wenku8HttpClient.fetchTextInteractive()`，批量路径继续用 `fetchText()`
+- 详情页目录页失败可降级（`ExploreBookDetail.indexError` 非空、`chapters` 为空），
+  不得因此整页报错
+- `HttpRateLimiter.Mode.INTERACTIVE` 只是「允许突刺」，**不降低批量节奏**：
+  6 秒滑动窗口内最多 6 次，超限自动退回 1 秒/请求
+
+### 4.7 封面加载
 
 自研 `ui/cover/CoverRepository`，**不引入 Coil/Glide**：第三方图片库会自建
 OkHttp 客户端，从而绕过 `Wenku8HttpClient` 的全局 1 秒限流与 429 退避。

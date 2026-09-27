@@ -4,9 +4,13 @@ import com.example.hyperreader.core.CatalogEntry
 import com.example.hyperreader.core.CatalogIndex
 import com.example.hyperreader.core.CatalogSearchField
 import com.example.hyperreader.core.CatalogStats
+import com.example.hyperreader.core.ExploreBookDetail
+import com.example.hyperreader.core.ExploreBookSeed
 import com.example.hyperreader.core.Wenku8Parser
 import com.example.hyperreader.core.Wenku8Url
 import com.example.hyperreader.core.Wenku8Urls
+import com.example.hyperreader.core.toBook
+import com.example.hyperreader.http.HttpRateLimiter
 import com.example.hyperreader.model.ReadingStats
 import com.example.hyperreader.reader.BackAction
 import com.example.hyperreader.reader.ReaderBlock
@@ -542,5 +546,135 @@ class CoreSmokeTest {
         } finally {
             directory.deleteRecursively()
         }
+    }
+
+    // ---- 探索详情与限流档位（0.10.1）----
+
+    @Test
+    fun interactiveModeIsFasterThanBatchButKeepsBatchPaceIntact() {
+        HttpRateLimiter.resetForTest()
+        val batch = HttpRateLimiter.batchIntervalForTest()
+        val interactive = HttpRateLimiter.interactiveIntervalForTest()
+        // 提速的本质：交互档单请求间隔显著小于批量档
+        assertTrue("交互档($interactive) 必须快于批量档($batch)", interactive < batch)
+        // 但不能快到「无节流」，仍要给源站留呼吸空间
+        assertTrue("交互档($interactive) 仍需保留节流", interactive > 0L)
+    }
+
+    @Test
+    fun interactiveBurstIsCappedThenFallsBackToBatchPace() {
+        HttpRateLimiter.resetForTest()
+        val window = HttpRateLimiter.interactiveWindowForTest()
+        val maxInWindow = HttpRateLimiter.interactiveMaxInWindowForTest()
+        val interactive = HttpRateLimiter.interactiveIntervalForTest()
+        // 窗口与次数上限必须是有限值，否则连续点击会把源站打穿
+        assertTrue(window > 0L)
+        assertTrue(maxInWindow in 1..32)
+        // 交互档不是「无限提速」：单窗口配额只够一两次点击，
+        // 远小于「窗口按交互间隔填满」的请求数，长期均值仍被批量档兜住
+        val interactiveIfUncapped = (window / interactive).toInt()
+        assertTrue("交互档($interactive ms) 若不限次会发 $interactiveIfUncapped 次请求，配额必须远小于它", maxInWindow < interactiveIfUncapped)
+        // 配额也不该小到「点一次就降级」
+        assertTrue(maxInWindow >= 2)
+    }
+
+    @Test
+    fun exploreDetailSeedIsConvertedToDisplayableBook() {
+        val entry = CatalogEntry(
+            id = "2835",
+            title = "境界的彼方",
+            author = "鸟居なごむ",
+            category = "轻小说",
+            status = "连载中",
+            wordCount = 1_234_567L,
+            updatedAt = "2026-09-27",
+            tags = listOf("校园", "奇幻"),
+            summary = "简介正文",
+            coverUrl = "https://www.wenku8.net/img/2835.jpg",
+            sourceUrl = "https://www.wenku8.net/book/2835.htm",
+        )
+        val book = entry.toBook()
+        assertEquals("2835", book.id)
+        assertEquals("境界的彼方", book.title)
+        assertEquals(1_234_567L, book.wordCount)
+        assertEquals(listOf("校园", "奇幻"), book.tags)
+    }
+
+    @Test
+    fun exploreDetailFallsBackToSeedWhenApiOmitsFields() {
+        // 接口只回了标题，作者/分类等字段缺失时必须用 seed 兜底，避免详情页空字段
+        val entry = CatalogEntry(
+            id = "9",
+            title = "只有标题",
+            sourceUrl = "https://www.wenku8.net/book/9.htm",
+        )
+        val seed = ExploreBookSeed(
+            id = "9",
+            title = "种子标题",
+            author = "种子作者",
+            category = "轻小说",
+            status = "完结",
+            updatedAt = "2026-01-01",
+            wordCount = 500_000L,
+            coverUrl = "https://www.wenku8.net/img/9.jpg",
+            sourceUrl = "https://www.wenku8.net/book/9.htm",
+        )
+        val book = entry.toBook(seed)
+        // 接口有值以接口为准
+        assertEquals("只有标题", book.title)
+        // 接口缺值回退 seed
+        assertEquals("种子作者", book.author)
+        assertEquals("轻小说", book.category)
+        assertEquals("完结", book.status)
+        assertEquals(500_000L, book.wordCount)
+        assertEquals("https://www.wenku8.net/img/9.jpg", book.coverUrl)
+    }
+
+    @Test
+    fun exploreDetailBookIsUsableEvenWhenIndexFails() {
+        // 目录页失败是可降级的：详情仍然可用，chapterCount 为 0，indexError 有值
+        val detail = ExploreBookDetail(
+            book = Book(
+                id = "1",
+                title = "书",
+                sourceUrl = "https://www.wenku8.net/book/1.htm",
+                bookUrl = "https://www.wenku8.net/book/1.htm",
+            ),
+            chapters = emptyList(),
+            indexError = "目录页请求超时",
+        )
+        assertEquals(0, detail.chapterCount)
+        assertEquals("目录页请求超时", detail.indexError)
+        assertEquals("书", detail.book.title)
+    }
+
+    @Test
+    fun exploreDetailChapterCountMirrorsParsedIndex() {
+        val chapters = listOf(
+            Chapter(id = "1", title = "第一章", url = "https://www.wenku8.net/novel/2/1/1.htm", order = 1),
+            Chapter(id = "2", title = "第二章", url = "https://www.wenku8.net/novel/2/1/2.htm", order = 2),
+            Chapter(id = "3", title = "第三章", url = "https://www.wenku8.net/novel/2/1/3.htm", order = 3),
+        )
+        val detail = ExploreBookDetail(
+            book = Book(
+                id = "1",
+                title = "书",
+                sourceUrl = "https://www.wenku8.net/book/1.htm",
+                bookUrl = "https://www.wenku8.net/book/1.htm",
+            ),
+            chapters = chapters,
+        )
+        assertEquals(3, detail.chapterCount)
+        assertEquals(null, detail.indexError)
+    }
+
+    @Test
+    fun indexUrlFallsBackToDefaultCategoryWhenCategoryMissing() {
+        assertEquals("https://www.wenku8.net/novel/2/2835/index.htm", Wenku8Urls.index("2835"))
+        assertEquals("https://www.wenku8.net/novel/3/2835/index.htm", Wenku8Urls.index("2835", "3"))
+        // 非数字脏值不能拼进 URL，退回默认分类
+        assertEquals("https://www.wenku8.net/novel/2/2835/index.htm", Wenku8Urls.index("2835", "abc"))
+        // ID 里的非数字字符必须被清掉
+        assertEquals("https://www.wenku8.net/novel/2/88/index.htm", Wenku8Urls.index("book-88"))
     }
 }

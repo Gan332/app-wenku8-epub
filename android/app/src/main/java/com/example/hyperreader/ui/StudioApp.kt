@@ -79,6 +79,7 @@ import com.example.hyperreader.R
 import com.example.hyperreader.Wenku8Application
 import com.example.hyperreader.auth.LoginActivity
 import com.example.hyperreader.reader.ReaderActivity
+import com.example.hyperreader.reader.onlineReaderIntent
 import com.example.hyperreader.ui.AppMiuixTheme
 import com.example.hyperreader.ui.BookDetailScreen
 import com.example.hyperreader.ui.BookshelfScreen
@@ -205,6 +206,7 @@ private fun StudioApp(
                     state.tab == StudioTab.BOOKSHELF -> "我的书架"
                     state.tab == StudioTab.EXPLORE -> "探索"
                     state.tab == StudioTab.SETTINGS -> settingsTitle
+                    state.exploreDetailId != null -> "书籍详情"
                     state.step == CreateStep.SOURCE -> "文库 EPUB 工坊"
                     state.step == CreateStep.DETAIL -> "书籍详情"
                     state.step == CreateStep.CHAPTERS -> "选择章节"
@@ -214,16 +216,50 @@ private fun StudioApp(
             )
         },
         bottomBar = {
-            NavigationBar {
-                NavigationBarItem(selected = state.tab == StudioTab.BOOKSHELF, onClick = { viewModel.setTab(StudioTab.BOOKSHELF) }, icon = MiuixIcons.Recent, label = "书架")
-                NavigationBarItem(selected = state.tab == StudioTab.EXPLORE, onClick = { viewModel.setTab(StudioTab.EXPLORE) }, icon = MiuixIcons.Search, label = "探索")
-                NavigationBarItem(selected = state.tab == StudioTab.CREATE, onClick = { viewModel.setTab(StudioTab.CREATE) }, icon = MiuixIcons.Add, label = "创建")
-                NavigationBarItem(selected = state.tab == StudioTab.SETTINGS, onClick = { viewModel.setTab(StudioTab.SETTINGS) }, icon = MiuixIcons.Settings, label = "设置")
+            // 探索详情是全屏独立页面：不显示底部导航，避免误触 tab 丢掉当前详情
+            if (state.exploreDetailId == null) {
+                NavigationBar {
+                    NavigationBarItem(selected = state.tab == StudioTab.BOOKSHELF, onClick = { viewModel.setTab(StudioTab.BOOKSHELF) }, icon = MiuixIcons.Recent, label = "书架")
+                    NavigationBarItem(selected = state.tab == StudioTab.EXPLORE, onClick = { viewModel.setTab(StudioTab.EXPLORE) }, icon = MiuixIcons.Search, label = "探索")
+                    NavigationBarItem(selected = state.tab == StudioTab.CREATE, onClick = { viewModel.setTab(StudioTab.CREATE) }, icon = MiuixIcons.Add, label = "创建")
+                    NavigationBarItem(selected = state.tab == StudioTab.SETTINGS, onClick = { viewModel.setTab(StudioTab.SETTINGS) }, icon = MiuixIcons.Settings, label = "设置")
+                }
             }
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).padding(horizontal = 18.dp)) {
+            // 探索详情优先接管整屏：与 tab 内容、创建流程步骤互斥
+            if (state.exploreDetailId != null) {
+                ExploreDetailScreen(
+                    seed = state.exploreDetailSeed,
+                    detail = state.exploreDetail,
+                    loading = state.exploreDetailLoading,
+                    error = state.exploreDetailError,
+                    onBack = viewModel::closeExploreDetail,
+                    onRetry = viewModel::retryExploreDetail,
+                    onAddToShelf = viewModel::addExploreDetailToShelf,
+                    onReadOnline = {
+                        val book = state.exploreDetail?.book ?: return@ExploreDetailScreen
+                        context.startActivity(
+                            onlineReaderIntent(
+                                context = context,
+                                bookId = book.id.orEmpty(),
+                                title = book.title,
+                                author = book.author,
+                            )
+                        )
+                    },
+                    onSameAuthor = { state.exploreDetail?.book?.id?.let(viewModel::expandAuthor) },
+                    onTagClick = { tag ->
+                        viewModel.setSearchField(SearchField.TITLE)
+                        viewModel.setSearchQuery(tag)
+                        viewModel.setTab(StudioTab.EXPLORE)
+                        viewModel.searchLocal()
+                    },
+                )
+                return@Column
+            }
             // 页面转场：tab 切换与创建流程步骤共用一套（横向滑入 + 淡入，MiuiX 缓动）
         val pageKey = when {
             state.tab == StudioTab.BOOKSHELF -> "bookshelf"

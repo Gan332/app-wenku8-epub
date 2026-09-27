@@ -20,6 +20,12 @@ class Wenku8Application : Application() {
     val readingStatsRepository: ReadingStatsRepository by lazy { ReadingStatsRepository(this) }
     val exploreRepository: ExploreRepository by lazy { ExploreRepository(Wenku8DataSource(jobManager.httpClient(), sessionStore)) }
     val catalogRepository: com.example.hyperreader.core.CatalogRepository by lazy { com.example.hyperreader.core.CatalogRepository(this) }
+
+    /**
+     * 探索页书籍详情：**只走公开 API**，与创建/导出的解析管线（[jobManager]）完全分开。
+     * 见 `ExploreDetailRepository` 的类注释。
+     */
+    val exploreDetailRepository: com.example.hyperreader.core.ExploreDetailRepository by lazy { com.example.hyperreader.core.ExploreDetailRepository(this) }
     val coverRepository: com.example.hyperreader.ui.cover.CoverRepository by lazy { com.example.hyperreader.ui.cover.CoverRepository(this) }
     val onlineReaderSource: com.example.hyperreader.reader.OnlineReaderSource by lazy { com.example.hyperreader.reader.OnlineReaderSource(File(filesDir, "online-cache"), jobManager.httpClient()) }
 }

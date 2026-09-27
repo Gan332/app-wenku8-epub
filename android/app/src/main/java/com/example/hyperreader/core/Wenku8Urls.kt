@@ -17,6 +17,21 @@ object Wenku8Urls {
 
     fun articleInfo(bookId: String): String = "$ARTICLE_INFO?id=${bookId.filter(Char::isDigit)}"
 
+    /**
+     * 目录页地址。`category` 是源站的分类号（如 `2`）。
+     *
+     * 偏好来自 `articleinfo.php` 解析出的 `directoryUrl`；拿不到时才用这个兜底
+     * （分类号缺失时按 `2` 轻小说 拼，源站会对错误分类重定向，重定向后仍能拿到目录）。
+     */
+    fun index(bookId: String, category: String? = null): String {
+        val id = bookId.filter(Char::isDigit)
+        val group = category?.filter(Char::isDigit)?.ifBlank { null } ?: DEFAULT_NOVEL_CATEGORY
+        return "$BASE/novel/$group/$id/index.htm"
+    }
+
+    /** wenku8 的轻小说分类号，绝大多数条目都在这里。 */
+    const val DEFAULT_NOVEL_CATEGORY = "2"
+
     fun search(keyword: String, field: SearchField): String {
         val encoded = runCatching { URLEncoder.encode(keyword.trim(), Charset.forName("GBK")) }.getOrElse { URLEncoder.encode(keyword.trim(), Charsets.UTF_8) }
         val type = if (field == SearchField.AUTHOR) "author" else "articlename"

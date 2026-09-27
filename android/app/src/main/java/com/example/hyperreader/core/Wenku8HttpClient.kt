@@ -33,6 +33,17 @@ class Wenku8HttpClient(private val cacheDirectory: File, sessionCookieJar: Cooki
         TextResource(decodeHtml(result.bytes, result.contentType), result.finalUrl, result.contentType)
     }
 
+    /**
+     * 用户按需请求（探索页、书籍详情）：走交互档节流，允许短时突刺。
+     *
+     * 只影响**节奏档位**，URL 白名单、内网拦截、429 退避、重试等边界完全一致。
+     * 批量抓取（导出、书目缓存）继续用 [fetchText]，保持 1 秒/请求。
+     */
+    suspend fun fetchTextInteractive(url: String, jobId: String, referer: String? = null): TextResource = withContext(Dispatchers.IO) {
+        val result = execute(url, jobId, 16 * 1024 * 1024, referer, HttpRateLimiter.Mode.INTERACTIVE)
+        TextResource(decodeHtml(result.bytes, result.contentType), result.finalUrl, result.contentType)
+    }
+
     suspend fun downloadImage(url: String, referer: String, jobId: String, name: String): DownloadedResource = withContext(Dispatchers.IO) {
         val result = execute(url, jobId, 30 * 1024 * 1024, referer)
         val type = detectImage(result.bytes, result.contentType) ?: throw Wenku8Exception("不支持的图片格式。", "UNSUPPORTED_IMAGE")
@@ -47,12 +58,18 @@ class Wenku8HttpClient(private val cacheDirectory: File, sessionCookieJar: Cooki
         activeCalls[jobId]?.toList()?.forEach(Call::cancel)
     }
 
-    private fun execute(rawUrl: String, jobId: String, maxBytes: Int, referer: String?): HttpResult {
+    private fun execute(
+        rawUrl: String,
+        jobId: String,
+        maxBytes: Int,
+        referer: String?,
+        mode: HttpRateLimiter.Mode = HttpRateLimiter.Mode.BATCH,
+    ): HttpResult {
         var current = validateUrl(rawUrl)
         var redirects = 0
         var attempt = 0
         while (redirects <= MAX_REDIRECTS) {
-            HttpRateLimiter.acquire()
+            HttpRateLimiter.acquire(mode)
             val request = Request.Builder()
                 .url(current)
                 .header("User-Agent", "Wenku8EPUBStudio-Android/0.2.0")
