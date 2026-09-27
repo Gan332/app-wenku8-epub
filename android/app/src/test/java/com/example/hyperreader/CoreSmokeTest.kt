@@ -20,6 +20,7 @@ import com.example.hyperreader.reader.readableTextOn
 import com.example.hyperreader.reader.relativeLuminance
 import com.example.hyperreader.reader.resolveBack
 import com.example.hyperreader.reader.resumeTargetIndex
+import com.example.hyperreader.reader.withPanel
 import com.example.hyperreader.service.missingImageWarnings
 import com.example.hyperreader.settings.ReadingProgress
 import com.example.hyperreader.settings.parseProgressMap
@@ -291,6 +292,44 @@ class CoreSmokeTest {
         assertEquals(BackAction.EXIT, afterShow.resolveBack())
         // 面板关闭回到「菜单栏可见」，仍然退出而不是再呼出一次
         assertEquals(BackAction.EXIT, afterShow.copy(showSettings = false).resolveBack())
+    }
+
+    @Test
+    fun panelsAreMutuallyExclusiveSoTheirOverlayWindowsCannotStack() {
+        // 从初始态打开设置：目录必须被关掉，且菜单栏保持可见
+        val settings = ReaderUiState().withPanel(showSettings = true)
+        assertTrue(settings.showSettings)
+        assertFalse(settings.showToc)
+        assertTrue(settings.controlsShown())
+
+        // 从目录态打开设置：目录必须关掉 —— 这正是「关掉目录再点设置没反应」的根因
+        val switched = ReaderUiState(showToc = true, controlsVisible = true).withPanel(showSettings = true)
+        assertTrue(switched.showSettings)
+        assertFalse(switched.showToc)
+
+        // 反向同理
+        val toToc = ReaderUiState(showSettings = true, controlsVisible = true).withPanel(showToc = true)
+        assertTrue(toToc.showToc)
+        assertFalse(toToc.showSettings)
+
+        // 关闭某个面板不得把另一个打开，也不得改变菜单栏显隐
+        val closed = ReaderUiState(showToc = true, controlsVisible = true).withPanel(showToc = false)
+        assertFalse(closed.showToc)
+        assertFalse(closed.showSettings)
+        assertTrue(closed.controlsShown())
+
+        // 关闭不改变其它字段：互斥只在「打开」方向发力
+        val onlyClose = ReaderUiState(showSettings = true, controlsVisible = false).withPanel(showToc = false)
+        assertTrue(onlyClose.showSettings)
+        assertFalse(onlyClose.controlsShown())
+    }
+
+    @Test
+    fun resolveBackStillClosesThePanelAfterMutualExclusionSwitchedThem() {
+        // 互斥切换后返回键仍必须先关当前面板，不能直接退出
+        val switched = ReaderUiState(showToc = true, controlsVisible = true).withPanel(showSettings = true)
+        assertEquals(BackAction.CLOSE_SETTINGS, switched.resolveBack())
+        assertEquals(BackAction.CLOSE_TOC, ReaderUiState(showToc = true, controlsVisible = true).resolveBack())
     }
 
     @Test

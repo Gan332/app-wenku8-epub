@@ -154,8 +154,9 @@ class OnlineReaderViewModel(application: Application) : AndroidViewModel(applica
     override fun toggleControls() = mutable.update { it.copy(controlsVisible = !it.controlsVisible) }
 
     override fun setImmersive(value: Boolean) = mutable.update { it.copy(isImmersive = value, controlsVisible = !value) }
-    override fun showSettings(show: Boolean) = mutable.update { it.copy(showSettings = show, controlsVisible = true) }
-    override fun showToc(show: Boolean) = mutable.update { it.copy(showToc = show, controlsVisible = true) }
+    // 与 ReaderViewModel 一致：面板开合互斥，避免两个 OverlayBottomSheet 的窗口互相叠压
+    override fun showSettings(show: Boolean) = mutable.update { it.withPanel(showSettings = show) }
+    override fun showToc(show: Boolean) = mutable.update { it.withPanel(showToc = show) }
     override fun closeOverlays() = mutable.update { it.copy(showSettings = false, showToc = false) }
 
     // ReaderActions 声明返回 Unit，因此这里必须用块体；表达式体会把 launch 的 Job 暴露成返回类型

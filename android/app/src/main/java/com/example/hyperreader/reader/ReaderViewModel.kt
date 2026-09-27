@@ -62,6 +62,26 @@ fun ReaderUiState.resolveBack(): BackAction = when {
 }
 
 /**
+ * 打开/关闭目录或设置面板，并保证两个面板**互斥**。
+ *
+ * 为什么必须互斥：MiuiX 的 `OverlayBottomSheet` 在根 `Scaffold` 的 popup 宿主里各占一个
+ * `fillMaxSize` 窗口，而 `DialogEntry` 的 `onDispose` **不会**移除仍在显示态
+ * （`showState.value == true`）的条目 —— 关闭动画期间旧窗口依然在命中测试图里。
+ * 两个面板同时为真时后开的那层会盖住前一层，关掉一层后遗留的「关闭中」窗口
+ * 又会挡住另一层，用户看到的就是「关掉目录再点设置没反应」。
+ *
+ * 调用点本来就是二选一（按钮打开其中一个、dismiss 关闭其中一个），
+ * 因此这里把另一个显式关掉：语义等价，渲染不再打架。
+ */
+fun ReaderUiState.withPanel(showSettings: Boolean? = null, showToc: Boolean? = null): ReaderUiState = when {
+    showSettings == true -> copy(showSettings = true, showToc = false, controlsVisible = true)
+    showToc == true -> copy(showToc = true, showSettings = false, controlsVisible = true)
+    showSettings == false -> copy(showSettings = false)
+    showToc == false -> copy(showToc = false)
+    else -> this
+}
+
+/**
  * 阅读界面用到的**纯 UI 回调**。
  *
  * EPUB（`ReaderViewModel`）与在线（`OnlineReaderViewModel`）各自持有状态，但共用同一份渲染界面，
@@ -143,8 +163,17 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application),
      */
     override fun toggleControls() = mutable.update { logReaderEvent("vm.toggleControls -> ${!it.controlsVisible}"); it.copy(controlsVisible = !it.controlsVisible) }
     override fun setImmersive(value: Boolean) = mutable.update { it.copy(isImmersive = value, controlsVisible = !value) }
-    override fun showSettings(show: Boolean) = mutable.update { logReaderEvent("vm.showSettings($show)"); it.copy(showSettings = show, controlsVisible = true) }
-    override fun showToc(show: Boolean) = mutable.update { logReaderEvent("vm.showToc($show)"); it.copy(showToc = show, controlsVisible = true) }
+    /**
+     * 面板开合互斥：见 [withPanel]。渲染层与状态层同时防一手，缺一不可。
+     */
+    override fun showSettings(show: Boolean) = mutable.update {
+        logReaderEvent("vm.showSettings($show)")
+        it.withPanel(showSettings = show)
+    }
+    override fun showToc(show: Boolean) = mutable.update {
+        logReaderEvent("vm.showToc($show)")
+        it.withPanel(showToc = show)
+    }
     override fun closeOverlays() = mutable.update { it.copy(showSettings = false, showToc = false) }
 
     override fun updateFontSize(value: Float) { viewModelScope.launch { settingsRepository.setReaderFontSize(value); refreshSettings() } }

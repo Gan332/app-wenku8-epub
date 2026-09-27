@@ -17,7 +17,10 @@ import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -137,11 +140,31 @@ internal fun logReaderState(tag: String, state: ReaderUiState) {
  * 而当年吞掉点击的空 `detectTapGestures` 恰好挂在 LazyColumn 节点，
  * 那才是这个栈里被验证生效的层级。
  *
- * 多层挂载是安全的：手势从子节点向父节点分发，先触发的一层会消费掉该次点击，
- * 其余层自动取消 —— 一次点击只 toggle 一次。父层检测保留用于边距/加载/错误区域。
+ * **必须忽略已消费的按压**：Compose 的指针事件在同一层级（同 z-index）会分发给
+ * 所有命中节点，消费（`consume()`）只标记状态、**不阻止分发**；节点想「让位」必须
+ * 自己检查 `isConsumed`。而 `detectTapGestures` 的 `onTap` 是**无条件**触发的
+ * （`waitForUpOrCancellation` 不因变化已被消费而返回 null）。
+ *
+ * 后果就是菜单栏按钮点不动：`Scaffold` 把 popup 宿主放在**最上层**、并按
+ * **非零最小约束**测量，于是面板（或关闭中的面板）的整屏 scrim 与顶/底栏是**同级同尺寸**
+ * 的命中节点 —— 它的 `consume()` 拦不住本例的 `onTap`，一次点击既激活按钮、
+ * 也触发 `toggleControls()` 把菜单栏收起来，看起来就是「按了没反应」。
+ * 加 `isConsumed` 守卫后，正文让位给同一层级上真正处理点击的兄弟节点；
+ * 内容区没有兄弟处理时，点击依然照常切换菜单栏。
  */
 private fun Modifier.readerTapToToggle(actions: ReaderActions): Modifier =
-    pointerInput(actions) { detectTapGestures { actions.toggleControls() } }
+    pointerInput(actions) {
+        awaitEachGesture {
+            // 按下即记录消费状态：必须先于消费传递看清「有没有别人要这次按压」
+            val down = awaitFirstDown(requireUnconsumed = false)
+            val claimedBySibling = down.isConsumed
+            var up = waitForUpOrCancellation()
+            if (up != null) {
+                if (!claimedBySibling) actions.toggleControls()
+                up.consume()
+            }
+        }
+    }
 
 /**
  * EPUB 阅读界面。**签名保持不变**，实现委托给 [ReaderScreenCore]。

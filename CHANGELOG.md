@@ -2,6 +2,40 @@
 
 本项目遵循语义化版本。
 
+## [0.10.1] - 2026-09-27
+
+### 修复
+
+- **阅读器菜单栏「目录」「设置」按钮点击无响应（0.9.1 起遗留，三轮静态分析未定位）**。
+  根因是 Compose 指针事件的同一层级分发语义与 `detectTapGestures` 的消费忽略：
+
+  - `Scaffold` 把 popup 宿主放在**最上层**（`place` 顺序在 topBar/bottomBar 之后），
+    并在测量时把 `constraints.copy(minWidth = 0, minHeight = 0)` 交给它 ——
+    **保留非零最小约束**，因此 `MiuixPopupHost` 一旦被组合，其 `fillMaxSize` Box
+    就被撑到全屏尺寸，成为覆盖顶/底栏的命中节点。
+  - 目录/设置面板的整屏 scrim 与面板的顶/底栏是**同级同尺寸**（均为全屏）的命中节点；
+    Compose 在同一层级会把事件分发给**所有**命中节点，`consume()` 只标记状态、
+    **不阻止分发**，节点必须自己检查 `isConsumed` 才「让位」。
+  - `detectTapGestures` 的 `onTap` 是**无条件**触发的（`waitForUpOrCancellation`
+    不因变化已被消费而返回 null）。于是点「目录」时，正文的 `onTap` 也照常执行，
+    一次点击既打开面板、又 `toggleControls()` 把菜单栏收起来 —— 观感就是「点了没反应」。
+
+  修复：`readerTapToToggle` 改用 `awaitEachGesture` + `awaitFirstDown`，
+  **按下瞬间**记录 `isConsumed`，被同层兄弟节点（按钮、面板）认领的按压不再切换菜单栏；
+  无人认领时行为不变（点正文照常呼出/收起）。
+
+- **关闭一个面板后立即打开另一个面板无效**。MiuiX `DialogEntry` 的 `onDispose`
+  **不会**移除仍在显示态的条目，关闭动画期间旧面板窗口留在命中测试图里，
+  会压住后开的面板。新增纯函数 `ReaderUiState.withPanel()`，让目录与设置**互斥**：
+  打开其一即关闭另一个（EPUB 与在线阅读两侧同步）。
+
+### 测试
+
+- 新增 `CoreSmokeTest.panelsAreMutuallyExclusiveSoTheirOverlayWindowsCannotStack`
+  与 `resolveBackStillClosesThePanelAfterMutualExclusionSwitchedThem`。
+- 0.9.4 引入的 `ReaderTrace` 交互埋点继续保留：本问题属「不崩溃的交互缺陷」，
+  真机验证时用 `adb logcat -s ReaderTrace` 可直接确认事件断在哪一层。
+
 ## [0.10.0] - 2026-09-27
 
 ### MiuiX 动效与组件全面化
