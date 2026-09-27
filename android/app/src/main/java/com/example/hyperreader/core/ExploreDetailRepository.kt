@@ -121,16 +121,21 @@ data class ExploreBookDetail(
 }
 
 /** [CatalogEntry] → 页面用 [Book]；接口缺字段时用 [fallback] 兜底。 */
-internal fun CatalogEntry.toBook(fallback: ExploreBookSeed? = null): Book = Book(
-    id = id,
-    title = title.ifBlank { fallback?.title.orEmpty() },
-    author = author.ifBlank { fallback?.author.orEmpty() }.ifBlank { "未知作者" },
-    category = category.ifBlank { fallback?.category.orEmpty() }.ifBlank { "轻小说" },
-    status = status.ifBlank { fallback?.status.orEmpty() },
-    updatedAt = updatedAt.ifBlank { fallback?.updatedAt.orEmpty() },
-    wordCount = wordCount ?: fallback?.wordCount,
-    coverUrl = coverUrl ?: fallback?.coverUrl,
-    summary = summary,
-    tags = tags,
-    sourceUrl = sourceUrl.ifBlank { fallback?.sourceUrl.orEmpty() },
-)
+internal fun CatalogEntry.toBook(fallback: ExploreBookSeed? = null): Book {
+    val source = sourceUrl.ifBlank { fallback?.sourceUrl.orEmpty() }
+    return Book(
+        id = id,
+        title = title.ifBlank { fallback?.title.orEmpty() },
+        author = author.ifBlank { fallback?.author.orEmpty() }.ifBlank { "未知作者" },
+        category = category.ifBlank { fallback?.category.orEmpty() }.ifBlank { "轻小说" },
+        status = status.ifBlank { fallback?.status.orEmpty() },
+        updatedAt = updatedAt.ifBlank { fallback?.updatedAt.orEmpty() },
+        wordCount = wordCount ?: fallback?.wordCount,
+        coverUrl = coverUrl ?: fallback?.coverUrl,
+        summary = summary,
+        tags = tags,
+        sourceUrl = source,
+        // Book.bookUrl 是必填：详情条目本身没有单独的书页地址，用同源 URL 代替
+        bookUrl = source,
+    )
+}
