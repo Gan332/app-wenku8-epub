@@ -9,12 +9,17 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.SearchBar
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.TextField
@@ -40,24 +45,36 @@ fun SearchScreen(state: StudioUiState, viewModel: StudioViewModel, onLogin: () -
             TextButton(text = "按书名", onClick = { viewModel.setSearchField(SearchField.TITLE) })
             TextButton(text = "按作者", onClick = { viewModel.setSearchField(SearchField.AUTHOR) })
         }
-        TextField(
-            value = state.searchQuery,
-            onValueChange = viewModel::setSearchQuery,
-            label = if (state.searchField == SearchField.TITLE) "搜索书名" else "搜索作者",
-            useLabelAsPlaceholder = true,
+        // MiuiX SearchBar 容器：输入框常驻、历史词作为展开内容。
+        // 初始展开 = 与旧布局等价（历史词常驻），即使不触发收起也不产生回归。
+        var searchExpanded by remember { mutableStateOf(true) }
+        SearchBar(
+            inputField = {
+                TextField(
+                    value = state.searchQuery,
+                    onValueChange = viewModel::setSearchQuery,
+                    label = if (state.searchField == SearchField.TITLE) "搜索书名" else "搜索作者",
+                    useLabelAsPlaceholder = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            },
+            expanded = searchExpanded,
+            onExpandedChange = { searchExpanded = it },
             modifier = Modifier.fillMaxWidth(),
+            content = {
+                if (state.searchHistory.isNotEmpty()) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("最近搜索", fontSize = 13.sp, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f))
+                        TextButton(text = "清空", onClick = viewModel::clearSearchHistory)
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        state.searchHistory.take(5).forEach { keyword -> TextButton(text = keyword, onClick = { viewModel.setSearchQuery(keyword) }) }
+                    }
+                }
+            },
         )
         Button(onClick = viewModel::searchBooks, enabled = !state.searchBusy && state.searchQuery.isNotBlank(), modifier = Modifier.fillMaxWidth()) {
             Text(if (state.searchBusy) "搜索中…" else "搜索")
-        }
-        if (state.searchHistory.isNotEmpty()) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("最近搜索", fontSize = 13.sp, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f))
-                TextButton(text = "清空", onClick = viewModel::clearSearchHistory)
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                state.searchHistory.take(5).forEach { keyword -> TextButton(text = keyword, onClick = { viewModel.setSearchQuery(keyword) }) }
-            }
         }
         state.searchMessage?.let { MessageCard(it) }
         if (state.searchResults.isEmpty() && !state.searchBusy) {

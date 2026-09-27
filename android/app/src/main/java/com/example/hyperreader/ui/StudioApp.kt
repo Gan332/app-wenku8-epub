@@ -28,6 +28,7 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -56,6 +57,8 @@ import top.yukonga.miuix.kmp.basic.LinearProgressIndicator
 import top.yukonga.miuix.kmp.basic.NavigationBar
 import top.yukonga.miuix.kmp.basic.NavigationBarItem
 import top.yukonga.miuix.kmp.basic.Scaffold
+import top.yukonga.miuix.kmp.basic.SnackbarHost
+import top.yukonga.miuix.kmp.basic.SnackbarHostState
 import top.yukonga.miuix.kmp.basic.Switch
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
@@ -186,6 +189,15 @@ private fun StudioApp(
         SettingsSection.CONFIG -> "配置导入导出"
         SettingsSection.ABOUT -> "关于"
     }
+    // 根消息走 Snackbar（可滑走、自动消失），替代源站页的内联错误卡
+    val snackbarHostState = remember { SnackbarHostState() }
+    LaunchedEffect(state.message) {
+        val msg = state.message
+        if (msg != null) {
+            snackbarHostState.showSnackbar(msg)
+            viewModel.clearMessage()
+        }
+    }
     Scaffold(
         topBar = {
             TopAppBar(
@@ -209,6 +221,7 @@ private fun StudioApp(
                 NavigationBarItem(selected = state.tab == StudioTab.SETTINGS, onClick = { viewModel.setTab(StudioTab.SETTINGS) }, icon = MiuixIcons.Settings, label = "设置")
             }
         },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).padding(horizontal = 18.dp)) {
             // 页面转场：tab 切换与创建流程步骤共用一套（横向滑入 + 淡入，MiuiX 缓动）
@@ -308,7 +321,6 @@ private fun SourceScreen(state: StudioUiState, viewModel: StudioViewModel) {
                 TextButton(text = "填入示例", onClick = { viewModel.setSource("https://www.wenku8.net/novel/2/2835/index.htm") }, modifier = Modifier.align(Alignment.End))
             }
         }
-        state.message?.let { MessageCard(it) }
         Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(16.dp)) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("导出内容", fontWeight = FontWeight.Bold)

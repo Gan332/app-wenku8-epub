@@ -4,12 +4,14 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -25,20 +27,28 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Popup
 import com.example.hyperreader.model.BookshelfEntry
 import com.example.hyperreader.model.BookshelfSource
+import com.example.hyperreader.reader.onlineReaderIntent
 import com.example.hyperreader.settings.ReadingProgress
 import com.example.hyperreader.ui.cover.CoverImage
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.Badge
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.HorizontalDivider
+import top.yukonga.miuix.kmp.basic.Icon
+import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.VerticalScrollBar
 import top.yukonga.miuix.kmp.basic.rememberScrollBarAdapter
+import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.More
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 @Composable
@@ -50,7 +60,9 @@ fun BookshelfScreen(
     onOpenRemote: (BookshelfEntry) -> Unit,
 ) {
     val showHistory = state.showJobHistory
-    var activeEntry by remember { mutableStateOf<BookshelfEntry?>(null) }
+    // 「更多」弹出菜单的锚定条目 id（null = 关闭）。
+    // 交互：点卡片主体直接打开书，行尾 More 弹操作菜单（替换旧的全屏操作弹窗）。
+    var menuEntryId by remember { mutableStateOf<String?>(null) }
     // 阅读断点（第 x 章 · 第 y 段）：reader_progress_ 前缀键的全量视图
     val readingProgress by viewModel.readingProgress.collectAsStateWithLifecycle(initialValue = emptyMap())
     // 数据变化时刷新「N 分钟前」的基准时刻，避免长开应用后相对时间停在启动瞬间
@@ -97,7 +109,38 @@ fun BookshelfScreen(
             Box(Modifier.fillMaxWidth()) {
                 LazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(state.bookshelf, key = { it.id }) { entry ->
-                        BookshelfCard(entry, readingProgress[entry.bookId], now, modifier = Modifier.animateItem()) { activeEntry = it }
+                        Box {
+                            BookshelfCard(
+                                entry,
+                                readingProgress[entry.bookId],
+                                now,
+                                modifier = Modifier.animateItem(),
+                                onMore = { menuEntryId = entry.id },
+                            ) {
+                                // 卡片主体直接打开：本地书进阅读器并记阅读，远程书进详情页
+                                if (entry.localUri != null) {
+                                    viewModel.markShelfRead(entry.id)
+                                    onOpenLocal(entry)
+                                } else {
+                                    onOpenRemote(entry)
+                                }
+                            }
+                            if (menuEntryId == entry.id) {
+                                Popup(
+                                    onDismissRequest = { menuEntryId = null },
+                                    alignment = Alignment.TopEnd,
+                                    offset = DpOffset(0.dp, 120.dp),
+                                ) {
+                                    BookEntryMenu(
+                                        entry = entry,
+                                        viewModel = viewModel,
+                                        onOpenLocal = { onOpenLocal(it); menuEntryId = null },
+                                        onOpenRemote = { onOpenRemote(it); menuEntryId = null },
+                                        onDismiss = { menuEntryId = null },
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
                 VerticalScrollBar(
@@ -107,48 +150,6 @@ fun BookshelfScreen(
             }
         }
     }
-
-    activeEntry?.let { entry ->
-        val context = LocalContext.current
-        BookActionsDialog(
-            entry = entry,
-            onDismiss = { activeEntry = null },
-            onRead = {
-                viewModel.markShelfRead(entry.id)
-                onOpenLocal(entry)
-                activeEntry = null
-            },
-            onReadOnline = {
-                context.startActivity(
-                    com.example.hyperreader.reader.onlineReaderIntent(
-                        context = context,
-                        bookId = entry.bookId,
-                        title = entry.title,
-                        author = entry.author,
-                        bookshelfId = entry.id,
-                    ),
-                )
-                viewModel.markShelfRead(entry.id)
-                activeEntry = null
-            },
-            onOpenRemote = {
-                onOpenRemote(entry)
-                activeEntry = null
-            },
-            onTogglePin = {
-                viewModel.setPinned(entry.id, !entry.isPinned)
-                activeEntry = null
-            },
-            onExpandAuthor = {
-                viewModel.expandAuthor(entry.bookId)
-                activeEntry = null
-            },
-            onRemove = {
-                viewModel.removeFromShelf(entry.id)
-                activeEntry = null
-            },
-        )
-    }
 }
 
 @Composable
@@ -157,6 +158,7 @@ private fun BookshelfCard(
     resume: ReadingProgress?,
     now: Long,
     modifier: Modifier = Modifier,
+    onMore: () -> Unit,
     onOpen: (BookshelfEntry) -> Unit,
 ) {
     Card(
@@ -198,6 +200,63 @@ private fun BookshelfCard(
                     )
                 }
             }
+            IconButton(onClick = onMore, modifier = Modifier.size(TOUCH_MIN.dp)) {
+                Icon(MiuixIcons.More, contentDescription = "更多")
+            }
+        }
+    }
+}
+
+/** 触摸目标下限（与阅读器约定一致）。 */
+private const val TOUCH_MIN = 48
+
+/**
+ * 书架条目「更多」操作菜单（Popup 锚定卡片右下，全部 MiuiX 组件）。
+ * 按书籍来源分组：本地 EPUB 只有打开类操作，Wenku8 书多出详情/在线/同作者。
+ */
+@Composable
+private fun BookEntryMenu(
+    entry: BookshelfEntry,
+    viewModel: StudioViewModel,
+    onOpenLocal: (BookshelfEntry) -> Unit,
+    onOpenRemote: (BookshelfEntry) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val context = LocalContext.current
+    fun act(block: () -> Unit) {
+        block()
+        onDismiss()
+    }
+    Card(insideMargin = PaddingValues(vertical = 4.dp)) {
+        Column(Modifier.width(IntrinsicSize.Min)) {
+            if (entry.localUri != null) {
+                BasicComponent(title = "打开阅读", onClick = { act { viewModel.markShelfRead(entry.id); onOpenLocal(entry) } })
+            } else {
+                BasicComponent(title = "查看详情", onClick = { act { onOpenRemote(entry) } })
+                BasicComponent(
+                    title = "在线阅读",
+                    onClick = {
+                        act {
+                            context.startActivity(
+                                onlineReaderIntent(
+                                    context = context,
+                                    bookId = entry.bookId,
+                                    title = entry.title,
+                                    author = entry.author,
+                                    bookshelfId = entry.id,
+                                ),
+                            )
+                            viewModel.markShelfRead(entry.id)
+                        }
+                    },
+                )
+                BasicComponent(title = "同作者作品", onClick = { act { viewModel.expandAuthor(entry.bookId) } })
+            }
+            BasicComponent(
+                title = if (entry.isPinned) "取消置顶" else "置顶",
+                onClick = { act { viewModel.setPinned(entry.id, !entry.isPinned) } },
+            )
+            BasicComponent(title = "移出书架", onClick = { act { viewModel.removeFromShelf(entry.id) } })
         }
     }
 }
