@@ -199,7 +199,8 @@ fn toc_titles_from_ncx(ncx: &str, package_dir: &str, out: &mut HashMap<String, S
 
 fn normalize(path: &str) -> String {
     let mut out: Vec<&str> = Vec::new();
-    for part in path.replace('\\', "/").split('/') {
+    let unified = path.replace('\\', "/");
+    for part in unified.split('/') {
         match part {
             "" | "." => {}
             ".." => {
@@ -240,7 +241,7 @@ fn read_entry(zip: &mut ZipArchive<File>, name: &str, budget: &mut usize) -> Res
         return Err(format!("entry too large: {name}"));
     }
     *budget += size;
-    if budget > &MAX_TOTAL_BYTES {
+    if *budget > MAX_TOTAL_BYTES {
         return Err("uncompressed epub exceeds limit".into());
     }
     let mut buf = Vec::with_capacity(size);

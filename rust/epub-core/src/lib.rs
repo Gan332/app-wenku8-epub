@@ -18,7 +18,7 @@ use jni::JNIEnv;
 /// JNI：`com.example.hyperreader.reader.EpubNative.parse(path): String?`
 #[no_mangle]
 pub extern "system" fn Java_com_example_hyperreader_reader_EpubNative_parse(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _class: JClass,
     path: JString,
 ) -> jni::sys::jstring {
