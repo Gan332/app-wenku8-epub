@@ -20,6 +20,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -39,6 +45,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import top.yukonga.miuix.kmp.anim.DecelerateEasing
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.BreadcrumbBar
 import top.yukonga.miuix.kmp.basic.BreadcrumbItem
@@ -204,6 +211,23 @@ private fun StudioApp(
         },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).padding(horizontal = 18.dp)) {
+            // 页面转场：tab 切换与创建流程步骤共用一套（横向滑入 + 淡入，MiuiX 缓动）
+        val pageKey = when {
+            state.tab == StudioTab.BOOKSHELF -> "bookshelf"
+            state.tab == StudioTab.EXPLORE -> "explore"
+            state.tab == StudioTab.SETTINGS -> "settings"
+            else -> "create:${state.step}"
+        }
+        AnimatedContent(
+            targetState = pageKey,
+            transitionSpec = {
+                val direction = if (targetState > initialState) 1 else -1
+                (fadeIn(tween(220, easing = DecelerateEasing())) +
+                    slideInHorizontally(tween(300, easing = DecelerateEasing())) { direction * it / 6 })
+                    .togetherWith(fadeOut(tween(140, easing = DecelerateEasing())))
+            },
+            label = "pageTransition",
+        ) { _ ->
             when {
                 state.tab == StudioTab.BOOKSHELF -> BookshelfScreen(state, viewModel, onImportEpub, onOpenLocal = { entry ->
                     entry.localUri?.let { uri ->
@@ -240,6 +264,7 @@ private fun StudioApp(
                 state.step == CreateStep.EXPORT -> ExportScreen(state, viewModel)
                 state.step == CreateStep.PROGRESS -> ProgressScreen(state, viewModel)
             }
+        }
 
             if (state.tab == StudioTab.CREATE) {
                 val steps = listOf(

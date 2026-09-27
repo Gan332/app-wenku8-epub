@@ -64,7 +64,7 @@ fun BookshelfScreen(
             if (state.jobs.isEmpty()) Text("还没有导出任务。", color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f), fontSize = 14.sp)
             else LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(state.jobs, key = { it.id }) { job ->
-                    Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(14.dp)) {
+                    Card(Modifier.fillMaxWidth().animateItem(), insideMargin = PaddingValues(14.dp)) {
                         Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
                             Text(job.book.title, fontWeight = FontWeight.Bold, maxLines = 2)
                             Text("${job.chapterCount} 章 · ${job.progress.percent}% · ${job.createdAt.take(10)}", color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f), fontSize = 12.sp)
@@ -97,7 +97,7 @@ fun BookshelfScreen(
             Box(Modifier.fillMaxWidth()) {
                 LazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(state.bookshelf, key = { it.id }) { entry ->
-                        BookshelfCard(entry, readingProgress[entry.bookId], now) { activeEntry = it }
+                        BookshelfCard(entry, readingProgress[entry.bookId], now, modifier = Modifier.animateItem()) { activeEntry = it }
                     }
                 }
                 VerticalScrollBar(
@@ -156,10 +156,11 @@ private fun BookshelfCard(
     entry: BookshelfEntry,
     resume: ReadingProgress?,
     now: Long,
+    modifier: Modifier = Modifier,
     onOpen: (BookshelfEntry) -> Unit,
 ) {
     Card(
-        modifier = Modifier.fillMaxWidth().clickable { onOpen(entry) },
+        modifier = modifier.fillMaxWidth().clickable { onOpen(entry) },
         insideMargin = PaddingValues(12.dp),
     ) {
         Row(verticalAlignment = Alignment.Top) {

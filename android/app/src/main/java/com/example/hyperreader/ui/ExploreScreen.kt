@@ -97,13 +97,13 @@ fun ExploreScreen(state: StudioUiState, viewModel: StudioViewModel, onLogin: () 
         LazyColumn(Modifier.fillMaxWidth().weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(localItems, key = { "local-${it.key}" }) { item ->
                 (item as? ExploreListItem.Book)?.let { book ->
-                    ExploreBookCard(book.book, onOpen = { viewModel.openSearchBook(book.book) }, onAdd = { viewModel.addSearchToShelf(book.book) })
+                    ExploreBookCard(book.book, onOpen = { viewModel.openSearchBook(book.book) }, onAdd = { viewModel.addSearchToShelf(book.book) }, modifier = Modifier.animateItem())
                 }
             }
             items(exploreItems, key = { "explore-${it.key}" }) { item ->
                 when (item) {
                     is ExploreListItem.Header -> Text(item.title, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                    is ExploreListItem.Book -> ExploreBookCard(item.book, onOpen = { viewModel.openSearchBook(item.book) }, onAdd = { viewModel.addSearchToShelf(item.book) })
+                    is ExploreListItem.Book -> ExploreBookCard(item.book, onOpen = { viewModel.openSearchBook(item.book) }, onAdd = { viewModel.addSearchToShelf(item.book) }, modifier = Modifier.animateItem())
                 }
             }
         }
@@ -111,8 +111,8 @@ fun ExploreScreen(state: StudioUiState, viewModel: StudioViewModel, onLogin: () 
 }
 
 @Composable
-private fun ExploreBookCard(book: SearchBook, onOpen: () -> Unit, onAdd: () -> Unit) {
-    Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(14.dp)) {
+private fun ExploreBookCard(book: SearchBook, onOpen: () -> Unit, onAdd: () -> Unit, modifier: Modifier = Modifier) {
+    Card(modifier.fillMaxWidth(), insideMargin = PaddingValues(14.dp)) {
         Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
             Text(book.title, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 2)
             if (book.author.isNotBlank()) Text("作者：${book.author}", fontSize = 13.sp)

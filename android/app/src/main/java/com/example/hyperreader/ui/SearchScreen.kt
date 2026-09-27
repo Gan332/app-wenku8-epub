@@ -64,15 +64,15 @@ fun SearchScreen(state: StudioUiState, viewModel: StudioViewModel, onLogin: () -
             Text("输入关键词开始搜索。", color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f), fontSize = 14.sp)
         } else {
             LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(state.searchResults, key = { it.id }) { result -> SearchResultCard(result, viewModel::openSearchBook) }
+                items(state.searchResults, key = { it.id }) { result -> SearchResultCard(result, viewModel::openSearchBook, Modifier.animateItem()) }
             }
         }
     }
 }
 
 @Composable
-private fun SearchResultCard(result: SearchBook, onOpen: (SearchBook) -> Unit) {
-    Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(14.dp)) {
+private fun SearchResultCard(result: SearchBook, onOpen: (SearchBook) -> Unit, modifier: Modifier = Modifier) {
+    Card(modifier.fillMaxWidth(), insideMargin = PaddingValues(14.dp)) {
         Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
             Text(result.title, fontSize = 17.sp, fontWeight = FontWeight.Bold, maxLines = 2)
             if (result.author.isNotBlank()) Text("作者：${result.author}", fontSize = 13.sp)

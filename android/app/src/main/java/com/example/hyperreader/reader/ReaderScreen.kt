@@ -4,6 +4,7 @@ import android.app.Activity
 import android.graphics.BitmapFactory
 import android.view.WindowManager
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -13,6 +14,8 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -72,6 +75,8 @@ import com.example.hyperreader.R
 import com.example.hyperreader.settings.ReaderBackground
 import com.example.hyperreader.settings.ReaderPageTurnMode
 import com.example.hyperreader.settings.ReaderSettings
+import top.yukonga.miuix.kmp.anim.DecelerateEasing
+import top.yukonga.miuix.kmp.anim.folmeSpring
 import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
 import top.yukonga.miuix.kmp.basic.Icon
@@ -205,8 +210,9 @@ fun ReaderScreenCore(
         topBar = {
             AnimatedVisibility(
                 visible = showControls,
-                enter = slideInVertically(initialOffsetY = { -it }) + fadeIn(),
-                exit = slideOutVertically(targetOffsetY = { -it }) + fadeOut(),
+                // MiuiX folme 弹簧：控件栏弹性收展（damping=1 无过冲，response≈0.35s）
+                enter = slideInVertically(folmeSpring(damping = 1.0f, response = 0.35f)) { -it } + fadeIn(tween(160)),
+                exit = slideOutVertically(folmeSpring(damping = 1.0f, response = 0.35f)) { -it } + fadeOut(tween(120)),
             ) {
                 // edge-to-edge 下系统栏可见时给状态栏让位，否则按钮压在状态栏触摸区点不到；
                 // 系统栏隐藏时 inset 为 0，沉浸布局不变。
@@ -233,8 +239,8 @@ fun ReaderScreenCore(
         bottomBar = {
             AnimatedVisibility(
                 visible = showControls,
-                enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
-                exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
+                enter = slideInVertically(folmeSpring(damping = 1.0f, response = 0.35f)) { it } + fadeIn(tween(160)),
+                exit = slideOutVertically(folmeSpring(damping = 1.0f, response = 0.35f)) { it } + fadeOut(tween(120)),
             ) {
                 Box(Modifier.windowInsetsPadding(WindowInsets.navigationBars.only(WindowInsetsSides.Bottom))) {
                     ReaderBottomBar(state, actions)
@@ -347,18 +353,21 @@ private fun ReaderContent(
     imageResolver: @Composable (block: ReaderBlock.Image) -> ReaderImage,
 ) {
     val fontFamily = rememberFont(state.settings.fontUri)
-    if (state.settings.pageTurnMode == ReaderPageTurnMode.HORIZONTAL) {
-        val pagerState = rememberPagerState(initialPage = state.chapterIndex, pageCount = { book.chapters.size })
-        LaunchedEffect(state.chapterIndex) { if (pagerState.currentPage != state.chapterIndex) pagerState.animateScrollToPage(state.chapterIndex) }
-        LaunchedEffect(pagerState.currentPage) { if (pagerState.currentPage != state.chapterIndex) actions.selectChapter(pagerState.currentPage) }
-        HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
-            val chapter = book.chapters.getOrNull(page) ?: return@HorizontalPager
-            // 只有「当前章」的页携带断点段落；其余页恒 0，直接章首，避免恢复值串页
-            val resumeParagraph = if (page == state.chapterIndex) state.paragraphIndex else 0
-            ChapterContent(chapter, resumeParagraph, state.settings, fontFamily, palette, imageResolver, actions) { actions.setParagraph(it) }
+    // 翻页模式切换 Crossfade 过渡，避免横竖排整块硬切
+    Crossfade(targetState = state.settings.pageTurnMode, label = "pageTurnMode") { mode ->
+        if (mode == ReaderPageTurnMode.HORIZONTAL) {
+            val pagerState = rememberPagerState(initialPage = state.chapterIndex, pageCount = { book.chapters.size })
+            LaunchedEffect(state.chapterIndex) { if (pagerState.currentPage != state.chapterIndex) pagerState.animateScrollToPage(state.chapterIndex) }
+            LaunchedEffect(pagerState.currentPage) { if (pagerState.currentPage != state.chapterIndex) actions.selectChapter(pagerState.currentPage) }
+            HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
+                val chapter = book.chapters.getOrNull(page) ?: return@Crossfade
+                // 只有「当前章」的页携带断点段落；其余页恒 0，直接章首，避免恢复值串页
+                val resumeParagraph = if (page == state.chapterIndex) state.paragraphIndex else 0
+                ChapterContent(chapter, resumeParagraph, state.settings, fontFamily, palette, imageResolver, actions) { actions.setParagraph(it) }
+            }
+        } else {
+            SeamlessContent(book, state, actions, palette, imageResolver, fontFamily)
         }
-    } else {
-        SeamlessContent(book, state, actions, palette, imageResolver, fontFamily)
     }
 }
 
@@ -386,7 +395,10 @@ private fun SeamlessContent(
     LaunchedEffect(state.chapterIndex, state.paragraphIndex, flat.size) {
         val target = resumeTargetIndex(flat, state.chapterIndex, state.paragraphIndex)
         if (target != null && target != listState.firstVisibleItemIndex && !listState.isScrollInProgress) {
-            listState.scrollToItem(target)
+            val distance = kotlin.math.abs(target - listState.firstVisibleItemIndex)
+            // 断点恢复必须瞬时精准落位；之后的目录跳转用动画，
+            // 大跨度（>50 项）仍瞬时，避免跨半本书的慢滚。
+            if (positioned && distance in 1..50) listState.animateScrollToItem(target) else listState.scrollToItem(target)
         }
         if (!positioned) positioned = true
     }
@@ -496,7 +508,11 @@ private fun ChapterContent(
 /** 正文插图的三态渲染：加载中转圈、失败占位（不再隐形空白）、成功显示。 */
 @Composable
 private fun ReaderImageBlock(image: ReaderImage, alt: String, palette: ReaderPalette) {
-    when (image) {
+    // 加载 → 就绪淡入；纯淡变不做尺寸缩放，避免插图排版跳动
+    AnimatedContent(targetState = image, transitionSpec = {
+        fadeIn(tween(220, easing = DecelerateEasing())).togetherWith(fadeOut(tween(120)))
+    }, label = "readerImage") { current ->
+        when (current) {
         ReaderImage.Loading -> Box(
             Modifier.fillMaxWidth().padding(vertical = 10.dp),
             contentAlignment = Alignment.Center,
@@ -519,10 +535,11 @@ private fun ReaderImageBlock(image: ReaderImage, alt: String, palette: ReaderPal
         }
 
         is ReaderImage.Ready -> Image(
-            image.bitmap,
+            current.bitmap,
             contentDescription = alt,
             modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
         )
+        }
     }
 }
 
@@ -540,7 +557,7 @@ private fun ReaderTocSheet(book: ReaderBook, current: Int, onSelect: (Int) -> Un
                         if (index == current) MiuixText("阅读中", fontSize = 12.sp, color = MiuixTheme.colorScheme.primary)
                     },
                     onClick = { onSelect(index) },
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().animateItem(),
                 )
             }
         }
@@ -611,30 +628,42 @@ private fun ReaderSettingsSheet(
             }
 
             item { SmallTitle("排版") }
+            // 数值用 AnimatedContent 淡变：行是 fill 宽，animateContentSize 不会触发；
+            // 拖动滑块时数字步进淡切，反馈比静态文字更清楚。
             item {
-                BasicComponent(title = "字号：${settings.fontSizeSp.toInt()} sp", bottomAction = {
-                    Slider(settings.fontSizeSp, { onFontSize(it) }, valueRange = 12f..32f, steps = 19)
-                })
+                BasicComponent(
+                    title = "字号",
+                    endActions = { AnimatedContent(settings.fontSizeSp.toInt(), label = "fontSize") { v -> MiuixText("$v sp", fontSize = 14.sp, color = MiuixTheme.colorScheme.primary) } },
+                    bottomAction = { Slider(settings.fontSizeSp, { onFontSize(it) }, valueRange = 12f..32f, steps = 19) },
+                )
             }
             item {
-                BasicComponent(title = "字重：${settings.fontWeight}", bottomAction = {
-                    Slider(settings.fontWeight.toFloat(), { onFontWeight(it.toInt()) }, valueRange = 100f..900f, steps = 7)
-                })
+                BasicComponent(
+                    title = "字重",
+                    endActions = { AnimatedContent(settings.fontWeight, label = "fontWeight") { v -> MiuixText("$v", fontSize = 14.sp, color = MiuixTheme.colorScheme.primary) } },
+                    bottomAction = { Slider(settings.fontWeight.toFloat(), { onFontWeight(it.toInt()) }, valueRange = 100f..900f, steps = 7) },
+                )
             }
             item {
-                BasicComponent(title = "行高：${"%.1f".format(settings.lineHeight)}", bottomAction = {
-                    Slider(settings.lineHeight, { onLineHeight(it) }, valueRange = 1.2f..2.6f, steps = 13)
-                })
+                BasicComponent(
+                    title = "行高",
+                    endActions = { AnimatedContent(settings.lineHeight, label = "lineHeight") { v -> MiuixText("%.1f".format(v), fontSize = 14.sp, color = MiuixTheme.colorScheme.primary) } },
+                    bottomAction = { Slider(settings.lineHeight, { onLineHeight(it) }, valueRange = 1.2f..2.6f, steps = 13) },
+                )
             }
             item {
-                BasicComponent(title = "段距：${settings.paragraphSpacingDp} dp", bottomAction = {
-                    Slider(settings.paragraphSpacingDp.toFloat(), { onSpacing(it.toInt()) }, valueRange = 0f..48f, steps = 47)
-                })
+                BasicComponent(
+                    title = "段距",
+                    endActions = { AnimatedContent(settings.paragraphSpacingDp, label = "spacing") { v -> MiuixText("$v dp", fontSize = 14.sp, color = MiuixTheme.colorScheme.primary) } },
+                    bottomAction = { Slider(settings.paragraphSpacingDp.toFloat(), { onSpacing(it.toInt()) }, valueRange = 0f..48f, steps = 47) },
+                )
             }
             item {
-                BasicComponent(title = "左右边距：${settings.horizontalPaddingDp} dp", bottomAction = {
-                    Slider(settings.horizontalPaddingDp.toFloat(), { onPadding(it.toInt()) }, valueRange = 0f..48f, steps = 47)
-                })
+                BasicComponent(
+                    title = "左右边距",
+                    endActions = { AnimatedContent(settings.horizontalPaddingDp, label = "padding") { v -> MiuixText("$v dp", fontSize = 14.sp, color = MiuixTheme.colorScheme.primary) } },
+                    bottomAction = { Slider(settings.horizontalPaddingDp.toFloat(), { onPadding(it.toInt()) }, valueRange = 0f..48f, steps = 47) },
+                )
             }
 
             item { SmallTitle("颜色") }
