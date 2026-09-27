@@ -360,7 +360,7 @@ private fun ReaderContent(
             LaunchedEffect(state.chapterIndex) { if (pagerState.currentPage != state.chapterIndex) pagerState.animateScrollToPage(state.chapterIndex) }
             LaunchedEffect(pagerState.currentPage) { if (pagerState.currentPage != state.chapterIndex) actions.selectChapter(pagerState.currentPage) }
             HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
-                val chapter = book.chapters.getOrNull(page) ?: return@Crossfade
+                val chapter = book.chapters.getOrNull(page) ?: return@HorizontalPager
                 // 只有「当前章」的页携带断点段落；其余页恒 0，直接章首，避免恢复值串页
                 val resumeParagraph = if (page == state.chapterIndex) state.paragraphIndex else 0
                 ChapterContent(chapter, resumeParagraph, state.settings, fontFamily, palette, imageResolver, actions) { actions.setParagraph(it) }
