@@ -1,0 +1,16 @@
+[package]
+name = "epub-core"
+version = "0.1.0"
+edition = "2021"
+
+# cdylib：给 Android JNI 的 libepub_core.so；rlib：供 cargo test 使用
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# 结构解析全部手写（语义窄：container/OPF/nav/NCX 四个简单结构），
+# 只依赖 zip —— 零 XML 库 API 漂移风险，且解析失败由 Kotlin 侧 legacy 路径兜底
+zip = { version = "2", default-features = false, features = ["deflate"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+jni = "0.21"
