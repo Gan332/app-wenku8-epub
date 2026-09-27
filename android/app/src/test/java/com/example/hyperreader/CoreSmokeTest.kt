@@ -318,10 +318,13 @@ class CoreSmokeTest {
         assertFalse(closed.showSettings)
         assertTrue(closed.controlsShown())
 
-        // 关闭不改变其它字段：互斥只在「打开」方向发力
+        // 关闭不改变其它字段：互斥只在「打开」方向发力 ——
+        // 设置面板仍然开着，因此菜单栏依旧可见（controlsShown 含 showSettings）
         val onlyClose = ReaderUiState(showSettings = true, controlsVisible = false).withPanel(showToc = false)
         assertTrue(onlyClose.showSettings)
-        assertFalse(onlyClose.controlsShown())
+        assertTrue(onlyClose.controlsShown())
+        // 对照：没有面板、也没有 controlsVisible 时才是隐藏
+        assertFalse(ReaderUiState(controlsVisible = false).withPanel(showToc = false).controlsShown())
     }
 
     @Test
