@@ -80,7 +80,8 @@ fun LnrAppTheme(content: @Composable () -> Unit) {
             colorScheme = MiuixThemeColorScheme(
                 background = scheme.background,
                 onSurface = scheme.onSurface,
-                onSurfaceVariant = scheme.onSurfaceVariant,
+                // MiuiX Colors 无 material 的 onSurfaceVariant，取语义最近的摘要文字色
+                onSurfaceVariant = scheme.onSurfaceVariantSummary,
                 surfaceContainerHigh = scheme.background,
                 surfaceContainerLow = scheme.background,
                 surfaceContainer = scheme.background,
