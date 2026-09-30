@@ -98,6 +98,10 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.okhttp)
     implementation(libs.jsoup)
+    // LNR 阅读器引入（0.12.0）：Result 类型 + 组件数据 HTML 序列化
+    implementation(libs.kotlin.result)
+    implementation(libs.kotlin.result.coroutines)
+    implementation(libs.dom4j)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
