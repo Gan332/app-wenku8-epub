@@ -28,14 +28,16 @@ fun showSnackbar(
     result: (SnackbarResult) -> Unit = {}
 ) {
     snackbarJob?.cancel()
+    val scope = coroutineScope ?: CoroutineScope(Dispatchers.Main)
 
     if (message == null) {
-        snackbarJob = null
-        hostState.currentSnackbarData?.dismiss()
+        // LNR 引入适配：MiuiX 没有 M3 的 currentSnackbarData 属性，
+        // dismiss 走 newestSnackbarData()（suspend），因此放进协程。
+        snackbarJob = scope.launch(Dispatchers.Main) {
+            hostState.newestSnackbarData()?.dismiss()
+        }
         return
     }
-
-    val scope = coroutineScope ?: CoroutineScope(Dispatchers.Main)
 
     snackbarJob = scope.launch(Dispatchers.Main) {
         val res = hostState.showSnackbar(
