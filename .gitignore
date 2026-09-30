@@ -29,3 +29,6 @@ android/app/src/main/jniLibs/
 
 # session memory, never commit
 .workbuddy-ai/
+
+# MiuiX 源码查阅用的临时解压目录，不入库
+.tmp-miuix/
