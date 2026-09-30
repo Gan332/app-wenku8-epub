@@ -232,7 +232,9 @@ fun ScrollContentTextComponent(
                         }
 
                         else -> {
-                            snackbarHostState.currentSnackbarData?.dismiss()
+                            // LNR 引入适配：MiuiX 无 M3 的 currentSnackbarData 属性，
+                            // dismiss 走 suspend newestSnackbarData()，放进已有协程作用域
+                            scope.launch { snackbarHostState.newestSnackbarData()?.dismiss() }
                             atTop = false; atBottom = false
                         }
                     }

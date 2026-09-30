@@ -43,7 +43,10 @@ import androidx.compose.ui.graphics.Color
 class AppTheme(
     val isDark: Boolean,
     val colorScheme: MiuixThemeColorScheme,
-)
+) {
+    /** 兼容 LNR 上游 `appTheme.MiuixTheme.colorScheme.x` 的投影写法 */
+    val MiuixTheme: MiuixThemeColorScheme get() = colorScheme
+}
 
 /**
  * LNR reader 实际用到的 ColorScheme 字段的最小投影。

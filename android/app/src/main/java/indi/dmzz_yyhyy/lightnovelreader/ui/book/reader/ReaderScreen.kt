@@ -41,8 +41,6 @@ import top.yukonga.miuix.kmp.basic.SnackbarHost
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.TopAppBar
-import top.yukonga.miuix.kmp.basic.TopAppBarDefaults
-import top.yukonga.miuix.kmp.basic.TopAppBarScrollBehavior
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -57,7 +55,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -109,7 +106,8 @@ fun ReaderScreen(
     onChangeChapter: (chapterId: String) -> Unit,
     onClickReaderStyleSettings: () -> Unit
 ) {
-    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
+    // LNR 引入适配：MiuiX TopAppBarDefaults 无 pinnedScrollBehavior —— 而 pinned 语义
+    // 是「顶栏固定不动」，Scaffold 的 topBar 槽默认即固定，整条 scrollBehavior 链删除。
     var isImmersive by remember { mutableStateOf(true) }
     val context = LocalContext.current
     val snackbarHostState = LocalSnackbarHost.current
@@ -161,7 +159,7 @@ fun ReaderScreen(
         }
     }
     Scaffold(
-        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+        modifier = Modifier,
         topBar = {
             AnimatedVisibility(
                 visible = !isImmersive,
@@ -174,7 +172,6 @@ fun ReaderScreen(
                         ?.map { it.title }
                         ?.getOrElse { "Unknowing" }
                         ?: "Unknowing",
-                    scrollBehavior
                 )
             }
         },
@@ -519,8 +516,7 @@ private fun updateReaderImmersiveMode(
 @Composable
 private fun TopBar(
     onClickBackButton: () -> Unit,
-    title: String,
-    scrollBehavior: TopAppBarScrollBehavior
+    title: String
 ) {
     TopAppBar(
         navigationIcon = {
@@ -550,7 +546,6 @@ private fun TopBar(
                 }
             }
         },
-        scrollBehavior = scrollBehavior
     )
 }
 
@@ -676,13 +671,13 @@ fun Indicator(
                     text = "$batLevel".padStart(3, '0'),
                     modifier = Modifier.align(Alignment.CenterVertically),
                     style = MiuixTheme.textStyles.body1,
-                    color = MiuixTheme.colorScheme.onSurfaceVariant,
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                 )
                 Text(
                     text = "%",
                     style = MiuixTheme.textStyles.body1,
                     fontWeight = FontWeight.W500,
-                    color = MiuixTheme.colorScheme.onSurfaceVariant
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary
                 )
                 Spacer(Modifier.width(4.dp))
                 Icon(
@@ -697,7 +692,7 @@ fun Indicator(
                             (batLevel in 96..100) -> painterResource(R.drawable.battery_android_full_24px)
                             else -> painterResource(R.drawable.battery_android_question_24px)
                         },
-                    tint = MiuixTheme.colorScheme.onSurfaceVariant,
+                    tint = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                     contentDescription = null
                 )
                 Spacer(Modifier.width(14.dp))
@@ -714,7 +709,7 @@ fun Indicator(
                     style = MiuixTheme.textStyles.body1.copy(
                         letterSpacing = 1.sp
                     ),
-                    color = MiuixTheme.colorScheme.onSurfaceVariant
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary
                 )
             }
         }
@@ -731,7 +726,7 @@ fun Indicator(
                     text = chapterTitle,
                     textAlign = TextAlign.End,
                     style = MiuixTheme.textStyles.body1,
-                    color = MiuixTheme.colorScheme.onSurfaceVariant,
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -748,13 +743,13 @@ fun Indicator(
                     style = MiuixTheme.textStyles.body1.copy(
                         fontWeight = FontWeight.W500
                     ),
-                    color = MiuixTheme.colorScheme.onSurfaceVariant,
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                 )
                 Text(
                     text = "%",
                     style = MiuixTheme.textStyles.body1,
                     fontWeight = FontWeight.W500,
-                    color = MiuixTheme.colorScheme.onSurfaceVariant
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary
                 )
             }
         }

@@ -219,7 +219,7 @@ fun ChapterSelectionBottomSheet(
                                                     text = chapter.title,
                                                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                                                     style = MiuixTheme.textStyles.title4,
-                                                    color = MiuixTheme.colorScheme.onSurfaceVariant,
+                                                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                                                     maxLines = 2,
                                                     overflow = TextOverflow.Ellipsis
                                                 )

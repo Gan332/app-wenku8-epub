@@ -75,7 +75,8 @@ fun ZoomableImage(
 ) {
     var retryKey by remember { mutableIntStateOf(0) }
     val screenWidth = LocalConfiguration.current.screenWidthDp.dp
-    val image = rememberLnrReaderImage(imageUri, screenWidth)
+    // retryKey 进 produceState keys：点「重试」才会真正重新加载
+    val image = rememberLnrReaderImage(imageUri, screenWidth, retryKey)
 
     Box(
         modifier = modifier
@@ -124,7 +125,6 @@ fun ZoomableImage(
                 bitmap = image.bitmap,
                 contentDescription = "",
                 contentScale = ContentScale.FillWidth,
-                key = { retryKey },
                 modifier = Modifier
                     .fillMaxWidth()
                     .pointerInput(onViewImage) {

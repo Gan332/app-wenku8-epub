@@ -63,6 +63,7 @@ sealed interface LnrReaderImage {
 fun rememberLnrReaderImage(
     uri: Uri?,
     targetWidth: Dp = 0.dp,
+    retryKey: Any? = null,
 ): LnrReaderImage {
     val context = LocalContext.current
     val density = LocalDensity.current
@@ -77,6 +78,7 @@ fun rememberLnrReaderImage(
         initialValue = LnrReaderImage.Loading,
         uri,
         targetWidthPx,
+        retryKey,
     ) {
         if (uri == null) {
             value = LnrReaderImage.Failed
