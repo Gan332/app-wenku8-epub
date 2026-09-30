@@ -3,6 +3,7 @@ package io.nightfish.lightnovelreader.api.text
 import io.nightfish.lightnovelreader.api.content.component.ComponentDataJsonElementSerializer
 import io.nightfish.lightnovelreader.api.content.component.data.AbstractContentComponentData
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.addJsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
