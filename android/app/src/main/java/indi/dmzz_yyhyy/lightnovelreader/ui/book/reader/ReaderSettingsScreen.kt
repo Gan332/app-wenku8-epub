@@ -65,7 +65,7 @@ fun SettingsBottomSheet(
         ) {
             Text(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-                style = MiuixTheme.textStyles.displayMedium,
+                style = MiuixTheme.textStyles.title2,
                 text = stringResource(R.string.reader_settings),
                 fontWeight = FontWeight.W600
             )

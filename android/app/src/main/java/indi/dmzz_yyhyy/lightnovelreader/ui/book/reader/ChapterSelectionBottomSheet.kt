@@ -103,7 +103,7 @@ fun ChapterSelectionBottomSheet(
                     Text(
                         modifier = Modifier.padding(start = 8.dp),
                         text = stringResource(R.string.select_chapter),
-                        style = MiuixTheme.textStyles.displayMedium,
+                        style = MiuixTheme.textStyles.title2,
                         fontWeight = FontWeight.W600
                     )
                 }
@@ -171,7 +171,7 @@ fun ChapterSelectionBottomSheet(
                                             Text(
                                                 text = volume.volumeTitle,
                                                 fontWeight = FontWeight.W600,
-                                                style = MiuixTheme.textStyles.titleMedium,
+                                                style = MiuixTheme.textStyles.subtitle,
                                                 color = MiuixTheme.colorScheme.onSurface
                                             )
                                             Text(
@@ -180,7 +180,7 @@ fun ChapterSelectionBottomSheet(
                                                     volume.chapters.size
                                                 ),
                                                 color = MiuixTheme.colorScheme.secondary,
-                                                style = MiuixTheme.textStyles.labelMedium
+                                                style = MiuixTheme.textStyles.footnote1
                                             )
                                         }
                                         Spacer(Modifier.weight(2f))
@@ -218,7 +218,7 @@ fun ChapterSelectionBottomSheet(
                                                 Text(
                                                     text = chapter.title,
                                                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                                    style = MiuixTheme.textStyles.titleSmall,
+                                                    style = MiuixTheme.textStyles.title4,
                                                     color = MiuixTheme.colorScheme.onSurfaceVariant,
                                                     maxLines = 2,
                                                     overflow = TextOverflow.Ellipsis

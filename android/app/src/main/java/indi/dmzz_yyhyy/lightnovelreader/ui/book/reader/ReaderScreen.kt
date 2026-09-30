@@ -43,7 +43,7 @@ import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.basic.TopAppBarDefaults
 import top.yukonga.miuix.kmp.basic.TopAppBarScrollBehavior
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -540,7 +540,7 @@ private fun TopBar(
                 AnimatedContent(title, label = "TitleAnimate") { text ->
                     Text(
                         text = text,
-                        style = MiuixTheme.textStyles.displayLarge,
+                        style = MiuixTheme.textStyles.title1,
                         fontWeight = FontWeight.W400,
                         color = MiuixTheme.colorScheme.onSurface,
                         maxLines = 1,
@@ -588,7 +588,7 @@ private fun BottomBar(
                     Spacer(Modifier.height(2.dp))
                     Text(
                         text = stringResource(R.string.previous_chapter),
-                        style = MiuixTheme.textStyles.labelSmall
+                        style = MiuixTheme.textStyles.footnote2
                     )
                 }
             }
@@ -639,7 +639,7 @@ private fun BottomBar(
                     Spacer(Modifier.height(2.dp))
                     Text(
                         text = stringResource(R.string.next_chapter),
-                        style = MiuixTheme.textStyles.labelSmall
+                        style = MiuixTheme.textStyles.footnote2
                     )
                 }
             }
@@ -675,12 +675,12 @@ fun Indicator(
                 Text(
                     text = "$batLevel".padStart(3, '0'),
                     modifier = Modifier.align(Alignment.CenterVertically),
-                    style = MiuixTheme.textStyles.bodyLarge,
+                    style = MiuixTheme.textStyles.body1,
                     color = MiuixTheme.colorScheme.onSurfaceVariant,
                 )
                 Text(
                     text = "%",
-                    style = MiuixTheme.textStyles.bodyLarge,
+                    style = MiuixTheme.textStyles.body1,
                     fontWeight = FontWeight.W500,
                     color = MiuixTheme.colorScheme.onSurfaceVariant
                 )
@@ -711,7 +711,7 @@ fun Indicator(
                         LocalTime.now().hour,
                         LocalTime.now().minute
                     ),
-                    style = MiuixTheme.textStyles.bodyLarge.copy(
+                    style = MiuixTheme.textStyles.body1.copy(
                         letterSpacing = 1.sp
                     ),
                     color = MiuixTheme.colorScheme.onSurfaceVariant
@@ -730,7 +730,7 @@ fun Indicator(
                     modifier = Modifier.fillMaxWidth(),
                     text = chapterTitle,
                     textAlign = TextAlign.End,
-                    style = MiuixTheme.textStyles.bodyLarge,
+                    style = MiuixTheme.textStyles.body1,
                     color = MiuixTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -745,14 +745,14 @@ fun Indicator(
                 Text(
                     text = "${(readingChapterProgress * 100).toInt()}".padStart(3, '0'),
                     modifier = Modifier.align(Alignment.CenterVertically),
-                    style = MiuixTheme.textStyles.bodyLarge.copy(
+                    style = MiuixTheme.textStyles.body1.copy(
                         fontWeight = FontWeight.W500
                     ),
                     color = MiuixTheme.colorScheme.onSurfaceVariant,
                 )
                 Text(
                     text = "%",
-                    style = MiuixTheme.textStyles.bodyLarge,
+                    style = MiuixTheme.textStyles.body1,
                     fontWeight = FontWeight.W500,
                     color = MiuixTheme.colorScheme.onSurfaceVariant
                 )

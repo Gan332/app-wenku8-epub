@@ -16,7 +16,6 @@ import io.nightfish.lightnovelreader.api.content.component.data.ParagraphCompone
 import io.nightfish.lightnovelreader.api.identifier.Identifier
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
-import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlin.reflect.KClass
 
