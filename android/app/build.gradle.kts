@@ -5,6 +5,7 @@ plugins {
     alias(libs.plugins.composeCompiler)
     alias(libs.plugins.composeMultiplatform)
     alias(libs.plugins.kotlinSerialization)
+    alias(libs.plugins.kotlinParcelize)
 }
 
 android {
@@ -102,6 +103,7 @@ dependencies {
     implementation(libs.kotlin.result)
     implementation(libs.kotlin.result.coroutines)
     implementation(libs.dom4j)
+    implementation(libs.androidx.navigation3.runtime)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

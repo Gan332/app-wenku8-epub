@@ -5,9 +5,10 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
-// LNR 引入适配：material3 的 Text/LocalTextStyle → MiuiX（参数签名完全对齐）
+// LNR 引入适配：material3 的 Text/LocalTextStyle → MiuiX（参数签名完全对齐）。
+// MiuiX 的 LocalTextStyles 是 internal，公开途径是 MiuixTheme.textStyles。
 import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.theme.LocalTextStyles
+import top.yukonga.miuix.kmp.theme.MiuixTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -165,7 +166,7 @@ fun AnimatedText(
     maxLines: Int = Int.MAX_VALUE,
     minLines: Int = 1,
     onTextLayout: ((TextLayoutResult) -> Unit)? = null,
-    style: TextStyle = LocalTextStyles.current.main
+    style: TextStyle = MiuixTheme.textStyles.main
 ) {
     Row(
         modifier = modifier,
@@ -224,7 +225,7 @@ fun AnimatedTextLine(
     maxLines: Int = Int.MAX_VALUE,
     minLines: Int = 1,
     onTextLayout: ((TextLayoutResult) -> Unit)? = null,
-    style: TextStyle = LocalTextStyles.current.main
+    style: TextStyle = MiuixTheme.textStyles.main
 ) {
     Row(
         modifier = modifier,

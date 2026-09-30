@@ -18,6 +18,7 @@ documentfile = "1.0.1"
 # LNR 阅读器引入（0.12.0）：api 子集的 Result 类型与组件数据 HTML 序列化
 kotlinResult = "2.3.1"
 dom4j = "2.2.0"
+navigation3Runtime = "1.1.7"
 
 [libraries]
 # 0.9.3 起 material / material3 / material-icons 全量移除（界面统一 MiuiX），对应依赖项一并删除
@@ -41,12 +42,16 @@ junit = { module = "junit:junit", version.ref = "junit" }
 kotlin-result = { module = "com.michael-bull.kotlin-result:kotlin-result", version.ref = "kotlinResult" }
 kotlin-result-coroutines = { module = "com.michael-bull.kotlin-result:kotlin-result-coroutines", version.ref = "kotlinResult" }
 dom4j = { module = "org.dom4j:dom4j", version.ref = "dom4j" }
+# api 子集的 WebBookDataSource 实现 NavKey 接口（纯运行时标记，不引 navigation UI）
+androidx-navigation3-runtime = { module = "androidx.navigation3:navigation3-runtime", version.ref = "navigation3Runtime" }
 androidx-junit = { module = "androidx.test.ext:junit", version.ref = "androidxJunit" }
 androidx-espresso = { module = "androidx.test.espresso:espresso-core", version.ref = "espresso" }
 
 [plugins]
 androidApplication = { id = "com.android.application", version.ref = "agp" }
 kotlinAndroid = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
+# LNR api 子集的 Identifier 使用 @Parcelize
+kotlinParcelize = { id = "org.jetbrains.kotlin.plugin.parcelize", version.ref = "kotlin" }
 composeCompiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 composeMultiplatform = { id = "org.jetbrains.compose", version.ref = "compose" }
 kotlinSerialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
