@@ -14,7 +14,12 @@ import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -526,26 +531,8 @@ private fun TopBar(
                 Icon(painterResource(id = R.drawable.arrow_back_24px), "back")
             }
         },
-        title = {
-            Row(
-                modifier = Modifier
-                    .horizontalScroll(rememberScrollState())
-                    .fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                AnimatedContent(title, label = "TitleAnimate") { text ->
-                    Text(
-                        text = text,
-                        style = MiuixTheme.textStyles.title1,
-                        fontWeight = FontWeight.W400,
-                        color = MiuixTheme.colorScheme.onSurface,
-                        maxLines = 1,
-                        softWrap = false,
-                        overflow = TextOverflow.Visible
-                    )
-                }
-            }
-        },
+        // LNR 引入适配：M3 TopAppBar 的 title 是 @Composable，MiuiX 的是 String —— 标题动画随之简化
+        title = title,
     )
 }
 
@@ -567,25 +554,26 @@ private fun BottomBar(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            TextButton(
-                onClick = onClickPrevChapter,
-                enabled = hasPrevChapter
+            // LNR 引入适配：M3 TextButton 是任意 content 槽，MiuiX TextButton 是 text:String ——
+            // 复合按钮（图标+文字）改为 Column + clickable，按压遮罩由 MiuixTheme 的 LocalIndication 自动提供
+            Column(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(10.dp))
+                    .alpha(if (hasPrevChapter) 1f else 0.4f)
+                    .clickable(enabled = hasPrevChapter, onClick = onClickPrevChapter)
+                    .padding(horizontal = 6.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Column(
-                    modifier = Modifier.padding(horizontal = 6.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Icon(
-                        painter = painterResource(R.drawable.arrow_back_24px),
-                        contentDescription = null,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Spacer(Modifier.height(2.dp))
-                    Text(
-                        text = stringResource(R.string.previous_chapter),
-                        style = MiuixTheme.textStyles.footnote2
-                    )
-                }
+                Icon(
+                    painter = painterResource(R.drawable.arrow_back_24px),
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = stringResource(R.string.previous_chapter),
+                    style = MiuixTheme.textStyles.footnote2
+                )
             }
 
             Row(
@@ -618,25 +606,24 @@ private fun BottomBar(
                 }
             }
 
-            TextButton(
-                onClick = onClickNextChapter,
-                enabled = hasNextChapter
+            Column(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(10.dp))
+                    .alpha(if (hasNextChapter) 1f else 0.4f)
+                    .clickable(enabled = hasNextChapter, onClick = onClickNextChapter)
+                    .padding(horizontal = 6.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Column(
-                    modifier = Modifier.padding(horizontal = 6.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Icon(
-                        painter = painterResource(R.drawable.arrow_forward_24px),
-                        contentDescription = null,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Spacer(Modifier.height(2.dp))
-                    Text(
-                        text = stringResource(R.string.next_chapter),
-                        style = MiuixTheme.textStyles.footnote2
-                    )
-                }
+                Icon(
+                    painter = painterResource(R.drawable.arrow_forward_24px),
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = stringResource(R.string.next_chapter),
+                    style = MiuixTheme.textStyles.footnote2
+                )
             }
         }
     }

@@ -114,7 +114,8 @@ fun ContentSettings(
             state = pagerState,
             modifier = Modifier
                 .fillMaxSize()
-                .background(MiuixTheme.colorScheme.surfaceContainerLow)
+                // MiuiX Colors 无 material 的 surfaceContainerLow，取语义最近的容器色
+                .background(MiuixTheme.colorScheme.surfaceContainerHigh)
                 .padding(horizontal = 8.dp, vertical = 12.dp),
             userScrollEnabled = false
         ) { pageIndex ->

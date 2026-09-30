@@ -63,7 +63,14 @@ class MiuixThemeColorScheme(
     val surfaceContainerHigh: Color,
     val surfaceContainerLow: Color,
     val surfaceContainer: Color,
-)
+) {
+    /**
+     * 兼容上游 `appTheme.MiuixTheme.colorScheme.x` 的双层投影写法：
+     * 上游 AppTheme 内嵌一个 MiuixTheme 包装对象，本工程用自引用把两层塌成一层，
+     * 拷贝来的 reader 代码（`theme.MiuixTheme.colorScheme.xxx`）无需逐处改写。
+     */
+    val colorScheme: MiuixThemeColorScheme get() = this
+}
 
 val LocalAppTheme = staticCompositionLocalOf<AppTheme> {
     error("No AppTheme provided: wrap the reader in LnrAppTheme { }")
