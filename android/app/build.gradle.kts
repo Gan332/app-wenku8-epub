@@ -5,7 +5,9 @@ plugins {
     alias(libs.plugins.composeCompiler)
     alias(libs.plugins.composeMultiplatform)
     alias(libs.plugins.kotlinSerialization)
-    alias(libs.plugins.kotlinParcelize)
+    // parcelize 已随 Kotlin 插件链在 classpath 上：只能不带 version apply，
+    // 声明版本会报 "already on the classpath with an unknown version"
+    id("org.jetbrains.kotlin.plugin.parcelize")
 }
 
 android {
