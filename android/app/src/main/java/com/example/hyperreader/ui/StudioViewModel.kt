@@ -518,6 +518,41 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
 
     fun cancel(id: String) = manager.cancel(id)
 
+    /**
+     * 从探索详情页直接导出：用该页已加载的目录建任务，**不经过创建流程的选章步骤**。
+     *
+     * @param engine 指定导出引擎（两个按钮各一个），不受全局设置影响；
+     *   传 null 则用设置里的全局选择。
+     */
+    fun exportExploreDetail(engine: com.example.hyperreader.settings.EpubEngine? = null) {
+        val detail = state.value.exploreDetail
+        val book = detail?.book
+        if (book == null) {
+            mutable.update { it.copy(exploreDetailError = "书籍信息尚未加载完成，暂时无法导出。") }
+            return
+        }
+        if (detail.chapters.isEmpty()) {
+            mutable.update { it.copy(exploreDetailError = "目录尚未就绪，无法导出；请先重试加载目录。") }
+            return
+        }
+        viewModelScope.launch {
+            mutable.update { it.copy(busy = true, message = null) }
+            runCatching { manager.create(book, detail.chapters, includeCover = true, engine = engine) }
+                .onSuccess { job ->
+                    mutable.update {
+                        it.copy(
+                            busy = false,
+                            activeJobId = job.id,
+                            step = CreateStep.PROGRESS,
+                            tab = StudioTab.CREATE,
+                            exploreDetailId = null,
+                        )
+                    }
+                }
+                .onFailure { error -> mutable.update { it.copy(busy = false, message = error.message ?: "无法创建任务。") } }
+        }
+    }
+
     // ---- 配置导入导出（凭据安全模型见 settings/ConfigTransfer.kt）----
 
     private val configMutable = MutableStateFlow(ConfigUiState())

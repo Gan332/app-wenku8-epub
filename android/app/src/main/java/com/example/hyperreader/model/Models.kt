@@ -123,6 +123,11 @@ data class ExportJob(
     val warnings: List<String> = emptyList(),
     val output: OutputFile? = null,
     val imageCount: Int = 0,
+    /**
+     * 打包用的 EPUB 导出引擎。默认自研；书籍详情页的两个导出按钮可**按任务**指定，
+     * 不受全局设置影响（见 `EpubEngine`）。旧任务记录缺该字段时按默认值反序列化。
+     */
+    val engine: com.example.hyperreader.settings.EpubEngine = com.example.hyperreader.settings.EpubEngine.CLASSIC,
 )
 
 @Serializable

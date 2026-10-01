@@ -99,7 +99,14 @@ class ExportJobManager(private val context: Context, sessionStore: Wenku8Session
         return Wenku8Parser.parseIndex(page.html, page.finalUrl, ids.bookId)
     }
 
-    suspend fun create(book: Book, chapters: List<Chapter>, includeCover: Boolean): ExportJob {
+    suspend fun create(
+        book: Book,
+        chapters: List<Chapter>,
+        includeCover: Boolean,
+        engine: EpubEngine? = null,
+    ): ExportJob {
+        // 未显式指定时用设置里的全局选择；指定时以调用方为准（书籍详情页的两个按钮）
+        val resolvedEngine = engine ?: settings.exportEngine.first()
         val validatedChapters = Wenku8Url.validateChapters(chapters)
         val now = Instant.now().toString()
         val job = ExportJob(
@@ -112,6 +119,7 @@ class ExportJobManager(private val context: Context, sessionStore: Wenku8Session
             progress = JobProgress(total = validatedChapters.size),
             createdAt = now,
             updatedAt = now,
+            engine = resolvedEngine,
         )
         update(job)
         queue.send(job.id)
@@ -245,9 +253,9 @@ class ExportJobManager(private val context: Context, sessionStore: Wenku8Session
             job = job.copy(progress = job.progress.copy(phase = JobPhase.packaging, percent = 97, cacheHits = cacheHits, imageTotal = imageTotal, message = "正在写入 EPUB 容器…"))
             update(job)
             val output = File(outputDirectory, "${bookSafeName(job.book.title)}-${job.id}.epub")
-            // 导出引擎在设置里切换（0.14.0）：两个引擎调用契约一致，只换实现
-            val engine = settings.exportEngine.first()
-            val built = if (engine == EpubEngine.POTATO) {
+            // 导出引擎随任务走（0.14.0）：默认取创建任务时的全局设置，
+            // 书籍详情页的两个按钮可显式指定，不受之后改设置影响。
+            val built = if (job.engine == EpubEngine.POTATO) {
                 potatoEpubBuilder.build(job.book, parsed, images, cover, output)
             } else {
                 epubBuilder.build(job.book, parsed, images, cover, output)

@@ -240,6 +240,7 @@ private fun StudioApp(
                     onBack = viewModel::closeExploreDetail,
                     onRetry = viewModel::retryExploreDetail,
                     onAddToShelf = viewModel::addExploreDetailToShelf,
+                    onExport = viewModel::exportExploreDetail,
                     onReadOnline = {
                         // 用 ?.let 而非 `?: return@ExploreDetailScreen`：后者依赖非内联 lambda
                         // 的函数名标签推断，在部分编译器/增量场景下会解析失败。

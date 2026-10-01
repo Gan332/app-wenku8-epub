@@ -62,6 +62,8 @@ fun ExploreDetailScreen(
     onReadOnline: () -> Unit,
     onSameAuthor: () -> Unit,
     onTagClick: (String) -> Unit,
+    /** 直接用指定引擎导出 EPUB（两个小按钮各对应一个引擎）。 */
+    onExport: (com.example.hyperreader.settings.EpubEngine) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val book = detail?.book
@@ -220,6 +222,23 @@ fun ExploreDetailScreen(
                             enabled = detail != null,
                             modifier = Modifier.fillMaxWidth().heightIn(min = DETAIL_ROW_HEIGHT),
                         )
+                    }
+                    // —— 两种 EPUB 导出引擎（小按钮，并排）——
+                    // 直接用本页已加载的目录建任务，不经过创建流程的选章步骤；
+                    // 引擎按任务指定，不受设置里的全局选择影响。
+                    if (detail != null && detail.chapters.isNotEmpty()) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            com.example.hyperreader.settings.EpubEngine.entries.forEach { option ->
+                                TextButton(
+                                    text = "导出 · ${option.label}",
+                                    onClick = { onExport(option) },
+                                    modifier = Modifier.weight(1f).heightIn(min = DETAIL_ROW_HEIGHT),
+                                )
+                            }
+                        }
                     }
                     Text(
                         "本页面只读取源站公开信息，不经过导出解析流程。",

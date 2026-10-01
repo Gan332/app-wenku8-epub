@@ -55,6 +55,7 @@ data class ReadingProgress(
  * - [POTATO]：LightNovelReader 的 `:epub` 模块（`io.nightfish.potatoepub`，Apache-2.0），
  *   正文按段落纯文本写入
  */
+@kotlinx.serialization.Serializable
 enum class EpubEngine(val label: String, val summary: String) {
     CLASSIC("自研引擎", "保留行内强调，默认"),
     POTATO("LNR 引擎", "段落纯文本，结构更规范"),
