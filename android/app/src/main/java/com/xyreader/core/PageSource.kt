@@ -43,6 +43,23 @@ interface PageSource : Closeable {
     /** 封面默认取第一页；格式自带封面元数据时可覆盖 */
     suspend fun renderCover(): ImageBitmap = renderPage(0)
 
+    /**
+     * 页数是否会在阅读过程中**增长**。
+     *
+     * 本地文件（EPUB / 压缩包 / PDF）打开后页数恒定，保持默认 `false`；
+     * **在线阅读**是逐章抓取后分页，打开时只知道自己抓到的那些章，
+     * 因此为 `true`，并由 [loadMore] 追加。
+     */
+    val growable: Boolean get() = false
+
+    /**
+     * 按需加载更多内容（仅 [growable] 为 `true` 时有意义）。
+     *
+     * @return `true` 表示确实新增了页；调用方据此刷新 [pageCount] 与 [chapters]。
+     *   默认不做事。
+     */
+    suspend fun loadMore(): Boolean = false
+
     override fun close()
 }
 

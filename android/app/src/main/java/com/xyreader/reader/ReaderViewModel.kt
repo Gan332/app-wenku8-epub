@@ -142,6 +142,8 @@ class ReaderViewModel(
     private val aspectRatioCache = mutableMapOf<Int, Float>()
 
     /** 防抖保存进度的任务 */
+    private var growJob: Job? = null
+
     private var saveJob: Job? = null
 
     /** 当前已打开数据源所用的样式键；与最新配置不一致时触发重建 */
@@ -634,12 +636,39 @@ class ReaderViewModel(
         currentPage = page
         pruneAround(page)
         preloadAround(page)
+        maybeGrow(page)
         val count = _state.value.pageCount
         if (count <= 0) return
         saveJob?.cancel()
         saveJob = viewModelScope.launch {
             delay(500)
             runCatching { repository.saveProgress(bookId, page, count) }
+        }
+    }
+
+    /**
+     * 在线阅读：读到接近末尾时抓取后续章节并追加页，随后刷新页数与目录。
+     *
+     * 本地源 [PageSource.growable] 为 false，这里是空操作，行为与之前完全一致。
+     * 抓取走 [PageSource.loadMore]，它内部自己切 IO 并受全局限流约束。
+     */
+    private fun maybeGrow(page: Int) {
+        val src = source ?: return
+        if (!src.growable) return
+        val count = _state.value.pageCount
+        if (count <= 0 || page < count - GROW_THRESHOLD) return
+        if (growJob?.isActive == true) return
+        growJob = viewModelScope.launch {
+            val grew = runCatching { src.loadMore() }.getOrDefault(false)
+            // 换源后旧结果作废
+            if (!grew || src !== source) return@launch
+            val newCount = src.pageCount
+            if (newCount <= count) return@launch
+            _state.value = _state.value.copy(
+                pageCount = newCount,
+                chapters = runCatching { src.chapters }.getOrDefault(emptyList()),
+            )
+            preloadAround(currentPage)
         }
     }
 
@@ -706,6 +735,9 @@ class ReaderViewModel(
 
     private companion object {
         const val PAGE_UI_RADIUS = 3
+
+        /** 距末尾还有这么多页时开始抓取下一章（在线阅读）。 */
+        const val GROW_THRESHOLD = 3
     }
 }
 
