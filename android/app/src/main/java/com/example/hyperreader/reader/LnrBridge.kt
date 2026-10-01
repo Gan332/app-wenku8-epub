@@ -228,11 +228,18 @@ class LnrBookRepository(
         val prev = book.chapters.getOrNull(index - 1)?.id
         val next = book.chapters.getOrNull(index + 1)?.id
         val components = buildJsonArray {
+            var count = 0
             for (block in chapter.blocks) {
                 when (block) {
                     // LNR 组件体系没有「标题」组件：转段落保留文字，内容不丢
-                    is ReaderBlock.Heading -> add(paragraphComponent(listOf(block.text)))
-                    is ReaderBlock.Paragraph -> add(paragraphComponent(listOf(block.text)))
+                    is ReaderBlock.Heading -> {
+                        add(paragraphComponent(listOf(block.text)))
+                        count++
+                    }
+                    is ReaderBlock.Paragraph -> {
+                        add(paragraphComponent(listOf(block.text)))
+                        count++
+                    }
                     is ReaderBlock.Image -> {
                         val uri = resolveImageUri(book, block.path)
                         if (uri != null) {
@@ -243,12 +250,13 @@ class LnrBookRepository(
                                     ImageComponentData(uri),
                                 ),
                             )
+                            count++
                         }
                     }
                 }
             }
             // 空章节防御：翻页渲染器对空组件列表不友好，给占位段落
-            if (isEmpty()) add(paragraphComponent(listOf(chapter.title)))
+            if (count == 0) add(paragraphComponent(listOf(chapter.title)))
         }
         return ChapterContent(
             id = chapter.id,
