@@ -62,6 +62,7 @@ import top.yukonga.miuix.kmp.basic.Slider
 import top.yukonga.miuix.kmp.basic.SliderDefaults
 import top.yukonga.miuix.kmp.basic.SnackbarHost
 import top.yukonga.miuix.kmp.basic.SnackbarHostState
+import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.Surface
 import top.yukonga.miuix.kmp.basic.Switch
 import top.yukonga.miuix.kmp.basic.Text
@@ -282,6 +283,17 @@ fun ReaderScreen(
         viewModel.events.collect { message -> snackbarHostState.showSnackbar(message) }
     }
 
+    // —— MiuiX 弹层宿主 ——
+    // 阅读设置面板用的是 MiuiX `OverlayBottomSheet`，它把弹层注册进
+    // `LocalRootDialogStates ?: LocalDialogStates`，而**只有 MiuiX `Scaffold`
+    // 会通过 `MiuixPopupHost` 渲染这个列表**。阅读器根节点原先是一个裸 `Box`，
+    // 弹层因此被注册进一个没人渲染的列表——表现为「点设置按钮没反应」。
+    // 这里补一个透明 Scaffold 作宿主；insets 交给阅读器自己管（contentWindowInsets = 0）。
+    Scaffold(
+        modifier = Modifier.fillMaxSize(),
+        containerColor = Color.Black,
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
+    ) { _ ->
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         when (state.phase) {
             ReaderPhase.Loading -> Box(
@@ -431,6 +443,7 @@ fun ReaderScreen(
                 .padding(WindowInsets.navigationBars.asPaddingValues())
                 .padding(bottom = 88.dp),
         )
+    }
     }
 }
 

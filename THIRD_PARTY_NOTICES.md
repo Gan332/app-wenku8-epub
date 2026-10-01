@@ -44,12 +44,8 @@
 
 ### 内置字体
 
-| 字体 | 来源 | 许可 |
-| --- | --- | --- |
-| 霞鹜文楷 Lite | [LXGW WenKai](https://github.com/lxgw/LxgwWenKai) | SIL OFL 1.1 |
-| 朱雀仿宋 | 璇玑造字 | SIL OFL 1.1 |
-
-字体文件随 APK 打包分发；用户导入的自定义字体仅存于本机，版权归字体作者所有。
+0.14.0 起只内置 MiSans（见下方「其它依赖」），霞鹜文楷 Lite 与朱雀仿宋已移除
+（APK 减约 23MB）。用户导入的自定义字体仅存于本机，版权归字体作者所有。
 
 > 0.13.0 起阅读器改用 XY reader（见上）。**LightNovelReader 的阅读器（126 个 Kotlin 文件）
 > 已整体移除**（`indi.dmzz_yyhyy.lightnovelreader` / `io.nightfish.lightnovelreader.api` 下的

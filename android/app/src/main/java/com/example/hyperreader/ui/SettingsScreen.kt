@@ -278,7 +278,7 @@ private fun AboutSection(viewModel: StudioViewModel) {
         {
             Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(14.dp)) {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("文库 EPUB 工坊", fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                    Text("HyperReader", fontWeight = FontWeight.Bold, fontSize = 17.sp)
                     Text("版本 0.7.0", fontSize = 13.sp, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f))
                     Text("Kotlin + Jetpack Compose + MiuiX", fontSize = 13.sp, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f))
                 }

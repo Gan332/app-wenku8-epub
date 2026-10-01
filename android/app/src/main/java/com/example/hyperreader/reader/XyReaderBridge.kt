@@ -52,6 +52,8 @@ import kotlinx.serialization.json.Json
 private val xyJson = Json {
     ignoreUnknownKeys = true
     encodeDefaults = true
+    // 枚举值被删掉时（如 0.14.0 移除的内置字体）回退到默认值，而不是抛异常让整份配置作废
+    coerceInputValues = true
 }
 
 /** 阅读配置在 DataStore 里的键；整份 [ReaderPrefs] 以一个 JSON 字符串存取。 */

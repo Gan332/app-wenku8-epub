@@ -517,9 +517,7 @@ private fun previewFamilyOf(family: NovelFontFamily): FontFamily = when (family)
     NovelFontFamily.SYSTEM_SANS -> FontFamily.SansSerif
     NovelFontFamily.SYSTEM_SERIF -> FontFamily.Serif
     NovelFontFamily.SYSTEM_MONOSPACE -> FontFamily.Monospace
-    NovelFontFamily.BUNDLED_WENKAI -> FontFamily(Font(R.font.lxgw_wenkai_lite))
     NovelFontFamily.BUNDLED_MISANS -> FontFamily(Font(R.font.misansvf))
-    NovelFontFamily.BUNDLED_ZHUQUE -> FontFamily(Font(R.font.zhuque_fangsong))
 }
 
 // ---------- 共用组件 ----------

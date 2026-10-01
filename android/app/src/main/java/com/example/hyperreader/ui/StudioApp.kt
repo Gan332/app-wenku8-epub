@@ -208,7 +208,7 @@ private fun StudioApp(
                     state.tab == StudioTab.EXPLORE -> "探索"
                     state.tab == StudioTab.SETTINGS -> settingsTitle
                     state.exploreDetailId != null -> "书籍详情"
-                    state.step == CreateStep.SOURCE -> "文库 EPUB 工坊"
+                    state.step == CreateStep.SOURCE -> "HyperReader"
                     state.step == CreateStep.DETAIL -> "书籍详情"
                     state.step == CreateStep.CHAPTERS -> "选择章节"
                     state.step == CreateStep.EXPORT -> "导出设置"

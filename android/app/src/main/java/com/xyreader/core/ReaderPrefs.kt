@@ -72,13 +72,20 @@ enum class NovelFontSize(val label: String, val sp: Float) {
  * 「导入字体」添加的自定义字体不占枚举位——见 [ReaderPrefs.novelCustomFont]。
  */
 @Serializable
+/**
+ * 小说字体：系统三族（无需下载）+ 内置 MiSans（随 APK 打包）。
+ * 「导入字体」添加的自定义字体不占枚举位——见 [ReaderPrefs.novelCustomFont]。
+ *
+ * 0.14.0 起只内置 MiSans：霞鹜文楷（13.9MB）与朱雀仿宋（8.8MB）已移除，
+ * APK 因此减约 23MB。已存配置里若还是那两个值，由 `XyReaderPrefsStore` 的
+ * `coerceInputValues` 回退到默认值，不会崩。
+ */
+@Serializable
 enum class NovelFontFamily(val label: String) {
     SYSTEM_SANS("系统无衬线"),
     SYSTEM_SERIF("系统衬线"),
     SYSTEM_MONOSPACE("系统等宽"),
-    BUNDLED_WENKAI("霞鹜文楷"),
     BUNDLED_MISANS("MiSans"),
-    BUNDLED_ZHUQUE("朱雀仿宋"),
 }
 
 /** 字重选项确保中文 fallback 字体也能明显区分。 */

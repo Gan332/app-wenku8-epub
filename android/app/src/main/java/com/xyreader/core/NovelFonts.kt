@@ -24,13 +24,11 @@ object NovelFonts {
     /**
      * 内置字体 → res/font 资源 id（构建期必须有对应文件）。
      *
-     * 与本工程既有字体资产对齐：MiSans 复用早已随包分发的 `misansvf`（可变字重），
-     * 不重复打包上游那份静态 regular，省 8MB。
+     * 0.14.0 起只内置 MiSans（复用本工程早已随包分发的 `misansvf` 可变字重）。
+     * 上游那两款 CJK 字体（霞鹜文楷 13.9MB、朱雀仿宋 8.8MB）已移除，APK 减约 23MB。
      */
     private val BUNDLED_RES: Map<NovelFontFamily, Int> = mapOf(
-        NovelFontFamily.BUNDLED_WENKAI to R.font.lxgw_wenkai_lite,
         NovelFontFamily.BUNDLED_MISANS to R.font.misansvf,
-        NovelFontFamily.BUNDLED_ZHUQUE to R.font.zhuque_fangsong,
     )
 
     private const val IMPORT_DIR = "fonts"
