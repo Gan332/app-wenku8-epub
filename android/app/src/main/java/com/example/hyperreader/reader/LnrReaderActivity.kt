@@ -160,6 +160,11 @@ private fun LnrReaderRoot(
         )
     }
 }
+
+/**
+ * LNR 阅读器的 VM 宿主：装配 4 个数据桥 + 组件注册表，
+ * 并把加载、会话统计、既有断点接到既有设施（AGENTS 4.3 口径不变）。
+ *
  * 装配关系：
  * ```
  * EpubReaderRepository.open(uri) → ReaderBook（native 结构解析 + Jsoup 块解析）
