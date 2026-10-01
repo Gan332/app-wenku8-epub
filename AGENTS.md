@@ -78,6 +78,11 @@ android/app/src/main/java/com/xyreader/     ← xy-reader 阅读器（保留上�
 ├── archive/                     页面源：NovelPageSource（排版引擎）、各压缩包/PDF/MOBI 页面源
 ├── reader/                      ReaderScreen（阅读界面）、ReaderViewModel、PageZoom
 └── ui/                          ReaderConfigScreen、NovelSpacingControls、Common
+
+android/app/src/main/java/io/nightfish/lightnovelreader/api/   ← LNR 书源抽象（见 §4.5.1）
+├── web/                         书源契约、注册表、探索页/搜索提供者与过滤器
+├── book/ explore/ content/      书本/章节模型、内容组件、探索页模型
+└── identifier/ serializer/ xml/ text/ image/ util/ error/ plugin/
 ```
 
 入口：Manifest 声明的启动 Activity 是 `.MainActivity`，但它**不是独立文件**，类定义在
@@ -144,14 +149,36 @@ android/app/src/main/java/com/xyreader/     ← xy-reader 阅读器（保留上�
   有单测 `mainSourcesUseNoMaterialComponents` 守卫，源码出现 material 引用直接失败
 - 主题色从 `MiuixTheme.colorScheme` 获取，不要写死颜色
 
-### 4.5 被动触发（0.7.0 起）
+### 4.5 探索页自动获取（0.14.0 起；**取代** 0.7.0 的「被动触发」）
 
-除用户点击外，应用**不发起任何书目网络请求**：
+0.7.0–0.13.0 探索页是**被动触发**的（只读本地索引，缓存为空时让用户去设置页点
+「更新书目缓存」）。0.14.0 起改为**自动获取**：
 
-- 「更新书目缓存」只存在于设置 → 书目缓存
-- 探索页只读本地索引，缓存为空时提供跳转入口
-- 打开未缓存书籍必须由用户点击「加载完整详情」后才请求
-- `CatalogRepository.ensureBook` / `expandAuthor` 不得在页面加载路径上自动调用
+- 进入探索页即自动抓取公开榜单，并把**本地索引没有的书自动走书源补全**
+  （`articleinfo.php`），逐个追加进列表；不再要求用户手动更新缓存
+- 单次补全有上限（`StudioViewModel.EXPLORE_AUTO_FETCH_LIMIT = 20`）：全局限流是
+  1 秒/请求，一次榜单动辄 30+ 本，全抓会让用户干等
+- 「更新书目缓存」仍保留在设置 → 书目缓存，用于一次性批量补全
+
+仍然生效的边界（**不要放宽**）：
+
+- 只抓 AGENTS §4.2 匿名白名单内的端点；`search.php` / `articlelist.php` /
+  `toplist.php` / `tags.php` 由站点控制登录，**保持原样、不得规避**
+- 所有请求必须走 `Wenku8HttpClient`（全局限流 + 429 退避 + 重定向复校验），
+  不得自建 HTTP 客户端绕过
+- 书源搜索走**本地书目索引**，不打源站 `search.php`
+- `CatalogRepository.expandAuthor` 仍只在用户显式点击时调用
+
+### 4.5.1 书源体系（0.14.0 起）
+
+LNR 的书源抽象在 `io.nightfish.lightnovelreader.api`（102 文件），本工程的实现是
+`core/Wenku8BookSource.kt`：
+
+- `Wenku8BookSource` 实现 `WebBookDataSource`，取数一律走 `Wenku8HttpClient` +
+  `Wenku8SessionStore`（用户自己的会话 Cookie），**不沿用上游的 `defaultplugin/wenku8`**
+  ——上游那份硬编码了作者账号 Cookie 且用 Ktor 绕过限流，理由见 `THIRD_PARTY_NOTICES.md`
+- 装配在 `Wenku8Application.bookSource`；探索页/详情页从这里取数
+- `permits` 压到 2：节奏由 `HttpRateLimiter` 决定，放大并发只会让请求排队
 
 ### 4.6 探索详情 ≠ 创建导出（0.11.0 起）
 

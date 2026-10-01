@@ -36,7 +36,7 @@ class Wenku8Application : Application() {
             catalogSearch = { field, keyword ->
                 catalogRepository.search(
                     keyword,
-                    if (field == CatalogSearchField.AUTHOR) CatalogSearchField.AUTHOR else CatalogSearchField.TITLE,
+                    if (field == SEARCH_FIELD_AUTHOR) CatalogSearchField.AUTHOR else CatalogSearchField.TITLE,
                 ).map { it.toSearchBook() }
             },
         )
@@ -51,3 +51,9 @@ class Wenku8Application : Application() {
     val coverRepository: com.example.hyperreader.ui.cover.CoverRepository by lazy { com.example.hyperreader.ui.cover.CoverRepository(this) }
     val onlineReaderSource: com.example.hyperreader.reader.OnlineReaderSource by lazy { com.example.hyperreader.reader.OnlineReaderSource(File(filesDir, "online-cache"), jobManager.httpClient()) }
 }
+
+/**
+ * 书源搜索的字段标识（`SearchType.type`），与 `Wenku8BookSource` 的 `searchTypes` 对齐。
+ * 只区分「按作者」与「按书名」，其余一律按书名走。
+ */
+private const val SEARCH_FIELD_AUTHOR = "author"
