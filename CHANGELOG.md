@@ -2,6 +2,57 @@
 
 本项目遵循语义化版本。
 
+## [0.12.0] - 2026-09-27
+
+### 变更
+
+- **阅读器换成 LightNovelReader 的内置阅读器**（来自本地 LNR 工作副本，
+  基线 `1.2.0-197-g5e2f7cd0`，**Apache 2.0**）。核心收益是它的
+  **按页排版翻页引擎**（`FlipPageContentComponent`，968 行）与滚动组件、
+  章节选择面板、图片查看器、阅读器设置面板。
+
+  引入方式与边界：
+
+  - 拷贝 `:api` 阅读器子集 + reader UI 共 **126 个 Kotlin 文件**
+    （原包名 `io.nightfish.lightnovelreader.api.*` / `indi.dmzz_yyhyy.lightnovelreader.*` 保留，
+    Apache 文件头保留，根目录加 `THIRD_PARTY_NOTICES.md` 声明）。
+  - **数据层全部保留本工程实现**：Rust EPUB 结构解析 + Jsoup 块解析、
+    DataStore 断点与设置、`CoverRepository` 限流图片管线、`ReadingStatsRepository` 统计。
+  - **不引入** LNR 的 Room / Coil / panpf / Hilt / WorkManager / 插件系统 / navigation3 UI。
+
+  适配要点：
+
+  - **material3 全清**（本项目守卫测试 `mainSourcesUseNoMaterialComponents` 持续绿）：
+    `ModalBottomSheet`→`OverlayBottomSheet`、`SecondaryTabRow`→MiuiX `TabRow`、
+    M3 的 `TopAppBar.title` 是 composable 而 MiuiX 是 String（标题动画简化）、
+    复合 `TextButton`→`Column+clickable`（按压遮罩由 `MiuixTheme` 的 `LocalIndication` 提供）。
+  - **Snackbar** 走 MiuiX 同名体系；**图片三态**（加载/失败占位/就绪）经
+    `ReaderImageLoader` 接 `CoverRepository`，失败点「重试」会真正重载。
+  - **主题桥** `LnrAppTheme`：把 MiuiX `colorScheme` 投影成 LNR 期望的
+    `LocalAppTheme`（含 `MiuixTheme.colorScheme` 双层写法的自引用兼容）。
+  - **数据桥** `LnrBridge.kt`：8 类 `UserData` 绑到**同一个** DataStore
+    （`lnr_userdata_*` / `lnr_reading_*` 前缀，不新建 DataStore 实例）、
+    `ReaderBlock`→LNR 组件 JSON（id 取组件自身 `Identifier`，与渲染注册表严格一致）、
+    EPUB 内插图解包落 `cacheDir/lnr-images`（sha1 寻址、原子写）。
+  - **断点双向**：进入时把既有 `ReadingProgress` 换算成 LNR 的 `lastReadChapterId`；
+    退出时把 LNR 的章内比例换算回段落序号写回 `ReadingProgress`，并 `recordRead` 更新书架时间。
+  - **统计口径不变**：`accumulateBookReadTime` → `ReadingStatsRepository.recordSession`
+    （单次 ≤30 分钟）；LNR 的事件流/完读率方法显式 no-op，避免统计双写。
+  - 组件 id 缺失时走 `ErrorContentComponentData`（可诊断），不静默吞。
+
+- **GPLv3 文件已剔除**：`RollingNumber`（EhViewer 来源，GPLv3）不进入本 MIT 项目，
+  4 处调用点改为普通文本。删除集：`Navigation.kt`、ImageViewer、`Dialog.kt`（11 个零引用导出）、
+  `AppColorPickerTarget`；图片全屏查看改接本工程 `CoverViewerDialog`。
+- **裁剪主设置页专属功能**：更新渠道（`data.update`）、书架/本地排序（`ui.bookmanager`）
+  选项组零引用且依赖 Hilt/shimmer，随之裁掉。
+
+### 升级说明
+
+- 无数据迁移变更（沿用 `com.example.hyperreader`）。
+- 旧 `ReaderActivity`（自研渲染壳）**暂留**作对照路径：首帧、R8、手势这类问题
+  只能在真机暴露；真机冒烟通过后在下一个版本删除。
+- 阅读器设置项位置与旧版不同（改为 LNR 布局），字号/字重/行高/背景等仍可调。
+
 ## [0.11.0] - 2026-09-27
 
 ### 新增
