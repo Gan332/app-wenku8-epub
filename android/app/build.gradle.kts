@@ -106,6 +106,9 @@ dependencies {
     implementation(libs.kotlin.result.coroutines)
     implementation(libs.dom4j)
     implementation(libs.androidx.navigation3.runtime)
+    // xy-reader 阅读器引入（0.13.0）：压缩包页面源（CBZ/CB7/CBT + CBR）
+    implementation(libs.commons.compress)
+    implementation(libs.junrar)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

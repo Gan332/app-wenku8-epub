@@ -43,3 +43,14 @@
 -dontwarn org.openjsse.**
 # MiuiX 依赖 Compose，部分符号在无引用时会被误判
 -dontwarn top.yukonga.miuix.kmp.**
+
+# ---- xy-reader 阅读器引入（0.13.0）----
+# 压缩包解析库大量使用反射/服务加载（commons-compress 的归档器探测、junrar 的
+# UnRAR 解码器），整体保活避免被裁成运行期 NoClassDefFoundError。
+-keep class com.xyreader.** { *; }
+-keep class org.apache.commons.compress.** { *; }
+-keep class com.github.junrar.** { *; }
+-dontwarn org.apache.commons.compress.**
+-dontwarn com.github.junrar.**
+# junrar 的日志门面是可选的，未引入 slf4j 实现
+-dontwarn org.slf4j.**
