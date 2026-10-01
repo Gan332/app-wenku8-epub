@@ -6,7 +6,13 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextIndent
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
@@ -19,6 +25,11 @@ import indi.dmzz_yyhyy.lightnovelreader.data.plugin.injector.PluginInjectorProvi
 import indi.dmzz_yyhyy.lightnovelreader.ui.LnrAppTheme
 import indi.dmzz_yyhyy.lightnovelreader.ui.book.reader.ReaderScreen
 import indi.dmzz_yyhyy.lightnovelreader.ui.book.reader.ReaderViewModel
+import indi.dmzz_yyhyy.lightnovelreader.ui.book.reader.SettingState
+import indi.dmzz_yyhyy.lightnovelreader.utils.readerTextColor
+import io.nightfish.lightnovelreader.api.ui.LocalComponentRender
+import io.nightfish.lightnovelreader.api.ui.LocalReaderStyle
+import io.nightfish.lightnovelreader.api.ui.ReaderStyle
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -49,20 +60,28 @@ class LnrReaderActivity : ComponentActivity() {
                 // LNR 壳依赖 LocalAppTheme（MiuiX 投影）+ LocalSnackbarHost，
                 // LnrAppTheme 两者都注入；MiuiX 本体主题仍由 AppMiuixTheme 提供。
                 val uiState by viewModel.readerUiState.collectAsStateWithLifecycle()
-                LnrAppTheme {
-                    ReaderScreen(
-                        readingScreenUiState = uiState,
-                        settingState = viewModel.reader.settingState,
-                        onClickBackButton = { finish() },
-                        accumulateReadTime = { id, seconds -> viewModel.reader.accumulateReadingTime(id, seconds) },
-                        updateTotalReadingTime = { id, seconds -> viewModel.reader.updateTotalReadingTime(id, seconds) },
-                        onClickPrevChapter = { viewModel.reader.prevChapter() },
-                        onClickNextChapter = { viewModel.reader.nextChapter() },
-                        onChangeChapter = { chapterId -> viewModel.reader.changeChapter(chapterId) },
-                        // 阅读器样式在独立二级页（本工程无该页）；返回即退出阅读器。
-                        onClickReaderStyleSettings = { finish() },
-                    )
-                }
+                LnrReaderRoot(
+                    contentComponentRepository = viewModel.reader.contentComponentRepository,
+                    settingState = viewModel.reader.settingState,
+                    content = {
+                        ReaderScreen(
+                            readingScreenUiState = uiState,
+                            settingState = viewModel.reader.settingState,
+                            onClickBackButton = { finish() },
+                            accumulateReadTime = { id, seconds ->
+                                viewModel.reader.accumulateReadingTime(id, seconds)
+                            },
+                            updateTotalReadingTime = { id, seconds ->
+                                viewModel.reader.updateTotalReadingTime(id, seconds)
+                            },
+                            onClickPrevChapter = { viewModel.reader.prevChapter() },
+                            onClickNextChapter = { viewModel.reader.nextChapter() },
+                            onChangeChapter = { chapterId -> viewModel.reader.changeChapter(chapterId) },
+                            // 阅读器样式在独立二级页（本工程无该页）；返回即退出阅读器。
+                            onClickReaderStyleSettings = { finish() },
+                        )
+                    },
+                )
             }
         }
     }
@@ -90,9 +109,57 @@ class LnrReaderActivity : ComponentActivity() {
 }
 
 /**
- * LNR 阅读器的 VM 宿主：装配 4 个数据桥 + 组件注册表，
- * 并把加载、会话统计、既有断点接到既有设施（AGENTS 4.3 口径不变）。
+ * LNR 阅读器的组合根，补齐 LNR 原 `NavigationContent` 提供、但本工程未引入导航基建
+ * 因此没人注入的 CompositionLocal。
  *
+ * [io.nightfish.lightnovelreader.api.ui.LocalComponentRender] 是**闪退根因**：
+ * 它的默认值是 `error(...)`，而 [ScrollContentComponent]/[FlipPageContentComponent]
+ * 渲染正文每个组件时都会读 `LocalComponentRender.current`。缺了 provider，一进阅读器
+ * 渲染首帧正文就抛 `IllegalStateException` —— CI 编译与单测都测不到（纯运行期，
+ * 且需要真实 EPUB + 真机），表现为「点进阅读器就闪退」。
+ *
+ * 同时投影 [LocalReaderStyle]：上游由设置页写入，本工程没有那个页面，
+ * 不投影的话字号/行距/缩进/段间距全部退回 [ReaderStyle] 硬编码默认值，
+ * 用户在 DataStore 里的阅读器设置对正文无效。这里从 [SettingState] 现算。
+ */
+@Composable
+private fun LnrReaderRoot(
+    contentComponentRepository: ContentComponentRepository,
+    settingState: SettingState,
+    content: @Composable () -> Unit,
+) {
+    LnrAppTheme {
+        val fontUri = settingState.fontUri
+        val textColor = readerTextColor(settingState)
+        val readerStyle = remember(
+            settingState.fontSize,
+            settingState.lineHeight,
+            settingState.fontWeigh,
+            settingState.firstLineTextIndent,
+            settingState.spacingAfterParagraph,
+            settingState.fontUri,
+            textColor,
+        ) {
+            ReaderStyle(
+                fontSize = settingState.fontSize.sp,
+                fontWeight = FontWeight(settingState.fontWeigh.toInt()),
+                lineHeight = settingState.lineHeight.sp,
+                letterSpacing = 0.2.sp,
+                textColor = textColor,
+                textDarkColor = textColor,
+                spacingBeforeParagraph = 0.sp,
+                spacingAfterParagraph = settingState.spacingAfterParagraph.sp,
+                textIndent = TextIndent(firstLine = settingState.firstLineTextIndent.sp),
+                fontUri = fontUri.takeIf { it != Uri.EMPTY },
+            )
+        }
+        CompositionLocalProvider(
+            LocalComponentRender provides contentComponentRepository,
+            LocalReaderStyle provides readerStyle,
+            content = content,
+        )
+    }
+}
  * 装配关系：
  * ```
  * EpubReaderRepository.open(uri) → ReaderBook（native 结构解析 + Jsoup 块解析）
