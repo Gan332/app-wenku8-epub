@@ -104,6 +104,10 @@ dependencies {
     // xy-reader 阅读器引入（0.13.0）：压缩包页面源（CBZ/CB7/CBT + CBR）
     implementation(libs.commons.compress)
     implementation(libs.junrar)
+    // LNR 书源体系引入（0.14.0）：Result 类型 + 书源 XML 构建
+    implementation(libs.kotlin.result)
+    implementation(libs.kotlin.result.coroutines)
+    implementation(libs.dom4j)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

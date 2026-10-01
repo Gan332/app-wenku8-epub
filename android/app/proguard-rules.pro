@@ -54,3 +54,15 @@
 -dontwarn com.github.junrar.**
 # junrar 的日志门面是可选的，未引入 slf4j 实现
 -dontwarn org.slf4j.**
+
+# ---- LNR 书源体系引入（0.14.0）----
+# 书源 API 大量用 kotlinx.serialization 的自定义 KSerializer，且插件体系靠注解
+# （@WebDataSource）描述元数据；整体保活避免被裁。
+-keep class io.nightfish.lightnovelreader.** { *; }
+# dom4j 用反射创建节点实现，XPath 依赖可选的 jaxen（本工程不引入）
+-keep class org.dom4j.** { *; }
+-dontwarn org.dom4j.**
+-dontwarn org.jaxen.**
+# kotlin-result 的 Result 密封类在 R8 下需要保留类型信息
+-keep class com.github.michaelbull.result.** { *; }
+-dontwarn com.github.michaelbull.result.**

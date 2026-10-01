@@ -18,6 +18,9 @@ documentfile = "1.0.1"
 # xy-reader 阅读器引入（0.13.0）：压缩包页面源
 commonsCompress = "1.27.1"
 junrar = "7.5.5"
+# LNR 书源体系引入（0.14.0）：Result 类型 + XML 构建
+kotlinResult = "2.3.1"
+dom4j = "2.2.0"
 
 [libraries]
 # 0.9.3 起 material / material3 / material-icons 全量移除（界面统一 MiuiX），对应依赖项一并删除
@@ -38,6 +41,10 @@ kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serializa
 okhttp = { module = "com.squareup.okhttp3:okhttp", version.ref = "okhttp" }
 jsoup = { module = "org.jsoup:jsoup", version.ref = "jsoup" }
 junit = { module = "junit:junit", version.ref = "junit" }
+# LNR 书源体系：Result 类型（api 层接口签名）+ dom4j（书源 XML 构建）
+kotlin-result = { module = "com.michael-bull.kotlin-result:kotlin-result", version.ref = "kotlinResult" }
+kotlin-result-coroutines = { module = "com.michael-bull.kotlin-result:kotlin-result-coroutines", version.ref = "kotlinResult" }
+dom4j = { module = "org.dom4j:dom4j", version.ref = "dom4j" }
 androidx-junit = { module = "androidx.test.ext:junit", version.ref = "androidxJunit" }
 androidx-espresso = { module = "androidx.test.espresso:espresso-core", version.ref = "espresso" }
 # 压缩包页面源：zip/7z/tar 用 commons-compress，rar 用 junrar（UnRAR License，仅解压）
