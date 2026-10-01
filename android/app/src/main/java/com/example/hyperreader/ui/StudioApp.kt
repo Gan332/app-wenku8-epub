@@ -109,7 +109,7 @@ class MainActivity : ComponentActivity() {
         if (uri != null) {
             runCatching { contentResolver.takePersistableUriPermission(uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION) }
             studioViewModel.addLocalEpub(uri.toString(), uri.lastPathSegment?.substringAfterLast('/') ?: "本地 EPUB")
-            startActivity(android.content.Intent(this, ReaderActivity::class.java).putExtra(ReaderActivity.EXTRA_URI, uri.toString()).putExtra(ReaderActivity.EXTRA_BOOK_ID, "local:${uri.toString().hashCode()}"))
+            startActivity(com.example.hyperreader.reader.LnrReaderActivity.intent(this, uri.toString(), "local:${uri.toString().hashCode()}"))
         }
     }
     private val fontPicker = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -284,7 +284,7 @@ private fun StudioApp(
             when {
                 state.tab == StudioTab.BOOKSHELF -> BookshelfScreen(state, viewModel, onImportEpub, onOpenLocal = { entry ->
                     entry.localUri?.let { uri ->
-                        context.startActivity(android.content.Intent(context, ReaderActivity::class.java).putExtra(ReaderActivity.EXTRA_URI, uri).putExtra(ReaderActivity.EXTRA_BOOK_ID, entry.bookId))
+                        context.startActivity(com.example.hyperreader.reader.LnrReaderActivity.intent(context, uri, entry.bookId))
                     }
                 }, onOpenRemote = { entry -> viewModel.openShelfRemote(entry) })
                 state.tab == StudioTab.EXPLORE -> ExploreScreen(state, viewModel, onLogin) {
@@ -500,7 +500,7 @@ private fun HistoryScreen(jobs: List<ExportJob>, viewModel: StudioViewModel) {
                             TextButton(text = "保存", onClick = { viewModel.save(job.id) })
                             TextButton(text = "分享", onClick = { viewModel.share(job.id) })
                             job.output?.let { output ->
-                                TextButton(text = "阅读", onClick = { context.startActivity(android.content.Intent(context, ReaderActivity::class.java).putExtra(ReaderActivity.EXTRA_URI, output.uri).putExtra(ReaderActivity.EXTRA_BOOK_ID, job.id)) })
+                                TextButton(text = "阅读", onClick = { context.startActivity(com.example.hyperreader.reader.LnrReaderActivity.intent(context, output.uri, job.id)) })
                             }
                         }
                     }

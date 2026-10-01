@@ -36,6 +36,11 @@
             android:name=".reader.ReaderActivity"
             android:exported="false"
             android:screenOrientation="unspecified" />
+        <!-- LNR 阅读器（0.12.0 引入）：旧壳暂留作对照，真机冒烟通过后删除 -->
+        <activity
+            android:name=".reader.LnrReaderActivity"
+            android:exported="false"
+            android:screenOrientation="unspecified" />
         <activity
             android:name=".reader.OnlineReaderActivity"
             android:exported="false"
