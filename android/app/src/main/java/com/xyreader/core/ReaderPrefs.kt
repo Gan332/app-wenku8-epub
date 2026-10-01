@@ -68,11 +68,6 @@ enum class NovelFontSize(val label: String, val sp: Float) {
 }
 
 /**
- * 小说字体：系统三族（无需下载）+ 三款内置开源字体（随 APK 打包）。
- * 「导入字体」添加的自定义字体不占枚举位——见 [ReaderPrefs.novelCustomFont]。
- */
-@Serializable
-/**
  * 小说字体：系统三族（无需下载）+ 内置 MiSans（随 APK 打包）。
  * 「导入字体」添加的自定义字体不占枚举位——见 [ReaderPrefs.novelCustomFont]。
  *
