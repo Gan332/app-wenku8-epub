@@ -100,9 +100,14 @@ android/             原生 Kotlin 业务层、MiuiX Compose UI、搜索、阅�
 - 分级设置：主题与外观、阅读器设置、阅读统计、书目缓存、关于
 - 书籍详情：作者、分类、连载状态、更新时间、全文字数、简介、标签和目录
 - 阅读统计：总时长、今日时长、连续天数、每日时长和按书籍统计
-- EPUB 阅读器：章节目录、章节导航、插图、左右章节翻页和上下滚动
-- 阅读设置：米黄/白纸/护眼/夜间/OLED/自定义背景，字体、字号、字重、行距、段距和边距
-- 自定义 TTF/OTF 字体导入，阅读进度按章节和段落恢复
+- EPUB 阅读器（[XY reader](https://github.com/TerryYu12/xy-reader)，MIT）：按页排版、
+  左右翻页与上下滚动、点击翻页、双击页内放大、捏合缩放
+- 阅读界面：目录抽屉（目录/书签双 tab、当前章高亮）、书签增删、复制当前页文字、
+  亮度调节、屏幕方向锁定、手势锁、沉浸式全屏
+- 阅读设置：纯黑/深灰/护眼黄/纯白背景，字体、字号、字重、行距、字间距、
+  四向边距、首行缩进、章首另起一页、图片缩放与渲染质量
+- 内置霞鹜文楷 / MiSans / 朱雀仿宋三款字体，支持导入自定义 TTF/OTF/TTC
+- 阅读进度按页记忆并同步书架「上次阅读」
 - 导出 EPUB 保存到 `Download/EPUB`、系统分享和历史任务重新阅读
 
 本地需要 JDK 21、Android SDK Platform 36 和 Build Tools 36.1.0：
@@ -123,20 +128,18 @@ Android 任务历史保存在应用私有数据目录，正式发布前请使用
 - 目标仓库：`https://github.com/Gan332/app-wenku8-epub`
 - APK 不直接提交到 Git，避免二进制文件污染仓库历史
 
-推送代码到目标仓库：
+推送代码到目标仓库（本机 `git push` 在 Windows Schannel 下不可靠，用仓库内脚本走 Git Database API）：
 
 ```powershell
-git remote add origin https://github.com/Gan332/app-wenku8-epub.git
-git add .
-git commit -m "feat: add standalone Android APK source and CI"
-git push -u origin main
+$env:LOCAL_BASE = "<上次推送对应的本地提交>"
+bash scripts/push-via-api.sh
 ```
 
-推送 `v0.8.0` 等版本标签会触发 Release APK：
+推送 `v0.13.0` 等版本标签会触发 Release APK：
 
 ```powershell
-git tag v0.8.0
-git push origin v0.8.0
+git tag v0.13.0
+git push origin v0.13.0
 ```
 
 ## 测试与验收
@@ -182,6 +185,8 @@ npm run release:package
 - [`docs/USER_SOP.md`](docs/USER_SOP.md)：用户操作流程
 - [`docs/ENGINEERING_SOP.md`](docs/ENGINEERING_SOP.md)：Git、开发、测试和发布流程
 - [`docs/RELEASE_CHECKLIST.md`](docs/RELEASE_CHECKLIST.md)：发布验收清单
+- [`docs/RELEASE_NOTES_v0.13.0.md`](docs/RELEASE_NOTES_v0.13.0.md)：v0.13.0 阅读器换成 XY reader
+- [`docs/RELEASE_NOTES_v0.12.0.md`](docs/RELEASE_NOTES_v0.12.0.md)：v0.12.0 阅读器接入 LightNovelReader
 - [`docs/RELEASE_NOTES_v0.7.0.md`](docs/RELEASE_NOTES_v0.7.0.md)：v0.7.0 封面、详情页、书架与设置二级界面
 - [`docs/RELEASE_NOTES_v0.6.0.md`](docs/RELEASE_NOTES_v0.6.0.md)：v0.6.0 免登录本地书目索引与搜索
 - [`docs/RELEASE_NOTES_v0.5.0.md`](docs/RELEASE_NOTES_v0.5.0.md)：v0.5.0 书架、探索、数据源和阅读统计发布说明
