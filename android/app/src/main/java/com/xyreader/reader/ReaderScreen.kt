@@ -824,7 +824,7 @@ private fun ReaderPagerArea(
                             colors = SliderDefaults.sliderColors(
                                 thumbColor = MiuixTheme.colorScheme.primary,
                                 foregroundColor = MiuixTheme.colorScheme.primary,
-                                inforegroundColor = Color.White.copy(alpha = 0.25f),
+                                backgroundColor = Color.White.copy(alpha = 0.25f),
                             ),
                         )
                         Text(
@@ -866,7 +866,7 @@ private fun ReaderPagerArea(
                             colors = SliderDefaults.sliderColors(
                                 thumbColor = MiuixTheme.colorScheme.primary,
                                 foregroundColor = MiuixTheme.colorScheme.primary,
-                                inforegroundColor = Color.White.copy(alpha = 0.25f),
+                                backgroundColor = Color.White.copy(alpha = 0.25f),
                             ),
                         )
                     }
