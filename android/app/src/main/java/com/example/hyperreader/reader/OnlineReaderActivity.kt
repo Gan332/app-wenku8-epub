@@ -29,7 +29,7 @@ import kotlinx.coroutines.launch
 /**
  * 在线阅读的状态持有者。
  *
- * 它实现 [ReaderActions]——与 `ReaderViewModel` **同一个接口**，
+ * 它实现 [ReaderActions]——与本地 EPUB 侧 **同一个接口**，
  * 因此在线与 EPUB 两种模式共用同一份渲染界面（`ReaderScreenCore`），
  * 字体、背景、沉浸模式、目录面板、阅读进度、时长统计的行为完全一致。
  *
@@ -133,7 +133,7 @@ class OnlineReaderViewModel(application: Application) : AndroidViewModel(applica
 
     fun clearNotice() = mutable.update { it.copy(notice = null) }
 
-    // ---- ReaderActions：与 ReaderViewModel 同名同签名，实现见下 ----
+    // ---- ReaderActions：与本地 EPUB 侧同签名，实现见下 ----
 
     override fun selectChapter(index: Int) {
         val book = state.value.book ?: return
@@ -150,11 +150,11 @@ class OnlineReaderViewModel(application: Application) : AndroidViewModel(applica
         persistProgress()
     }
 
-    // 与 ReaderViewModel 保持一致：只切 controlsVisible，不翻转持久化的沉浸设置
+    // 与本地 EPUB 侧保持一致：只切 controlsVisible，不翻转持久化的沉浸设置
     override fun toggleControls() = mutable.update { it.copy(controlsVisible = !it.controlsVisible) }
 
     override fun setImmersive(value: Boolean) = mutable.update { it.copy(isImmersive = value, controlsVisible = !value) }
-    // 与 ReaderViewModel 一致：面板开合互斥，避免两个 OverlayBottomSheet 的窗口互相叠压
+    // 与本地 EPUB 侧一致：面板开合互斥，避免两个 OverlayBottomSheet 的窗口互相叠压
     override fun showSettings(show: Boolean) = mutable.update { it.withPanel(showSettings = show) }
     override fun showToc(show: Boolean) = mutable.update { it.withPanel(showToc = show) }
     override fun closeOverlays() = mutable.update { it.copy(showSettings = false, showToc = false) }

@@ -18,7 +18,7 @@
 -keep class com.example.hyperreader.Wenku8Application { *; }
 -keep class com.example.hyperreader.MainActivity { *; }
 -keep class com.example.hyperreader.auth.** { *; }
--keep class com.example.hyperreader.reader.ReaderActivity { *; }
+-keep class com.example.hyperreader.reader.XyReaderActivity { *; }
 -keep class com.example.hyperreader.reader.OnlineReaderActivity { *; }
 -keep class com.example.hyperreader.service.ExportNotificationService { *; }
 

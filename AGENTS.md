@@ -11,7 +11,7 @@
 
 当前主要发版对象是 **Android 原生应用**。Android 版本不需要 Node.js 服务，WebView 仅用于 wenku8 登录。
 
-当前版本：`0.12.0`（versionCode 19，见 `android/app/build.gradle.kts`，以该文件为准）
+当前版本：`0.13.0`（versionCode 20，见 `android/app/build.gradle.kts`，以该文件为准）
 包名：`com.example.hyperreader`（由 `com.wenku8.epubstudio` 于 0.9.0 重命名，非原地改名，升级需数据迁移）
 
 仓库地址：`https://github.com/Gan332/app-wenku8-epub`
@@ -68,10 +68,16 @@ android/app/src/main/java/com/example/hyperreader/
 ├── file/                        EPUB 保存、分享、字体导入
 ├── http/                        全局限流 HttpRateLimiter
 ├── model/                       业务模型（Book、Chapter、BookshelfEntry 等）
-├── reader/                      EPUB 解析、阅读器（Reader/OnlineReader Activity）、进度
+├── reader/                      EPUB 解析、阅读器宿主（XyReader/OnlineReader）、数据桥、进度
 ├── service/                     导出任务队列、前台进度通知
 ├── settings/                    设置模型与 DataStore 仓储、配置导入导出
 └── ui/                          Compose 页面、ViewModel、封面缓存（ui/cover/）
+
+android/app/src/main/java/com/xyreader/     ← xy-reader 阅读器（保留上游包名，见 §4.8）
+├── core/                        契约与配置：PageSource/Chapter、ReaderPrefs、ArchiveFactory、ReaderGraph
+├── archive/                     页面源：NovelPageSource（排版引擎）、各压缩包/PDF/MOBI 页面源
+├── reader/                      ReaderScreen（阅读界面）、ReaderViewModel、PageZoom
+└── ui/                          ReaderConfigScreen、NovelSpacingControls、Common
 ```
 
 入口：Manifest 声明的启动 Activity 是 `.MainActivity`，但它**不是独立文件**，类定义在
@@ -177,6 +183,50 @@ OkHttp 客户端，从而绕过 `Wenku8HttpClient` 的全局 1 秒限流与 429 
 - 下载走共享的无 Cookie 客户端
 - 按目标宽度下采样，避免 OOM
 - 缩放手势自行实现（`detectTransformGestures`），不引入 panpf
+
+### 4.8 阅读器：XY reader（0.13.0 起）
+
+本地 EPUB 阅读器来自 [TerryYu12/xy-reader](https://github.com/TerryYu12/xy-reader)（MIT），
+代码在 `com/xyreader/`，**保留上游包名**便于日后与上游比对。0.12.0 引入的
+LightNovelReader 阅读器（126 个文件）已在 0.13.0 整体移除。
+
+它是**页面位图**阅读器，不是 Compose 文本排版：`PageSource` 只暴露
+`pageCount` + `renderPage(i): ImageBitmap`；文字小说走 `NovelPageSource`，用
+`StaticLayout` 把段落预分页后把每页画到**透明底 Bitmap** 上，pager 背景直接透出。
+
+三条不能违反的边界：
+
+1. **`com.xyreader` 不得反向依赖 `com.example.hyperreader`**。阅读器只认
+   `com.xyreader.core.ReaderRepository`（8 个成员），实现由
+   `reader/XyReaderBridge.kt` 提供，经 `ReaderGraph.install(...)` 在 `setContent` 前安装。
+2. **EPUB 解析仍走本工程管线**。`ReaderViewModel` 的 `sourceOpener` 由宿主注入
+   `XyEpubPageSourceOpener`（内部调 `EpubReaderRepository` 的 Rust + 回退链），
+   **不要**改回上游的 `NovelTextExtractor.parseEpub`。
+3. **不引入上游的 Room / Coil / WebDAV / GDrive / 书库管理界面**。远程链路已整体删去
+   （`RemoteArchiveSources` / `RemoteGdriveSources` / `HttpRangeChannel` 及其入口）；
+   本工程数据源只有 wenku8。
+
+数据落点全部在既有 `wenku8_settings` DataStore（**实例唯一**，AGENTS §4.3），键前缀 `xy_reader_`：
+阅读配置 `xy_reader_prefs`（单键 JSON）、书签 `xy_reader_bookmarks`、收藏
+`xy_reader_favorites`、页进度 `xy_reader_page_<bookId>`。
+
+进度口径：上游是「页 / 总页数」，本工程 `ReadingProgress` 是「章 + 段」，两者**不换算**
+（分页依赖字号与边距）。页进度单独存并作为续读唯一依据，同时刷书架 `recordRead`。
+
+在线阅读（`OnlineReaderActivity`）**不走** xy-reader，仍用本工程的
+`reader/ReaderScreen.kt`（`ReaderScreenCore`）+ `ReaderActions`。改阅读器 UI 时注意
+`ReaderActions` 接口定义在 `reader/ReaderActions.kt`，两个阅读器共用。
+
+MiuiX 化对照（上游全是 material3，本项目禁止 material，有守卫单测）：
+`Text/Icon/IconButton/Button/Slider/Switch/Surface/Card/RadioButton/CircularProgressIndicator`
+签名基本兼容，只换 import；`TextButton` 改收 `text: String`；`ModalBottomSheet` →
+`overlay.OverlayBottomSheet(show = true, onDismissRequest = ...)`；
+`MaterialTheme.colorScheme` → `MiuixTheme.colorScheme`（无 `surfaceContainerLow`，用
+`surfaceContainerHigh`；`onSurfaceVariant` → `onSurfaceVariantSummary`）；
+`MaterialTheme.typography` → `MiuixTheme.textStyles`；图标用 `MiuixIcons`（本项目已有的
+`Back` / `ListView` / `Tune` / `ChevronBackward` / `ChevronForward`）或
+`ImageVector.vectorResource(R.drawable.*_24px)`；无 `FilterChip`，用 `ReaderScreen.kt`
+末尾的本地同名实现。
 
 ## 5. 构建与验证
 
@@ -358,12 +408,16 @@ docs: release reader interaction fixes as v0.5.0
 
 修改相关模块前先阅读对应参考项目：
 
+- [TerryYu12/xy-reader](https://github.com/TerryYu12/xy-reader)
+  - `app/src/main/java/com/xyreader/reader/`：阅读器界面与 ViewModel（本工程阅读器的上游）
+  - `app/src/main/java/com/xyreader/archive/NovelPageSource.kt`：文字分页引擎
+  - 升级阅读器时对照上游 `main`，注意本工程已按 §4.8 做了裁剪
 - [dmzz-yyhyy/LightNovelReader](https://github.com/dmzz-yyhyy/LightNovelReader)
   - `api/web/`：数据源与探索页接口
   - `defaultplugin/wenku8/`：Wenku8 数据源实现
   - `data/bookshelf/`：书架模型与排序
   - `data/statistics/`：阅读时长与连续天数统计
-  - `ui/book/reader/`：阅读器工具栏、BottomSheet、沉浸模式
+  - （阅读器已于 0.13.0 移除，仅数据源与探索页思路仍可参考）
 - [MewX/light-novel-library_Wenku8_Android](https://github.com/MewX/light-novel-library_Wenku8_Android)
   - Wenku8 页面组织方式和阅读交互
 

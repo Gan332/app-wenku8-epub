@@ -78,7 +78,7 @@ import top.yukonga.miuix.kmp.theme.ThemeController
 import com.example.hyperreader.R
 import com.example.hyperreader.Wenku8Application
 import com.example.hyperreader.auth.LoginActivity
-import com.example.hyperreader.reader.ReaderActivity
+import com.example.hyperreader.reader.XyReaderActivity
 import com.example.hyperreader.reader.onlineReaderIntent
 import com.example.hyperreader.ui.AppMiuixTheme
 import com.example.hyperreader.ui.BookDetailScreen
@@ -109,7 +109,7 @@ class MainActivity : ComponentActivity() {
         if (uri != null) {
             runCatching { contentResolver.takePersistableUriPermission(uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION) }
             studioViewModel.addLocalEpub(uri.toString(), uri.lastPathSegment?.substringAfterLast('/') ?: "本地 EPUB")
-            startActivity(com.example.hyperreader.reader.LnrReaderActivity.intent(this, uri.toString(), "local:${uri.toString().hashCode()}"))
+            startActivity(XyReaderActivity.intent(this, uri.toString(), "local:${uri.toString().hashCode()}", uri.lastPathSegment?.substringAfterLast('/') ?: "本地 EPUB"))
         }
     }
     private val fontPicker = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -284,7 +284,7 @@ private fun StudioApp(
             when {
                 state.tab == StudioTab.BOOKSHELF -> BookshelfScreen(state, viewModel, onImportEpub, onOpenLocal = { entry ->
                     entry.localUri?.let { uri ->
-                        context.startActivity(com.example.hyperreader.reader.LnrReaderActivity.intent(context, uri, entry.bookId))
+                        context.startActivity(XyReaderActivity.intent(context, uri, entry.bookId, entry.title))
                     }
                 }, onOpenRemote = { entry -> viewModel.openShelfRemote(entry) })
                 state.tab == StudioTab.EXPLORE -> ExploreScreen(state, viewModel, onLogin) {
@@ -500,7 +500,7 @@ private fun HistoryScreen(jobs: List<ExportJob>, viewModel: StudioViewModel) {
                             TextButton(text = "保存", onClick = { viewModel.save(job.id) })
                             TextButton(text = "分享", onClick = { viewModel.share(job.id) })
                             job.output?.let { output ->
-                                TextButton(text = "阅读", onClick = { context.startActivity(com.example.hyperreader.reader.LnrReaderActivity.intent(context, output.uri, job.id)) })
+                                TextButton(text = "阅读", onClick = { context.startActivity(XyReaderActivity.intent(context, output.uri, job.id, job.book.title)) })
                             }
                         }
                     }

@@ -1,7 +1,6 @@
 package com.example.hyperreader.reader
 
 import android.app.Activity
-import android.graphics.BitmapFactory
 import android.view.WindowManager
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
@@ -52,7 +51,6 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
@@ -60,10 +58,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Modifier
-import android.util.LruCache
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
@@ -73,7 +68,6 @@ import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.hyperreader.R
 import com.example.hyperreader.settings.ReaderBackground
 import com.example.hyperreader.settings.ReaderPageTurnMode
@@ -102,10 +96,6 @@ import top.yukonga.miuix.kmp.icon.extended.Tune
 import top.yukonga.miuix.kmp.overlay.OverlayBottomSheet
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import java.io.File
-import java.net.URLDecoder
-import java.util.zip.ZipFile
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 
 private const val TOUCH_TARGET = 48
 private const val CONTROL_BAR_HEIGHT = 56
@@ -167,34 +157,15 @@ private fun Modifier.readerTapToToggle(actions: ReaderActions): Modifier =
     }
 
 /**
- * EPUB 阅读界面。**签名保持不变**，实现委托给 [ReaderScreenCore]。
- */
-@Composable
-fun ReaderScreen(
-    viewModel: ReaderViewModel,
-    onImportFont: () -> Unit,
-    onImportEpub: () -> Unit,
-    onBack: () -> Unit,
-) {
-    val state by viewModel.state.collectAsStateWithLifecycle()
-    val archivePath = state.book?.archivePath.orEmpty()
-    ReaderScreenCore(
-        state = state,
-        actions = viewModel,
-        imageResolver = { block: ReaderBlock.Image -> rememberEpubImage(archivePath, block.path) },
-        onImportFont = onImportFont,
-        onImportEpub = onImportEpub,
-        onBack = onBack,
-    )
-}
-
-/**
- * 阅读界面的真正实现：EPUB 与 wenku8 在线阅读**共用这一份**，
+ * 阅读界面的真正实现：在线阅读与本地 EPUB **共用这一份**，
  * 因此字体、背景、沉浸模式、目录面板、阅读进度回调在两种模式下行为完全一致。
  *
+ * 本地 EPUB 侧由 `com.xyreader.reader.ReaderScreen`（xy-reader 阅读器）承担，
+ * 不再走本文件——这里只服务 wenku8 在线阅读。
+ *
  * @param state 由各自的 ViewModel 持有。
- * @param actions 界面回调。EPUB 侧传 `ReaderViewModel`，在线侧传 `OnlineReaderViewModel`（都实现 [ReaderActions]）。
- * @param imageResolver 正文插图解析：EPUB 走 zip 条目，在线走 [rememberRemoteImage] 的网络图片。
+ * @param actions 界面回调，在线侧传 `OnlineReaderViewModel`（实现 [ReaderActions]）。
+ * @param imageResolver 正文插图解析：在线走 [rememberRemoteImage] 的网络图片。
  */
 @Composable
 fun ReaderScreenCore(
@@ -803,56 +774,6 @@ private fun rememberFont(uri: String?): FontFamily {
     if (uri.isNullOrBlank()) return default
     val file = File(uri)
     return if (file.isFile) runCatching { FontFamily(Font(file)) }.getOrDefault(default) else default
-}
-
-/**
- * 插图解码不能在组合期的 `remember {}` 里做 —— 那是主线程磁盘 I/O，
- * 大文件多插图时会直接卡住甚至无响应。改为 IO 协程 + 内存缓存。
- */
-@Composable
-private fun rememberEpubImage(archivePath: String, path: String): ReaderImage {
-    val result = produceState<ReaderImage>(initialValue = ReaderImage.Loading, archivePath, path) {
-        value = withContext(Dispatchers.IO) {
-            decodeEpubImage(archivePath, path)?.let { ReaderImage.Ready(it) } ?: ReaderImage.Failed
-        }
-    }
-    return result.value
-}
-
-private val epubImageCache = object : LruCache<String, ImageBitmap>(8 * 1024 * 1024) {
-    override fun sizeOf(key: String, value: ImageBitmap): Int = value.width * value.height * 4
-}
-
-/** 解码目标最长边：全尺寸解码大插图会 OOM 返回 null，界面上表现为「图片不显示」。 */
-private const val MAX_IMAGE_DIMENSION = 2048
-
-private fun decodeEpubImage(archivePath: String, path: String): ImageBitmap? {
-    val key = "$archivePath::$path"
-    epubImageCache.get(key)?.let { return it }
-    val bitmap = runCatching {
-        ZipFile(File(archivePath)).use { zip ->
-            // EPUB 里的 href 常带百分号编码（%E6%8F%92%E5%9B%BE.jpg），zip 条目名是原样字节：
-            // 先按原样查，miss 再解码查一次，否则查不到条目 → 图片静默空白。
-            val entry = zip.getEntry(path)
-                ?: zip.getEntry(decodePercentEncoding(path))
-                ?: return null
-            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-            zip.getInputStream(entry).use { BitmapFactory.decodeStream(it, null, bounds) }
-            if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
-            var sample = 1
-            val longest = maxOf(bounds.outWidth, bounds.outHeight)
-            while (longest / sample > MAX_IMAGE_DIMENSION) sample *= 2
-            val options = BitmapFactory.Options().apply { inSampleSize = sample }
-            zip.getInputStream(entry).use { BitmapFactory.decodeStream(it, null, options) }?.asImageBitmap()
-        }
-    }.getOrNull()
-    return bitmap?.also { epubImageCache.put(key, it) }
-}
-
-/** 含 `%` 才解码；`+` 在路径里是合法字符，只做百分号解码语义（URLDecoder 会把 + 变空格，先还原）。 */
-private fun decodePercentEncoding(path: String): String {
-    if ('%' !in path) return path
-    return runCatching { URLDecoder.decode(path.replace("+", "%2B"), "UTF-8") }.getOrNull() ?: path
 }
 
 @Composable

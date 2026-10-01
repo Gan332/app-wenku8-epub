@@ -2,6 +2,60 @@
 
 本项目遵循语义化版本。
 
+## [0.13.0] - 2026-10-01
+
+### 变更
+
+- **阅读器换成 [XY reader](https://github.com/TerryYu12/xy-reader)（MIT）**，
+  取代 0.12.0 引入的 LightNovelReader。引入代码放在 `com/xyreader/`，**保留上游包名**
+  便于日后比对。
+
+  这是一套**页面位图**阅读器：`PageSource` 只暴露 `pageCount` + `renderPage(i): ImageBitmap`。
+  文字小说走 `NovelPageSource`——用 `StaticLayout` 把段落预分页，再把每页画到**透明底
+  Bitmap** 上，pager 背景直接透出；配套 `ReaderViewModel`（位图 LRU 缓存、前后各 2 页
+  预载、串行渲染 worker、防抖存进度）与 `ReaderScreen`（左右翻页/上下滚动、点击翻页、
+  双击缩放、目录抽屉、书签、复制文字、亮度、屏幕方向）。
+
+  引入范围：`core`（契约与配置）+ `archive`（排版引擎与各格式页面源）+
+  `reader`（阅读界面）+ `ui`（阅读配置页），共 27 个 Kotlin 文件、约 6900 行。
+
+### 按本工程约束做的裁剪
+
+- **Room 全去**：`BookEntity` / `BookmarkEntity` 降级为纯数据类，书签与页进度手写 JSON
+  落在既有 `wenku8_settings` DataStore（键前缀 `xy_reader_`），遵守「DataStore 实例唯一」。
+- **`LibraryRepository` → `ReaderRepository`**（收窄到 8 个成员），`AppGraph` →
+  可安装的 `ReaderGraph`，避免 `com.xyreader` 反向依赖宿主包名。
+- **EPUB 解析没换**：`ReaderViewModel` 增加 `sourceOpener` 注入点，宿主注入
+  `XyEpubPageSourceOpener`，仍走本工程 Rust 原生结构解析 + Jsoup + 回退链。
+- **远程链路整体未引入**（WebDAV / Google Drive / HttpRangeChannel）：本工程数据源只有 wenku8。
+- **material3 / material-icons 全量 MiuiX 化**（约 330 处引用），满足 `mainSourcesUseNoMaterialComponents` 守卫。
+- 新增内置字体霞鹜文楷 Lite 与朱雀仿宋（OFL 1.1）；MiSans 复用既有 `misansvf`，不重复打包。
+
+### 移除
+
+- LightNovelReader 的 **126 个 Kotlin 文件**（`indi.dmzz_yyhyy.lightnovelreader` /
+  `io.nightfish.lightnovelreader.api`）及其专属依赖 kotlin-result、dom4j、navigation3-runtime。
+- 旧自研阅读器壳 `ReaderActivity` 与已无调用方的 `ReaderViewModel`（EPUB 侧）。
+  **注意**：`reader/ReaderScreen.kt` 的 `ReaderScreenCore` / `ReaderActions` 被
+  **在线阅读复用，保留**。
+
+### 需要注意
+
+- **阅读器设置项与位置变了**（改为 XY reader 布局），原有能力（字号/行距/边距/字距/
+  首行缩进/章首另起一页/背景/亮度/翻页方式/常亮/屏幕方向/图片缩放）都在。
+- **进度口径变了**：页进度单独存（分页依赖字号与边距，无法与「章 + 段」稳定换算），
+  同时刷新书架「上次阅读」。旧版的章/段进度不再用于本地 EPUB 续读。
+- **APK 体积增大约 23MB**（两款内置 CJK 字体）。
+
+### 验证重点
+
+1. 打开 EPUB：正文按页排版，左右翻页/上下滚动都能翻
+2. 目录抽屉：当前章高亮、点击跳转；书签可增删
+3. 阅读设置面板：字号/行距/边距/背景调整后**重新分页且保留当前位置**
+4. 续读：读到中间退出 → 重开回到原页；书架「上次阅读」更新
+5. 亮度/屏幕方向/常亮/手势锁生效
+6. 回归：wenku8 在线阅读、导出（缓存/富文本/卷级目录）不受影响
+
 ## [0.12.0] - 2026-09-27
 
 ### 变更

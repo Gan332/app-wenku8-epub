@@ -19,8 +19,8 @@ android {
         applicationId = "com.example.hyperreader"
         minSdk = 26
         targetSdk = 36
-        versionCode = 19
-        versionName = "0.12.0"
+        versionCode = 20
+        versionName = "0.13.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -101,11 +101,6 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.okhttp)
     implementation(libs.jsoup)
-    // LNR 阅读器引入（0.12.0）：Result 类型 + 组件数据 HTML 序列化
-    implementation(libs.kotlin.result)
-    implementation(libs.kotlin.result.coroutines)
-    implementation(libs.dom4j)
-    implementation(libs.androidx.navigation3.runtime)
     // xy-reader 阅读器引入（0.13.0）：压缩包页面源（CBZ/CB7/CBT + CBR）
     implementation(libs.commons.compress)
     implementation(libs.junrar)

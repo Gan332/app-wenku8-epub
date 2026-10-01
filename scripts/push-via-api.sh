@@ -48,7 +48,15 @@ git diff --name-only --diff-filter=d "$LOCAL_BASE" "$LOCAL_SHA" > "$TMP/files"
 echo "==> 本次改动文件"
 sed 's/^/    /' "$TMP/files"
 
-if [ ! -s "$TMP/files" ]; then
+# 删除的文件：tree 里以 sha=null 显式摘除。少了这一步，远端会留下本地已删的文件
+# （--diff-filter=d 只给新增/修改，删除必须单独取）。
+git diff --name-only --diff-filter=D "$LOCAL_BASE" "$LOCAL_SHA" > "$TMP/deleted"
+if [ -s "$TMP/deleted" ]; then
+  echo "==> 本次删除文件"
+  sed 's/^/    - /' "$TMP/deleted"
+fi
+
+if [ ! -s "$TMP/files" ] && [ ! -s "$TMP/deleted" ]; then
   echo "==> 没有改动，退出"
   exit 0
 fi
@@ -76,6 +84,19 @@ open(sys.argv[1], "a", encoding="utf-8").write(json.dumps(entry) + "\n")
 PY
   echo "    blob $sha  $f"
 done < "$TMP/files"
+
+# 删除项：path + sha=null，Git Data API 据此从新 tree 中摘除该路径
+if [ -s "$TMP/deleted" ]; then
+  while IFS= read -r f; do
+    [ -z "$f" ] && continue
+    "$PY" - "$TMP/entries.jsonl" "$f" <<'PY'
+import json, sys
+entry = {"path": sys.argv[2], "mode": "100644", "type": "blob", "sha": None}
+open(sys.argv[1], "a", encoding="utf-8").write(json.dumps(entry) + "\n")
+PY
+    echo "    delete    $f"
+  done < "$TMP/deleted"
+fi
 
 "$PY" - "$TMP/entries.jsonl" "$BASETREE" "$TMP/tree_payload.json" <<'PY'
 import json, sys
