@@ -18,7 +18,11 @@ import com.example.hyperreader.model.BookshelfSource
 import com.example.hyperreader.model.ExportJob
 import com.example.hyperreader.model.JobStatus
 import com.example.hyperreader.model.ReadingStats
+import android.net.Uri
 import com.example.hyperreader.model.SearchBook
+import com.github.michaelbull.result.get
+import io.nightfish.lightnovelreader.api.book.BookInformation
+import java.time.LocalDateTime
 import com.example.hyperreader.model.SearchField
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -182,30 +186,75 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    /**
+     * 加载探索页。
+     *
+     * 0.14.0 起改为**自动获取**（原 AGENTS §4.5「被动触发」已废止）：本地索引命中的书先
+     * 铺上去让界面立刻可见，随后缺失的书**自动**走书源（`articleinfo.php`）补全并逐个追加，
+     * 不再要求用户去设置页手动点「更新书目缓存」。
+     *
+     * 补全上限 [EXPLORE_AUTO_FETCH_LIMIT]：全局限流是 1 秒/请求，一次榜单全抓会让用户
+     * 干等；超过上限的部分留到用户手动刷新或进入详情时再取。
+     */
     fun loadExplore(page: ExplorePage = explorePages.first()) {
         viewModelScope.launch {
             mutable.update { it.copy(exploreBusy = true, exploreMessage = null) }
-            runCatching {
+            val ids = runCatching {
                 val publicClient = com.example.hyperreader.core.Wenku8HttpClient(java.io.File(app.cacheDir, "wenku8-explore"))
                 val resource = publicClient.fetchText(page.url, "explore-public", Wenku8Urls.BASE)
                 Wenku8Parser.parseBookLinks(resource.html, resource.finalUrl).map { it.id }
-            }.onSuccess { ids ->
-                // 公开页只给出 ID，用本地索引补全元数据；缺失的排队下次抓取
-                val known = ids.mapNotNull { catalogRepository.get(it) }
-                val pending = ids.size - known.size
-                val rows = if (known.isEmpty()) emptyList() else listOf(ExploreBooksRow(page.title, known.map { it.toSearchBook() }, page.id))
-                mutable.update {
-                    it.copy(
-                        exploreBusy = false,
-                        exploreRows = rows,
-                        exploreMessage = if (pending > 0) "已缓存 ${known.size} 本，另有 $pending 本可在「更新书目」时补全。" else null,
-                    )
-                }
-            }.onFailure { error ->
+            }.getOrElse { error ->
                 mutable.update { it.copy(exploreBusy = false, exploreMessage = error.message ?: "加载失败。") }
+                return@launch
             }
+            if (ids.isEmpty()) {
+                mutable.update {
+                    it.copy(exploreBusy = false, exploreRows = emptyList(), exploreMessage = "该榜单暂时没有内容。")
+                }
+                return@launch
+            }
+
+            val known = ids.mapNotNull { catalogRepository.get(it) }
+            val collected = known.map { it.toSearchBook() }.toMutableList()
+            publishExploreRows(page, collected)
+            mutable.update { it.copy(exploreBusy = false) }
+
+            val missing = ids.filter { catalogRepository.get(it) == null }.take(EXPLORE_AUTO_FETCH_LIMIT)
+            if (missing.isEmpty()) return@launch
+            missing.forEachIndexed { index, id ->
+                val info = app.bookSource.getBookInformation(id).get() ?: return@forEachIndexed
+                collected += info.toSearchBook()
+                publishExploreRows(page, collected)
+                mutable.update { it.copy(exploreMessage = "正在补全 ${index + 1}/${missing.size}…") }
+            }
+            mutable.update { it.copy(exploreMessage = null) }
         }
     }
+
+    private fun publishExploreRows(page: ExplorePage, books: List<SearchBook>) {
+        mutable.update {
+            it.copy(
+                exploreRows = if (books.isEmpty()) {
+                    emptyList()
+                } else {
+                    listOf(ExploreBooksRow(page.title, books, page.id))
+                },
+            )
+        }
+    }
+
+    /** 书源详情 → 探索页卡片。字段缺失时给空值，由 UI 兜底显示。 */
+    internal fun BookInformation.toSearchBook(): SearchBook = SearchBook(
+        id = id,
+        title = title,
+        author = author,
+        category = publishingHouse,
+        status = if (isComplete) "已完结" else "连载中",
+        updatedAt = if (lastUpdated == LocalDateTime.MIN) "" else lastUpdated.toLocalDate().toString(),
+        wordCount = wordCount.count.takeIf { it > 0 }?.toLong(),
+        coverUrl = coverUri.takeIf { it != Uri.EMPTY }?.toString(),
+        sourceUrl = Wenku8Urls.articleInfo(id),
+    )
 
     /** 免登录本地搜索。 */
     fun searchLocal() {
@@ -519,6 +568,12 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         const val ROUTE_BOOKSHELF = "bookshelf"
         const val EXTRA_ROUTE = "route"
         const val EXTRA_JOB_ID = "job_id"
+
+        /**
+         * 探索页单次自动补全的书目上限。全局限流是 1 秒/请求，一次榜单动辄 30+ 本，
+         * 全抓会让用户干等 30 秒以上；超出的部分留给手动刷新或进入详情时再取。
+         */
+        const val EXPLORE_AUTO_FETCH_LIMIT = 20
     }
 
     fun save(id: String) {

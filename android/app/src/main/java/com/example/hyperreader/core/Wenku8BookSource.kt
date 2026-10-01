@@ -6,6 +6,7 @@ import com.example.hyperreader.model.Chapter
 import com.example.hyperreader.model.ContentBlock
 import com.example.hyperreader.model.SearchBook
 import com.github.michaelbull.result.Err
+import com.github.michaelbull.result.get
 import com.github.michaelbull.result.Ok
 import com.github.michaelbull.result.Result
 import io.nightfish.lightnovelreader.api.book.BookInformation
@@ -238,7 +239,7 @@ class Wenku8BookSource(
      * 目录页本身有"上一章/下一章"链接，但那要多一次请求；这里用目录推算，零额外请求。
      */
     private suspend fun neighbourChapters(bookId: String, chapterId: String): Pair<String?, String?> {
-        val volumes = getBookVolumes(bookId).getOrNull() ?: return null to null
+        val volumes = getBookVolumes(bookId).get() ?: return null to null
         val flat = volumes.volumes.flatMap { it.chapters }
         val index = flat.indexOfFirst { it.id == chapterId }
         if (index < 0) return null to null

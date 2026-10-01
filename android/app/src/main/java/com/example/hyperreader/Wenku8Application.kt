@@ -1,6 +1,8 @@
 package com.example.hyperreader
 
 import android.app.Application
+import com.example.hyperreader.core.CatalogSearchField
+import com.example.hyperreader.core.Wenku8BookSource
 import com.example.hyperreader.core.Wenku8SessionStore
 import com.example.hyperreader.core.Wenku8SearchProvider
 import com.example.hyperreader.service.ExportJobManager
@@ -9,6 +11,7 @@ import com.example.hyperreader.data.ReadingStatsRepository
 import com.example.hyperreader.core.ExploreRepository
 import com.example.hyperreader.core.Wenku8DataSource
 import com.example.hyperreader.settings.SettingsRepository
+import com.example.hyperreader.ui.toSearchBook
 import java.io.File
 
 class Wenku8Application : Application() {
@@ -19,6 +22,25 @@ class Wenku8Application : Application() {
     val bookshelfRepository: BookshelfRepository by lazy { BookshelfRepository(this) }
     val readingStatsRepository: ReadingStatsRepository by lazy { ReadingStatsRepository(this) }
     val exploreRepository: ExploreRepository by lazy { ExploreRepository(Wenku8DataSource(jobManager.httpClient(), sessionStore)) }
+
+    /**
+     * wenku8 书源（LNR 书源体系的本工程落地）。
+     *
+     * 取数走 [jobManager] 的共享限流客户端与 [sessionStore] 的会话 Cookie；
+     * 搜索回调接到本地书目索引上——**不打源站的 `search.php`**（该接口由站点控制登录）。
+     */
+    val bookSource: Wenku8BookSource by lazy {
+        Wenku8BookSource(
+            http = jobManager.httpClient(),
+            session = sessionStore,
+            catalogSearch = { field, keyword ->
+                catalogRepository.search(
+                    keyword,
+                    if (field == CatalogSearchField.AUTHOR) CatalogSearchField.AUTHOR else CatalogSearchField.TITLE,
+                ).map { it.toSearchBook() }
+            },
+        )
+    }
     val catalogRepository: com.example.hyperreader.core.CatalogRepository by lazy { com.example.hyperreader.core.CatalogRepository(this) }
 
     /**
