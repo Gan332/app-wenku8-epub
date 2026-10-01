@@ -31,6 +31,11 @@ class SettingsRepository(private val context: Context) {
         )
     }
 
+    /** EPUB 导出引擎；未设置或值非法时回退自研引擎。 */
+    val exportEngine: Flow<EpubEngine> = data.safeData().map { prefs ->
+        EpubEngine.fromName(prefs[EXPORT_ENGINE])
+    }
+
     val readerSettings: Flow<ReaderSettings> = data.safeData().map { prefs ->
         val default = ReaderSettings()
         ReaderSettings(
@@ -70,6 +75,9 @@ class SettingsRepository(private val context: Context) {
     }
 
     suspend fun setThemeMode(mode: AppThemeMode) = edit { it[THEME_MODE] = mode.name }
+
+    /** 切换 EPUB 导出引擎；只影响之后创建的导出任务。 */
+    suspend fun setExportEngine(engine: EpubEngine) = edit { it[EXPORT_ENGINE] = engine.name }
     suspend fun setDynamicColor(enabled: Boolean) = edit { it[USE_DYNAMIC_COLOR] = enabled }
     suspend fun setAccentColor(color: Int) = edit { it[ACCENT_COLOR] = color }
 
@@ -105,6 +113,8 @@ class SettingsRepository(private val context: Context) {
 
     private companion object {
         val THEME_MODE = stringPreferencesKey("theme_mode")
+        /** EPUB 导出引擎（`EpubEngine.name`）；缺失/非法回退 CLASSIC。 */
+        val EXPORT_ENGINE = stringPreferencesKey("export_engine")
         val USE_DYNAMIC_COLOR = booleanPreferencesKey("use_dynamic_color")
         val ACCENT_COLOR = intPreferencesKey("accent_color")
         val READER_FONT_SIZE = floatPreferencesKey("reader_font_size")

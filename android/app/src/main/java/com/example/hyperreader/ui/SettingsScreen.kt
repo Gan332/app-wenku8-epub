@@ -115,6 +115,31 @@ private fun SettingsOverview(state: StudioUiState, viewModel: StudioViewModel) {
             }
             HorizontalDivider(Modifier.fillMaxWidth())
         }
+        // —— EPUB 导出引擎（0.14.0）：两个引擎产出的 EPUB 结构一致，区别在行内强调是否保留 ——
+        item {
+            val engine by viewModel.exportEngine.collectAsStateWithLifecycle(
+                initialValue = com.example.hyperreader.settings.EpubEngine.CLASSIC,
+            )
+            Card(modifier = Modifier.fillMaxWidth(), insideMargin = PaddingValues(14.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("EPUB 导出引擎", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Text(
+                        "只影响之后创建的导出任务；已导出的文件不受影响。",
+                        fontSize = 12.sp,
+                        color = MiuixTheme.colorScheme.onSurface.copy(alpha = .7f),
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        com.example.hyperreader.settings.EpubEngine.entries.forEach { option ->
+                            TextButton(
+                                text = (if (option == engine) "✓ " else "") + option.label,
+                                onClick = { viewModel.setExportEngine(option) },
+                            )
+                        }
+                    }
+                    Text(engine.summary, fontSize = 12.sp, color = MiuixTheme.colorScheme.primary)
+                }
+            }
+        }
     }
 }
 

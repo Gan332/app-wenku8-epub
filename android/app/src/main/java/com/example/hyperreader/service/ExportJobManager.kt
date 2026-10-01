@@ -12,6 +12,7 @@ import com.example.hyperreader.data.JobRepository
 import com.example.hyperreader.epub.EpubBuilder
 import com.example.hyperreader.file.EpubFileStore
 import com.example.hyperreader.model.Book
+import com.example.hyperreader.settings.EpubEngine
 import com.example.hyperreader.model.BookIndex
 import com.example.hyperreader.model.Chapter
 import com.example.hyperreader.model.ContentBlock
@@ -35,6 +36,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.io.File
 import java.text.Normalizer
@@ -47,6 +49,10 @@ class ExportJobManager(private val context: Context, sessionStore: Wenku8Session
     private val http = Wenku8HttpClient(File(context.cacheDir, "wenku8"), sessionStore?.cookieJar())
     private val fileStore = EpubFileStore(context)
     private val epubBuilder = EpubBuilder()
+
+    /** 第二种导出引擎（设置里可切换），见 [EpubEngine]。 */
+    private val potatoEpubBuilder = com.example.hyperreader.epub.PotatoEpubBuilder()
+    private val settings = com.example.hyperreader.settings.SettingsRepository(context)
     private val outputDirectory = File(context.filesDir, "output").apply { mkdirs() }
     private val queue = Channel<String>(Channel.UNLIMITED)
     private val running = mutableMapOf<String, Job>()
@@ -239,7 +245,13 @@ class ExportJobManager(private val context: Context, sessionStore: Wenku8Session
             job = job.copy(progress = job.progress.copy(phase = JobPhase.packaging, percent = 97, cacheHits = cacheHits, imageTotal = imageTotal, message = "正在写入 EPUB 容器…"))
             update(job)
             val output = File(outputDirectory, "${bookSafeName(job.book.title)}-${job.id}.epub")
-            val built = epubBuilder.build(job.book, parsed, images, cover, output)
+            // 导出引擎在设置里切换（0.14.0）：两个引擎调用契约一致，只换实现
+            val engine = settings.exportEngine.first()
+            val built = if (engine == EpubEngine.POTATO) {
+                potatoEpubBuilder.build(job.book, parsed, images, cover, output)
+            } else {
+                epubBuilder.build(job.book, parsed, images, cover, output)
+            }
             val savedUri = fileStore.save(File(built.sourcePath), built.name)
             job = job.copy(
                 status = JobStatus.completed,

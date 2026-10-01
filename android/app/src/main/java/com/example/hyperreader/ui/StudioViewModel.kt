@@ -120,6 +120,14 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     val state: StateFlow<StudioUiState> = mutable.asStateFlow()
     val appTheme = settingsRepository.appTheme
 
+    /** EPUB 导出引擎（设置页可切换）；导出任务在打包时读取当前值。 */
+    val exportEngine: kotlinx.coroutines.flow.Flow<com.example.hyperreader.settings.EpubEngine> =
+        settingsRepository.exportEngine
+
+    fun setExportEngine(engine: com.example.hyperreader.settings.EpubEngine) {
+        viewModelScope.launch { runCatching { settingsRepository.setExportEngine(engine) } }
+    }
+
     /** 书架「读到哪了」：bookId → 阅读断点。 */
     val readingProgress = settingsRepository.allProgress()
 

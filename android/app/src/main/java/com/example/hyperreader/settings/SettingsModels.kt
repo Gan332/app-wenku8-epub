@@ -46,3 +46,22 @@ data class ReadingProgress(
     val paragraphIndex: Int = 0,
     val updatedAt: Long = 0L,
 )
+
+/**
+ * EPUB 导出引擎（0.14.0 起可在设置里切换）。
+ *
+ * 两个引擎产出同样的 EPUB 3.3 结构、调用契约一致，区别见各自实现的 KDoc：
+ * - [CLASSIC]：自研 `epub/EpubBuilder`，保留已 sanitize 的行内强调标签
+ * - [POTATO]：LightNovelReader 的 `:epub` 模块（`io.nightfish.potatoepub`，Apache-2.0），
+ *   正文按段落纯文本写入
+ */
+enum class EpubEngine(val label: String, val summary: String) {
+    CLASSIC("自研引擎", "保留行内强调，默认"),
+    POTATO("LNR 引擎", "段落纯文本，结构更规范"),
+    ;
+
+    companion object {
+        fun fromName(raw: String?): EpubEngine =
+            entries.firstOrNull { it.name == raw } ?: CLASSIC
+    }
+}
