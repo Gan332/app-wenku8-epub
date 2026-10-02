@@ -237,11 +237,16 @@ object Wenku8Parser {
             val id = Regex("/book/(\\d+)\\.htm", RegexOption.IGNORE_CASE).find(href)?.groupValues?.get(1)
                 ?: Regex("[?&]id=(\\d+)", RegexOption.IGNORE_CASE).find(href)?.groupValues?.get(1)
                 ?: continue
-            if (!seen.add(id)) continue
+            if (id in seen) continue
             val container = anchor.parents().firstOrNull { it.tagName() in setOf("tr", "li", "div") } ?: anchor.parent() ?: continue
             val raw = cleanInline(container.text())
             val title = cleanInline(anchor.text()).ifBlank { cleanInline(container.selectFirst("a[href*=/book/]")?.text()) }.ifBlank { continue }
-            val image = container.selectFirst("img[src]")?.let { Wenku8Url.resolve(finalUrl, it.attr("src")) }
+            // 标题取到后才占位：tags.php / toplist.php 的卡片先出现无文字的封面链接，
+            // 若此时就记 id，后面真正带标题的链接会被当成重复跳过，整本书丢失
+            seen.add(id)
+            val image = (container.selectFirst("img[src]")
+                ?: anchor.parents().take(COVER_ANCESTOR_LIMIT).firstNotNullOfOrNull { it.selectFirst("img[src]") })
+                ?.let { Wenku8Url.resolve(finalUrl, it.attr("src")) }
             results += SearchBook(
                 id = id,
                 title = title,
@@ -257,6 +262,32 @@ object Wenku8Parser {
         }
         return results
     }
+
+    /**
+     * 解析 `tags.php` 的官方标签链接：`<a href="tags.php?t=%C1%B5%B0%AE">恋爱</a>`。
+     *
+     * `t` 参数是百分号编码的 GBK 字节（源站声明 gb2312、实际 GB18030，GBK 解码兼容），
+     * 按 GBK 解回标签名；没有 `t` 参数、解码失败或重复的锚点直接跳过，
+     * 返回顺序与页面出现顺序一致。登录页在此显式抛出，由调用方转成登录引导。
+     */
+    fun parseTagList(html: String, finalUrl: String): List<String> {
+        if (looksLikeLoginPage(html)) throw Wenku8Exception("浏览标签需要登录轻小说文库。", "AUTH_REQUIRED")
+        val document = Jsoup.parse(html, finalUrl)
+        val tags = LinkedHashSet<String>()
+        for (anchor in document.select("a[href*=tags.php]")) {
+            val encoded = TAG_PARAM.find(anchor.attr("href"))?.groupValues?.get(1).orEmpty()
+            if (encoded.isBlank()) continue
+            val tag = runCatching { java.net.URLDecoder.decode(encoded, "GBK") }.getOrDefault(encoded).trim()
+            if (tag.isNotBlank()) tags += tag
+        }
+        return tags.toList()
+    }
+
+    /** `tags.php?t=...` 的 t 参数；同时排除后续参数与锚点。 */
+    private val TAG_PARAM = Regex("[?&]t=([^&#]+)")
+
+    /** 封面不在文字容器内时，向上最多找这么多个祖先（卡片把标题与封面放在兄弟 div 里）。 */
+    private const val COVER_ANCESTOR_LIMIT = 4
 
     private fun parseWordCount(document: org.jsoup.nodes.Document): Long? = Regex("全文长度\\s*[：:]\\s*([\\d,，]+)\\s*字").find(document.text())?.groupValues?.get(1)?.replace(",", "")?.replace("，", "")?.toLongOrNull()
 

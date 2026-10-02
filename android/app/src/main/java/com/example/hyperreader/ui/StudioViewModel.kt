@@ -85,11 +85,8 @@ data class StudioUiState(
     val exploreMessage: String? = null,
     val catalogSize: Int = 0,
     /**
-     * 本地书目索引里出现过的全部标签。
-     *
-     * 数据来自已抓取的 `articleinfo.php`（每本书的「作品Tags」字段），
-     * **不抓源站的 `tags.php`**——那个接口由站点控制登录（AGENTS §4.2）。
-     * 因此标签覆盖面随本地索引增长，索引为空时这里也是空的。
+     * 标签区展示的标签：官方标签（登录后从 `tags.php` 拉取，见 §4.5.2）在前，
+     * 本地书目索引里已抓到的标签在后；未登录时只有本地标签。
      */
     val exploreTags: List<String> = emptyList(),
     /** 当前选中的标签；null 表示未进入标签浏览。 */
@@ -136,6 +133,12 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     val exportEngine: kotlinx.coroutines.flow.Flow<com.example.hyperreader.settings.EpubEngine> =
         settingsRepository.exportEngine
 
+    /**
+     * 官方标签（登录后从 `tags.php` 拉取）；未登录或抓取失败时为空，标签区只显示本地内容。
+     * 声明必须在 `init` 之前：冷启动的 collector 会经 [mergedTags] 读到它。
+     */
+    private var officialTags: List<String> = emptyList()
+
     fun setExportEngine(engine: com.example.hyperreader.settings.EpubEngine) {
         viewModelScope.launch { runCatching { settingsRepository.setExportEngine(engine) } }
     }
@@ -153,6 +156,8 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
             }
         }
         mutable.update { it.copy(loggedIn = app.sessionStore.hasSession()) }
+        // 冷启动已有会话时拉取官方标签（tags.php，登录墙内）；失败静默，本地索引标签兜底
+        if (app.sessionStore.hasSession()) loadOfficialTags()
         viewModelScope.launch {
             settingsRepository.searchHistory.collect { history -> mutable.update { it.copy(searchHistory = history) } }
         }
@@ -173,8 +178,8 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
                 mutable.update {
                     it.copy(
                         catalogSize = stats.count,
-                        // 标签索引随书目一起刷新；索引为空时自然为空表
-                        exploreTags = catalogRepository.tagList(),
+                        // 标签区 = 官方标签（登录后从 tags.php 拉取）+ 本地索引标签
+                        exploreTags = mergedTags(catalogRepository.tagList()),
                         catalogUpdatedAt = stats.lastUpdatedAt,
                         catalogLoading = catalog.loading,
                         catalogProgress = catalog.progress,
@@ -191,10 +196,22 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     fun backSettings() = mutable.update { it.copy(settingsSection = SettingsSection.OVERVIEW) }
 
     /**
-     * 公开探索来源：年度精选榜与月度新书榜，均为匿名可访问页面。
-     * 不再使用 toplist.php / tags.php / articlelist.php（由站点控制登录）。
+     * 探索榜单两类入口：
+     * - **登录墙内**（`requiresAuth = true`）：`toplist.php` 的四个排序榜，
+     *   走用户**自己的**会话 Cookie（AGENTS §4.5.3：本人登录后按账号权限访问不算规避）；
+     * - **匿名可访问**：年度精选榜与月度新书榜（`/zt/` 公开页）。
+     *
+     * 未登录点登录墙榜单只会得到登录提示，不做任何规避；`articlelist.php` 仍不使用。
      */
     val explorePages: List<ExplorePage> = buildList {
+        listOf(
+            "lastupdate" to "今日更新",
+            "allvisit" to "热门轻小说",
+            "postdate" to "新书一览",
+            "anime" to "动画化作品",
+        ).forEach { (sort, title) ->
+            add(ExplorePage("toplist-$sort", title, Wenku8Urls.toplist(sort), requiresAuth = true))
+        }
         val thisYear = java.time.Year.now().value
         (0 until 5).forEach { offset ->
             val year = thisYear - offset
@@ -221,10 +238,18 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     fun loadExplore(page: ExplorePage = explorePages.first()) {
         viewModelScope.launch {
             mutable.update { it.copy(exploreBusy = true, exploreMessage = null) }
+            var cards: List<SearchBook> = emptyList()
             val ids = runCatching {
-                val publicClient = com.example.hyperreader.core.Wenku8HttpClient(java.io.File(app.cacheDir, "wenku8-explore"))
-                val resource = publicClient.fetchText(page.url, "explore-public", Wenku8Urls.BASE)
-                Wenku8Parser.parseBookLinks(resource.html, resource.finalUrl).map { it.id }
+                if (page.requiresAuth) {
+                    // 登录墙内榜单：走共享限流客户端 + 用户会话 Cookie，
+                    // 登录页识别与会话清理在数据源里完成（不尝试绕过）
+                    cards = exploreRepository.load(page)
+                    cards.map { it.id }
+                } else {
+                    val publicClient = com.example.hyperreader.core.Wenku8HttpClient(java.io.File(app.cacheDir, "wenku8-explore"))
+                    val resource = publicClient.fetchText(page.url, "explore-public", Wenku8Urls.BASE)
+                    Wenku8Parser.parseBookLinks(resource.html, resource.finalUrl).map { it.id }
+                }
             }.getOrElse { error ->
                 mutable.update { it.copy(exploreBusy = false, exploreMessage = error.message ?: "加载失败。") }
                 return@launch
@@ -236,8 +261,10 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
                 return@launch
             }
 
-            val known = ids.mapNotNull { catalogRepository.get(it) }
-            val collected = known.map { it.toSearchBook() }.toMutableList()
+            // 登录墙榜单自带完整卡片（标题/作者/封面），本地索引条目字段更全时优先本地，
+            // 其余直接用卡片，不必等逐本补全就能显示
+            val cardById = cards.associateBy { it.id }
+            val collected = ids.mapNotNull { id -> catalogRepository.get(id)?.toSearchBook() ?: cardById[id] }.toMutableList()
             publishExploreRows(page, collected)
             mutable.update { it.copy(exploreBusy = false) }
 
@@ -298,18 +325,54 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     /**
-     * 标签浏览：选中标签 → 从**本地索引**取该标签下的书。
-     *
-     * 索引本身是免登录抓公开页（榜单 + `articleinfo.php`）建起来的，
-     * 因此这里不发任何网络请求，断网可用。
+     * 标签浏览：本地索引**立即**出结果（零网络、断网可用）；已登录时再用官方
+     * `tags.php?t=X` 的结果补齐（站点全量，含尚未抓进索引的书），合并去重后覆盖显示。
+     * 服务端失败（断网/登录过期）保留本地结果，只提示原因。
      */
     fun selectTag(tag: String) {
-        val results = catalogRepository.searchTag(tag).map { it.toSearchBook() }
-        mutable.update { it.copy(activeTag = tag, tagResults = results) }
+        val local = catalogRepository.searchTag(tag).map { it.toSearchBook() }
+        mutable.update { it.copy(activeTag = tag, tagResults = local) }
+        if (!app.sessionStore.hasSession()) return
+        viewModelScope.launch {
+            runCatching { exploreRepository.tagBooks(tag) }
+                .onSuccess { server ->
+                    if (server.isEmpty()) return@onSuccess
+                    val serverIds = server.map { it.id }.toSet()
+                    mutable.update {
+                        it.copy(
+                            // 官方结果在前，本地索引里多出的书补在后面
+                            tagResults = server + local.filter { book -> book.id !in serverIds },
+                            exploreMessage = null,
+                            loggedIn = app.sessionStore.hasSession(),
+                        )
+                    }
+                }
+                .onFailure { error ->
+                    mutable.update {
+                        it.copy(
+                            exploreMessage = error.message ?: "标签浏览失败，已显示本地结果。",
+                            loggedIn = app.sessionStore.hasSession(),
+                        )
+                    }
+                }
+        }
     }
 
     /** 退出标签浏览。 */
     fun clearTag() = mutable.update { it.copy(activeTag = null, tagResults = emptyList()) }
+
+    /** 官方标签在前（站点规范词表），本地索引里多出的标签跟在后面。 */
+    private fun mergedTags(local: List<String>): List<String> = (officialTags + local).distinct()
+
+    private fun loadOfficialTags() {
+        viewModelScope.launch {
+            runCatching { exploreRepository.officialTags() }.onSuccess { tags ->
+                if (tags.isEmpty()) return@onSuccess
+                officialTags = tags
+                mutable.update { it.copy(exploreTags = mergedTags(catalogRepository.tagList())) }
+            }
+        }
+    }
 
     fun updateCatalog(budget: Int = 200) = catalogRepository.update(budget)    fun clearCatalog() = catalogRepository.clear()
 
@@ -383,7 +446,11 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
 
     fun setSearchQuery(value: String) = mutable.update { it.copy(searchQuery = value, searchMessage = null) }
     fun setSearchField(value: SearchField) = mutable.update { it.copy(searchField = value) }
-    fun refreshSession() = mutable.update { it.copy(loggedIn = app.sessionStore.hasSession()) }
+    fun refreshSession() {
+        val loggedIn = app.sessionStore.hasSession()
+        mutable.update { it.copy(loggedIn = loggedIn) }
+        if (loggedIn && officialTags.isEmpty()) loadOfficialTags()
+    }
     fun clearSearchHistory() { viewModelScope.launch { settingsRepository.clearSearchHistory() } }
     fun searchBooks() {
         val current = state.value

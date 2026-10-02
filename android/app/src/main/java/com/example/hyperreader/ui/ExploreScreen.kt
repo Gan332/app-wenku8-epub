@@ -37,7 +37,7 @@ private sealed interface ExploreListItem {
 fun ExploreScreen(state: StudioUiState, viewModel: StudioViewModel, onLogin: () -> Unit, onGoToCatalog: () -> Unit) {
     Column(Modifier.fillMaxSize().padding(top = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text("探索", fontSize = 25.sp, fontWeight = FontWeight.Bold)
-        Text("数据源：Wenku8 轻小说文库 · 公开页面，无需登录", color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f), fontSize = 13.sp)
+        Text("数据源：Wenku8 轻小说文库 · 年度/月度榜单无需登录，排行榜与标签需登录", color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f), fontSize = 13.sp)
         Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(14.dp)) {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 val updated = state.catalogUpdatedAt.takeIf { it > 0 }
@@ -55,7 +55,12 @@ fun ExploreScreen(state: StudioUiState, viewModel: StudioViewModel, onLogin: () 
             }
         }
         if (!state.loggedIn) {
-            Text("无需登录即可搜索；登录后可在设置页使用站内搜索作为补充。", color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f), fontSize = 12.sp)
+            Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(14.dp)) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("排行榜、站内搜索与官方标签需登录 wenku8（使用你自己的账号会话）", fontSize = 13.sp)
+                    TextButton(text = "登录", onClick = onLogin)
+                }
+            }
         }
         LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             items(viewModel.explorePages) { page ->
@@ -80,10 +85,10 @@ fun ExploreScreen(state: StudioUiState, viewModel: StudioViewModel, onLogin: () 
                 items(state.searchHistory.take(8)) { keyword -> TextButton(text = keyword, onClick = { viewModel.setSearchQuery(keyword) }) }
             }
         }
-        // —— 标签浏览（0.14.0）——
-        // 标签来自**本地书目索引**（每本书 articleinfo.php 里的「作品Tags」），
-        // 不抓源站的 tags.php——那个接口由站点控制登录，见 AGENTS §4.2。
-        // 所以这里零网络请求，断网可用；覆盖面随本地索引增长。
+        // —— 标签浏览（0.14.0 起，0.14.x 接入官方 tags.php）——
+        // 未登录：标签全部来自本地书目索引（articleinfo.php 的「作品Tags」），零网络、断网可用；
+        // 已登录：官方标签列表来自 tags.php（登录墙内，用户本人会话），本地多出的标签跟在后面，
+        // 选中标签时先显示本地结果、再用 tags.php 结果补齐（见 AGENTS §4.5.2）。
         if (state.exploreTags.isNotEmpty()) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text("按标签浏览", fontSize = 13.sp, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f))
@@ -102,7 +107,7 @@ fun ExploreScreen(state: StudioUiState, viewModel: StudioViewModel, onLogin: () 
         }
         state.exploreMessage?.let { MessageCard(it) }
         state.searchMessage?.let { MessageCard(it) }
-        if (state.exploreBusy) Text("正在加载公开榜单…", color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f), fontSize = 13.sp)
+        if (state.exploreBusy) Text("正在加载榜单…", color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f), fontSize = 13.sp)
         if (!state.exploreBusy && state.exploreRows.isEmpty() && state.localResults.isEmpty() && state.catalogSize == 0) {
             Text("本地书目为空，点击「更新书目缓存」抓取公开榜单。", color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f), fontSize = 13.sp)
         }

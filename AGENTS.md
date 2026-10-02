@@ -1,6 +1,6 @@
 # AGENTS.md
 
-文库 EPUB 工坊（`app-wenku8-epub`）的智能体工作说明。本文件记录项目约定、构建验证方式和远程同步流程，任何自动化代理在修改仓库前都应先阅读。
+文库 EPUB 工坊（`app-wenku8-epub`）的智能体工作说明。本文件记录项目约定、构建验证方式和远程同步流程，任何自动化代理在修改仓库前都应先阅读。用中文输出
 
 ## 1. 项目概况
 
@@ -8,10 +8,12 @@
 
 - `public/` + `src/`：本机单用户 Web 版本（Express + 原生前端）
 - `android/`：独立的原生 Android 版本（Kotlin + Jetpack Compose + MiuiX）
+- `rust/epub-core/`：EPUB 结构解析的 Rust 核心（编译为 Android JNI 的 `libepub_core.so`）
+- `data/`、`output/`：Web 版运行时的书目数据与 EPUB 产物目录（已 gitignore）
 
 当前主要发版对象是 **Android 原生应用**。Android 版本不需要 Node.js 服务，WebView 仅用于 wenku8 登录。
 
-当前版本：`0.13.0`（versionCode 20，见 `android/app/build.gradle.kts`，以该文件为准）
+当前版本：`0.14.0`（versionCode 21，见 `android/app/build.gradle.kts`，以该文件为准）
 包名：`com.example.hyperreader`（由 `com.wenku8.epubstudio` 于 0.9.0 重命名，非原地改名，升级需数据迁移）
 
 仓库地址：`https://github.com/Gan332/app-wenku8-epub`
@@ -59,6 +61,8 @@
 ## 3. 目录结构
 
 ```text
+rust/epub-core/               Rust EPUB 结构解析 → libepub_core.so（JNI 快路径，见 §4.10）
+
 android/app/src/main/java/com/example/hyperreader/
 ├── Wenku8Application.kt         依赖容器：设置、书架、统计、数据源、任务
 ├── auth/                        wenku8 登录 WebView（LoginActivity）
@@ -123,15 +127,23 @@ android/app/src/main/java/io/nightfish/lightnovelreader/api/   ← LNR 书源抽
 | `/zt/booklist/{yyyyMM}.php` | 月度新书榜 |
 | `/novel/2/{id}/index.htm` | 章节目录 |
 
-以下接口由站点控制登录，**保持原样，不得规避**：
+以下接口由站点控制登录，**不得匿名抓取、不得以任何方式规避**：
 
-- `modules/article/search.php`
-- `modules/article/articlelist.php`
-- `modules/article/toplist.php`
-- `modules/article/tags.php`
+| 接口 | 状态 |
+| --- | --- |
+| `modules/article/search.php` | 站内搜索，**用户自己登录后**走会话链路可用（0.14.x） |
+| `modules/article/toplist.php` | 排行榜，**用户自己登录后**走会话链路可用（0.14.x） |
+| `modules/article/tags.php` | 官方标签，**用户自己登录后**走会话链路可用（0.14.x） |
+| `modules/article/articlelist.php` | 全工程**不用** |
 
-抓取器 `CatalogCrawler` / `CatalogRepository` 必须使用**独立的无 Cookie 客户端**，
-即使设备存在登录态也不得携带 Cookie。
+**会话链路**（合规路径，依据 §4.5.3 第 2 条）：只携带 `Wenku8SessionStore` 里
+**用户本人**的会话 Cookie，经 `Wenku8HttpClient` 访问（限流/退避不变），实现分别在
+`core/Wenku8SearchProvider`（搜索页）与 `core/ExploreRepository`（榜单/标签）。
+返回登录页即清会话并提示重新登录，**不内置任何第三方凭据、不尝试绕过**。
+
+免登录抓取（上表白名单）由 `CatalogCrawler` / `CatalogRepository` 负责，必须使用
+**独立的无 Cookie 客户端**，即使设备存在登录态也不得携带 Cookie——与会话链路分开，
+两条链路不要混用。
 
 ### 4.3 状态与持久化
 
@@ -162,11 +174,13 @@ android/app/src/main/java/io/nightfish/lightnovelreader/api/   ← LNR 书源抽
 
 仍然生效的边界（**不要放宽**）：
 
-- 只抓 AGENTS §4.2 匿名白名单内的端点；`search.php` / `articlelist.php` /
-  `toplist.php` / `tags.php` 由站点控制登录，**保持原样、不得规避**
+- 匿名抓取只限 AGENTS §4.2 匿名白名单内的端点；`search.php` / `toplist.php` /
+  `tags.php` 只在**用户已登录**时由会话链路访问（§4.2），`articlelist.php` 不用；
+  一律**不得匿名规避**
 - 所有请求必须走 `Wenku8HttpClient`（全局限流 + 429 退避 + 重定向复校验），
   不得自建 HTTP 客户端绕过
-- 书源搜索走**本地书目索引**，不打源站 `search.php`
+- 书源契约里的搜索仍走**本地书目索引**；站内 `search.php` 搜索在搜索页走会话链路，
+  两条并存（见 §4.5.3 第 2 条）
 - `CatalogRepository.expandAuthor` 仍只在用户显式点击时调用
 
 ### 4.5.1 书源体系（0.14.0 起）
@@ -180,17 +194,20 @@ LNR 的书源抽象在 `io.nightfish.lightnovelreader.api`（102 文件），本
 - 装配在 `Wenku8Application.bookSource`；探索页/详情页从这里取数
 - `permits` 压到 2：节奏由 `HttpRateLimiter` 决定，放大并发只会让请求排队
 
-### 4.5.2 标签浏览（0.14.0 起）
+### 4.5.2 标签浏览（0.14.0 起；0.14.x 接入官方 `tags.php`）
 
-探索页有「按标签浏览」区，标签**全部来自本地书目索引**：
+探索页有「按标签浏览」区，标签两路合并、官方在前（`StudioViewModel.mergedTags`）：
 
-- 数据来源是已抓取的 `articleinfo.php` 里每本书的「作品Tags」字段，
-  由 `CatalogIndex` 的 `tagIndex` 聚合（`CatalogRepository.tagList()` /
-  `searchTag()`）
-- **不抓源站的 `tags.php`**：该接口由站点控制登录（§4.2），且本地索引已经
-  覆盖了同样的信息，没有理由去碰它
-- 因此标签浏览**零网络请求**，断网可用；覆盖面随本地索引增长（索引为空时标签区不显示）
-- 选中标签只做一次本地查询（`StudioViewModel.selectTag`），不发请求
+- **官方标签**（登录后）：`tags.php` 首页的标签锚点，由 `Wenku8DataSource.officialTags()`
+  用**用户本人会话**抓取，`Wenku8Parser.parseTagList` 按 GBK 解码 `t` 参数；
+  冷启动已有会话与登录返回（`refreshSession`）时各拉一次，失败静默
+- **本地索引标签**（始终）：已抓 `articleinfo.php` 的「作品Tags」由 `CatalogIndex.tagIndex`
+  聚合（`CatalogRepository.tagList()` / `searchTag()`），未登录时的唯一来源，断网可用
+- 选中标签（`StudioViewModel.selectTag`）：本地结果**立即**显示；已登录时再用
+  `tags.php?t=X`（`Wenku8DataSource.tagBooks`，交互档节流）的结果合并覆盖，
+  服务端失败保留本地结果、只提示原因
+- **不做任何匿名规避**：`tags.php` 匿名 302 到登录页，取到登录页即清会话提示重登；
+  本地索引始终是无会话/断网时的兜底（索引为空且未登录时标签区不显示）
 
 ### 4.5.3 关于「用上游书源 / 抓登录墙内接口 / 取消限流」的既有结论
 
@@ -202,7 +219,8 @@ LNR 的书源抽象在 `io.nightfish.lightnovelreader.api`（102 文件），本
 2. **不用匿名请求抓 `search.php` / `toplist.php` / `tags.php`**。它们由站点控制登录，
    匿名抓取属于规避访问控制。**若用户自己已登录**（`Wenku8SessionStore` 里是用户
    本人的会话），按账号权限访问这些页面不属于规避——但必须走用户自己的会话，
-   不得内置任何他人凭据。
+   不得内置任何他人凭据。（0.14.x 已按此实现：搜索页 `search.php`、探索榜单
+   `toplist.php`、官方标签 `tags.php`；见 §4.2 会话链路。）
 3. **不取消限流**。`HttpRateLimiter` 的存在是为了不把源站和用户 IP 置于风险中；
    可以调参、可以加缓存、可以后台预取，但**必须始终遵守 429 与 `Retry-After`**。
    去掉退避不是性能优化，是把用户 IP 送进黑名单。
@@ -274,6 +292,13 @@ LightNovelReader 阅读器（126 个文件）已在 0.13.0 整体移除。
 `reader/ReaderScreen.kt`（`ReaderScreenCore`）+ `ReaderActions`。改阅读器 UI 时注意
 `ReaderActions` 接口定义在 `reader/ReaderActions.kt`，两个阅读器共用。
 
+**迁移进行中（0.14.0，step 2/3 已提交）**：`reader/OnlinePageSource.kt` 已实现——
+在线阅读按章抓取后，用与本地 EPUB 完全同一套 `StaticLayout` 分页生成位图页，实现
+xy-reader 的**可增长** `PageSource`（`growable = true` + `loadMore`，读到近末尾时
+`ReaderViewModel.maybeGrow` 追加章节）。但 **step 3（接入）未完成**：`OnlinePageSource`
+目前没有任何调用方，`OnlineReaderActivity` 仍走 `ReaderScreenCore`。接入完成前
+不要删除 `ReaderScreenCore`，也不要误以为在线阅读已切到 xy-reader。
+
 MiuiX 化对照（上游全是 material3，本项目禁止 material，有守卫单测）：
 `Text/Icon/IconButton/Button/Slider/Switch/Surface/Card/RadioButton/CircularProgressIndicator`
 签名基本兼容，只换 import；`TextButton` 改收 `text: String`；`ModalBottomSheet` →
@@ -284,6 +309,31 @@ MiuiX 化对照（上游全是 material3，本项目禁止 material，有守卫�
 `Back` / `ListView` / `Tune` / `ChevronBackward` / `ChevronForward`）或
 `ImageVector.vectorResource(R.drawable.*_24px)`；无 `FilterChip`，用 `ReaderScreen.kt`
 末尾的本地同名实现。
+
+### 4.9 双 EPUB 导出引擎（0.14.0 起）
+
+`settings/SettingsModels.kt` 的 `EpubEngine` 枚举有两个引擎，产出同样的 EPUB 3.3
+结构、调用契约一致，由 `ExportJobManager` 按配置选择：
+
+- `CLASSIC`：自研 `epub/EpubBuilder`，保留已 sanitize 的行内强调标签，默认
+- `POTATO`：LightNovelReader 的 `:epub` 模块（`io.nightfish.potatoepub`，Apache-2.0，源码整体 vendored 进仓库），正文按段落纯文本写入
+
+切换入口：设置页「EPUB 导出引擎」（`SettingsRepository.EXPORT_ENGINE`）。
+探索详情页有**两个导出小按钮**（`StudioViewModel.exportExploreDetail(engine)`），
+各对应一个引擎，**不受全局设置影响**；其它导出路径走全局配置。
+
+### 4.10 Rust 解析快路径（`rust/epub-core`）
+
+`EpubReaderRepository.parseArchive` 优先走 JNI 快路径（`EpubNative.parse` →
+`libepub_core.so`），失败任何一步（so 缺失、结构解析失败、JSON 失败、超限）都回退
+`parseArchiveLegacy`（zip + Jsoup）。约束：
+
+- Rust **只做结构解析**（container/OPF/nav/NCX + 读出章节 HTML）；HTML → 内容块
+  仍走 Kotlin Jsoup 的 `parseBlocks`，保证两条路径行为一致
+- native 是**加速路径，不是单点依赖**，改 Rust 时必须保留 legacy 回退
+- `so` 不入库：CI 用 `cargo-ndk` 在构建期产出到 `android/app/src/main/jniLibs/`
+  （已 gitignore）；Rust 只依赖 `zip`/`serde`/`jni`，零 XML 库漂移风险
+- Rust 测试在 CI 跑（`working-directory: rust` 的 `cargo test`），改动 `rust/` 时同样要过 CI
 
 ## 5. 构建与验证
 
@@ -305,7 +355,7 @@ npm start         # 或 npm run dev（--watch），http://127.0.0.1:3210
 
 工作流：`.github/workflows/android-apk.yml`
 
-- 推送到 `main`（含 PR）：单元测试 + debug APK + 有签名 Secrets 时的 release APK + 上传 Artifact
+- 推送到 `main`（含 PR）：Rust 测试（`cargo test`）+ Kotlin 单元测试 + debug APK + 有签名 Secrets 时的 release APK + 上传 Artifact
 - 推送 `v*` 标签：额外附加 APK 到 Release
 
 ### 5.3 提交后必须跟踪 CI
@@ -485,6 +535,7 @@ docs: release reader interaction fixes as v0.5.0
 - 不要在本地执行 Gradle 构建
 - 不要使用 `git push`
 - 不要提交 APK、密钥、签名文件或 `local.properties`
+- 不要提交构建产物（`rust/target/`、`android/app/src/main/jniLibs/`，均已 gitignore）
 - 不要绕过源站登录/验证码
 - 不要把用户密码写入代码或日志
 - 不要新增 `preferencesDataStore` 实例

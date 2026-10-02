@@ -52,9 +52,12 @@ import kotlinx.coroutines.withContext
  * == 为什么不是照搬上游实现 ==
  * 上游的 `defaultplugin/wenku8`（见 `THIRD_PARTY_NOTICES.md`）有三处不能沿用：
  * 1. `Wenku8Api` 硬编码了上游作者的 wenku8 账号 Cookie（含口令哈希）并随每个请求发送；
- * 2. 其 HTTP 栈是 Ktor + 自建信号量，会绕过本项目的全局限流与 429 退避；
- * 3. 它抓取 `search.php` / `articlelist.php` / `toplist.php` / `tags.php`，
- *    这些接口由站点控制登录，按 AGENTS §4.2 保持原样、不得规避。
+ * 2. 它的 HTTP 栈是 Ktor + 自建信号量，会绕过本项目的全局限流与 429 退避；
+ * 3. 它匿名抓取 `search.php` / `articlelist.php` / `toplist.php` / `tags.php`——
+ *    这些接口由站点控制登录，匿名抓取属于规避（AGENTS §4.2/§4.5.3）。
+ *    用户**自己登录后**用本人会话访问 `search.php` / `toplist.php` / `tags.php`
+ *    不属于规避，那条链路在 `core/Wenku8SearchProvider` 与 `ExploreRepository`
+ *    里实现（带登录页识别与会话清理），不经过本类；`articlelist.php` 仍完全不碰。
  *
  * 因此这里只借用上游的**体系**（书源契约、探索页/搜索提供者模型），取数一律走：
  * - [Wenku8HttpClient]：全局 1 秒限流 + 429 `Retry-After` 退避 + 重定向复校验；
@@ -270,8 +273,9 @@ class Wenku8BookSource(
 /**
  * 探索页：只挂**匿名可访问**的公开榜单（AGENTS §4.2 白名单内的 `/zt/` 页）。
  *
- * 上游的探索页用的是 `articlelist.php` / `toplist.php` / `tags.php`，这三个由站点
- * 控制登录，本工程不碰；因此这里换成年度精选榜与月度新书榜两个公开入口。
+ * 上游的探索页用 `articlelist.php` / `toplist.php` / `tags.php`；本提供者不碰它们
+ * （`articlelist.php` 全工程不用；`toplist.php` / `tags.php` 由用户登录后在
+ * `ExploreRepository` 的会话链路里抓，见 AGENTS §4.5.3）。
  */
 private class Wenku8ExplorePageProvider(
     private val http: Wenku8HttpClient,
@@ -355,10 +359,12 @@ private class Wenku8ListTapPage(
 }
 
 /**
- * 搜索：走**本地书目索引**，不打源站的 `search.php`（该接口由站点控制登录）。
+ * 书源契约里的搜索：走**本地书目索引**，不打源站的 `search.php`。
  *
  * 本地索引由 [CatalogCrawler] 从公开榜单与书籍详情页构建，断网可用；
  * 命中结果以 [SearchResult.MultipleBook] 逐个吐出，与上游的流式契约一致。
+ * 站内 `search.php` 搜索（登录墙内）走 `core/Wenku8SearchProvider`，
+ * 由搜索页直接调用，不经过本类。
  */
 private class Wenku8CatalogSearchProvider(
     private val lookup: suspend (String, String) -> List<SearchBook>,
