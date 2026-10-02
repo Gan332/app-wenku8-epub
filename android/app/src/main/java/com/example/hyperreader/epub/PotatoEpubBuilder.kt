@@ -41,6 +41,10 @@ class PotatoEpubBuilder {
             publisher = book.category.takeIf(String::isNotBlank)
             manifestId = "epub"
             spineId = "spine"
+            // **必填**：EpubBuilder.build() 里是 `modifier ?: throw Error("Missing 'modifier'")`，
+            // 不设它每次导出都会直接失败（表现为「LNR 引擎无法导出」）。
+            // 语义是 OPF 的 dcterms:modified，取导出时刻即可。
+            modifier = java.time.LocalDateTime.now()
         }
 
         // 封面：potatoepub 的 cover() 只接受 jpg，非 jpg 直接跳过（不阻断整次导出）

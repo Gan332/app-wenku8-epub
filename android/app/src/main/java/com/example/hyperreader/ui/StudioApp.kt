@@ -10,6 +10,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -204,10 +206,10 @@ private fun StudioApp(
         topBar = {
             TopAppBar(
                 title = when {
+                    state.exploreDetailId != null -> "书籍详情"
                     state.tab == StudioTab.BOOKSHELF -> "我的书架"
                     state.tab == StudioTab.EXPLORE -> "探索"
                     state.tab == StudioTab.SETTINGS -> settingsTitle
-                    state.exploreDetailId != null -> "书籍详情"
                     state.step == CreateStep.SOURCE -> "HyperReader"
                     state.step == CreateStep.DETAIL -> "书籍详情"
                     state.step == CreateStep.CHAPTERS -> "选择章节"
@@ -271,52 +273,53 @@ private fun StudioApp(
             state.tab == StudioTab.EXPLORE -> "explore"
             state.tab == StudioTab.SETTINGS -> "settings"
             else -> "create:${state.step}"
-        }
-        AnimatedContent(
-            targetState = pageKey,
-            transitionSpec = {
-                val direction = if (targetState > initialState) 1 else -1
-                (fadeIn(tween(220, easing = DecelerateEasing())) +
-                    slideInHorizontally(tween(300, easing = DecelerateEasing())) { direction * it / 6 })
-                    .togetherWith(fadeOut(tween(140, easing = DecelerateEasing())))
-            },
-            label = "pageTransition",
-        ) { _ ->
-            when {
-                state.tab == StudioTab.BOOKSHELF -> BookshelfScreen(state, viewModel, onImportEpub, onOpenLocal = { entry ->
-                    entry.localUri?.let { uri ->
-                        context.startActivity(XyReaderActivity.intent(context, uri, entry.bookId, entry.title))
+        } else {
+            AnimatedContent(
+                targetState = pageKey,
+                transitionSpec = {
+                    val direction = if (targetState > initialState) 1 else -1
+                    (fadeIn(tween(220, easing = DecelerateEasing())) +
+                        slideInHorizontally(tween(300, easing = DecelerateEasing())) { direction * it / 6 })
+                        .togetherWith(fadeOut(tween(140, easing = DecelerateEasing())))
+                },
+                label = "pageTransition",
+            ) { _ ->
+                when {
+                    state.tab == StudioTab.BOOKSHELF -> BookshelfScreen(state, viewModel, onImportEpub, onOpenLocal = { entry ->
+                        entry.localUri?.let { uri ->
+                            context.startActivity(XyReaderActivity.intent(context, uri, entry.bookId, entry.title))
+                        }
+                    }, onOpenRemote = { entry -> viewModel.openShelfRemote(entry) })
+                    state.tab == StudioTab.EXPLORE -> ExploreScreen(state, viewModel, onLogin) {
+                        viewModel.setTab(StudioTab.SETTINGS)
+                        viewModel.openSettingsSection(SettingsSection.CATALOG)
                     }
-                }, onOpenRemote = { entry -> viewModel.openShelfRemote(entry) })
-                state.tab == StudioTab.EXPLORE -> ExploreScreen(state, viewModel, onLogin) {
-                    viewModel.setTab(StudioTab.SETTINGS)
-                    viewModel.openSettingsSection(SettingsSection.CATALOG)
-                }
-                state.tab == StudioTab.SETTINGS -> SettingsScreen(
-                    viewModel = viewModel,
-                    onImportEpub = onImportEpub,
-                    onImportFont = onImportFont,
-                    onExportConfig = onExportConfig,
-                    onImportConfig = onImportConfig,
-                )
-                state.step == CreateStep.SOURCE -> SourceScreen(state, viewModel)
-                state.step == CreateStep.DETAIL -> state.book?.let {
-                    BookDetailScreen(
-                        book = it,
-                        chapterCount = state.index?.chapters?.size ?: 0,
+                    state.tab == StudioTab.SETTINGS -> SettingsScreen(
                         viewModel = viewModel,
-                        loading = state.busy,
-                        loadError = state.detailError,
-                    ) { tag ->
-                        viewModel.setSearchField(SearchField.TITLE)
-                        viewModel.setSearchQuery(tag)
-                        viewModel.setTab(StudioTab.EXPLORE)
-                        viewModel.searchLocal()
-                    }
-                } ?: SourceScreen(state, viewModel)
-                state.step == CreateStep.CHAPTERS -> ChaptersScreen(state, viewModel)
-                state.step == CreateStep.EXPORT -> ExportScreen(state, viewModel)
-                state.step == CreateStep.PROGRESS -> ProgressScreen(state, viewModel)
+                        onImportEpub = onImportEpub,
+                        onImportFont = onImportFont,
+                        onExportConfig = onExportConfig,
+                        onImportConfig = onImportConfig,
+                    )
+                    state.step == CreateStep.SOURCE -> SourceScreen(state, viewModel)
+                    state.step == CreateStep.DETAIL -> state.book?.let {
+                        BookDetailScreen(
+                            book = it,
+                            chapterCount = state.index?.chapters?.size ?: 0,
+                            viewModel = viewModel,
+                            loading = state.busy,
+                            loadError = state.detailError,
+                        ) { tag ->
+                            viewModel.setSearchField(SearchField.TITLE)
+                            viewModel.setSearchQuery(tag)
+                            viewModel.setTab(StudioTab.EXPLORE)
+                            viewModel.searchLocal()
+                        }
+                    } ?: SourceScreen(state, viewModel)
+                    state.step == CreateStep.CHAPTERS -> ChaptersScreen(state, viewModel)
+                    state.step == CreateStep.EXPORT -> ExportScreen(state, viewModel)
+                    state.step == CreateStep.PROGRESS -> ProgressScreen(state, viewModel)
+                }
             }
         }
 
@@ -342,7 +345,10 @@ private fun StudioApp(
 
 @Composable
 private fun SourceScreen(state: StudioUiState, viewModel: StudioViewModel) {
-    Column(Modifier.fillMaxWidth().padding(top = 18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+    Column(
+        Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(top = 18.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
         Text("把公开轻小说整理成可离线阅读的 EPUB。", fontSize = 24.sp, fontWeight = FontWeight.Bold)
         Text("支持 wenku8 书籍页、目录页或纯书籍 ID。请求会遵守源站限流。", color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.72f), fontSize = 14.sp)
         Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(16.dp)) {
@@ -400,7 +406,10 @@ private fun ChaptersScreen(state: StudioUiState, viewModel: StudioViewModel) {
 private fun ExportScreen(state: StudioUiState, viewModel: StudioViewModel) {
     val book = state.book ?: return
     val selected = state.index?.chapters?.count { it.id in state.selectedIds } ?: 0
-    Column(Modifier.fillMaxWidth().padding(top = 18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+    Column(
+        Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(top = 18.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
         TextButton(text = "‹ 返回章节", onClick = viewModel::backToChapters)
         BookHeader(book.title, book.author, book.category, selected, selected)
         Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(16.dp)) {
@@ -433,7 +442,10 @@ private fun ProgressScreen(state: StudioUiState, viewModel: StudioViewModel) {
 private fun ProgressContent(job: ExportJob, viewModel: StudioViewModel) {
     var showWarnings by remember { mutableStateOf(false) }
     val progress = job.progress.percent / 100f
-    Column(Modifier.fillMaxWidth().padding(top = 18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+    Column(
+        Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(top = 18.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
         Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(18.dp)) {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(job.book.title, fontSize = 24.sp, fontWeight = FontWeight.Bold)
