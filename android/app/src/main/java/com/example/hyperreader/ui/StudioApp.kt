@@ -206,6 +206,8 @@ private fun StudioApp(
         topBar = {
             TopAppBar(
                 title = when {
+                    // 探索详情接管整屏时优先显示它；这一支必须排在 tab 判断之前，
+                    // 否则从探索进入详情时 tab 仍是 EXPLORE，标题会一直显示「探索」。
                     state.exploreDetailId != null -> "书籍详情"
                     state.tab == StudioTab.BOOKSHELF -> "我的书架"
                     state.tab == StudioTab.EXPLORE -> "探索"
@@ -273,53 +275,52 @@ private fun StudioApp(
             state.tab == StudioTab.EXPLORE -> "explore"
             state.tab == StudioTab.SETTINGS -> "settings"
             else -> "create:${state.step}"
-        } else {
-            AnimatedContent(
-                targetState = pageKey,
-                transitionSpec = {
-                    val direction = if (targetState > initialState) 1 else -1
-                    (fadeIn(tween(220, easing = DecelerateEasing())) +
-                        slideInHorizontally(tween(300, easing = DecelerateEasing())) { direction * it / 6 })
-                        .togetherWith(fadeOut(tween(140, easing = DecelerateEasing())))
-                },
-                label = "pageTransition",
-            ) { _ ->
-                when {
-                    state.tab == StudioTab.BOOKSHELF -> BookshelfScreen(state, viewModel, onImportEpub, onOpenLocal = { entry ->
-                        entry.localUri?.let { uri ->
-                            context.startActivity(XyReaderActivity.intent(context, uri, entry.bookId, entry.title))
-                        }
-                    }, onOpenRemote = { entry -> viewModel.openShelfRemote(entry) })
-                    state.tab == StudioTab.EXPLORE -> ExploreScreen(state, viewModel, onLogin) {
-                        viewModel.setTab(StudioTab.SETTINGS)
-                        viewModel.openSettingsSection(SettingsSection.CATALOG)
+        }
+        AnimatedContent(
+            targetState = pageKey,
+            transitionSpec = {
+                val direction = if (targetState > initialState) 1 else -1
+                (fadeIn(tween(220, easing = DecelerateEasing())) +
+                    slideInHorizontally(tween(300, easing = DecelerateEasing())) { direction * it / 6 })
+                    .togetherWith(fadeOut(tween(140, easing = DecelerateEasing())))
+            },
+            label = "pageTransition",
+        ) { _ ->
+            when {
+                state.tab == StudioTab.BOOKSHELF -> BookshelfScreen(state, viewModel, onImportEpub, onOpenLocal = { entry ->
+                    entry.localUri?.let { uri ->
+                        context.startActivity(XyReaderActivity.intent(context, uri, entry.bookId, entry.title))
                     }
-                    state.tab == StudioTab.SETTINGS -> SettingsScreen(
-                        viewModel = viewModel,
-                        onImportEpub = onImportEpub,
-                        onImportFont = onImportFont,
-                        onExportConfig = onExportConfig,
-                        onImportConfig = onImportConfig,
-                    )
-                    state.step == CreateStep.SOURCE -> SourceScreen(state, viewModel)
-                    state.step == CreateStep.DETAIL -> state.book?.let {
-                        BookDetailScreen(
-                            book = it,
-                            chapterCount = state.index?.chapters?.size ?: 0,
-                            viewModel = viewModel,
-                            loading = state.busy,
-                            loadError = state.detailError,
-                        ) { tag ->
-                            viewModel.setSearchField(SearchField.TITLE)
-                            viewModel.setSearchQuery(tag)
-                            viewModel.setTab(StudioTab.EXPLORE)
-                            viewModel.searchLocal()
-                        }
-                    } ?: SourceScreen(state, viewModel)
-                    state.step == CreateStep.CHAPTERS -> ChaptersScreen(state, viewModel)
-                    state.step == CreateStep.EXPORT -> ExportScreen(state, viewModel)
-                    state.step == CreateStep.PROGRESS -> ProgressScreen(state, viewModel)
+                }, onOpenRemote = { entry -> viewModel.openShelfRemote(entry) })
+                state.tab == StudioTab.EXPLORE -> ExploreScreen(state, viewModel, onLogin) {
+                    viewModel.setTab(StudioTab.SETTINGS)
+                    viewModel.openSettingsSection(SettingsSection.CATALOG)
                 }
+                state.tab == StudioTab.SETTINGS -> SettingsScreen(
+                    viewModel = viewModel,
+                    onImportEpub = onImportEpub,
+                    onImportFont = onImportFont,
+                    onExportConfig = onExportConfig,
+                    onImportConfig = onImportConfig,
+                )
+                state.step == CreateStep.SOURCE -> SourceScreen(state, viewModel)
+                state.step == CreateStep.DETAIL -> state.book?.let {
+                    BookDetailScreen(
+                        book = it,
+                        chapterCount = state.index?.chapters?.size ?: 0,
+                        viewModel = viewModel,
+                        loading = state.busy,
+                        loadError = state.detailError,
+                    ) { tag ->
+                        viewModel.setSearchField(SearchField.TITLE)
+                        viewModel.setSearchQuery(tag)
+                        viewModel.setTab(StudioTab.EXPLORE)
+                        viewModel.searchLocal()
+                    }
+                } ?: SourceScreen(state, viewModel)
+                state.step == CreateStep.CHAPTERS -> ChaptersScreen(state, viewModel)
+                state.step == CreateStep.EXPORT -> ExportScreen(state, viewModel)
+                state.step == CreateStep.PROGRESS -> ProgressScreen(state, viewModel)
             }
         }
 
