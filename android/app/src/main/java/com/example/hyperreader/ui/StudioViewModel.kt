@@ -84,6 +84,18 @@ data class StudioUiState(
     val exploreBusy: Boolean = false,
     val exploreMessage: String? = null,
     val catalogSize: Int = 0,
+    /**
+     * 本地书目索引里出现过的全部标签。
+     *
+     * 数据来自已抓取的 `articleinfo.php`（每本书的「作品Tags」字段），
+     * **不抓源站的 `tags.php`**——那个接口由站点控制登录（AGENTS §4.2）。
+     * 因此标签覆盖面随本地索引增长，索引为空时这里也是空的。
+     */
+    val exploreTags: List<String> = emptyList(),
+    /** 当前选中的标签；null 表示未进入标签浏览。 */
+    val activeTag: String? = null,
+    /** 当前标签下的书（同样来自本地索引）。 */
+    val tagResults: List<SearchBook> = emptyList(),
     val catalogLoading: Boolean = false,
     val catalogProgress: Pair<Int, Int>? = null,
     val catalogUpdatedAt: Long = 0L,
@@ -161,6 +173,8 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
                 mutable.update {
                     it.copy(
                         catalogSize = stats.count,
+                        // 标签索引随书目一起刷新；索引为空时自然为空表
+                        exploreTags = catalogRepository.tagList(),
                         catalogUpdatedAt = stats.lastUpdatedAt,
                         catalogLoading = catalog.loading,
                         catalogProgress = catalog.progress,
@@ -283,8 +297,21 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    fun updateCatalog(budget: Int = 200) = catalogRepository.update(budget)
-    fun clearCatalog() = catalogRepository.clear()
+    /**
+     * 标签浏览：选中标签 → 从**本地索引**取该标签下的书。
+     *
+     * 索引本身是免登录抓公开页（榜单 + `articleinfo.php`）建起来的，
+     * 因此这里不发任何网络请求，断网可用。
+     */
+    fun selectTag(tag: String) {
+        val results = catalogRepository.searchTag(tag).map { it.toSearchBook() }
+        mutable.update { it.copy(activeTag = tag, tagResults = results) }
+    }
+
+    /** 退出标签浏览。 */
+    fun clearTag() = mutable.update { it.copy(activeTag = null, tagResults = emptyList()) }
+
+    fun updateCatalog(budget: Int = 200) = catalogRepository.update(budget)    fun clearCatalog() = catalogRepository.clear()
 
     /** 由用户在书架操作界面显式触发：抓取该作者的作品。被动触发，不由打开页面自动执行。 */
     fun expandAuthor(bookId: String) {

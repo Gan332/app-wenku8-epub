@@ -12,6 +12,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -79,6 +80,26 @@ fun ExploreScreen(state: StudioUiState, viewModel: StudioViewModel, onLogin: () 
                 items(state.searchHistory.take(8)) { keyword -> TextButton(text = keyword, onClick = { viewModel.setSearchQuery(keyword) }) }
             }
         }
+        // —— 标签浏览（0.14.0）——
+        // 标签来自**本地书目索引**（每本书 articleinfo.php 里的「作品Tags」），
+        // 不抓源站的 tags.php——那个接口由站点控制登录，见 AGENTS §4.2。
+        // 所以这里零网络请求，断网可用；覆盖面随本地索引增长。
+        if (state.exploreTags.isNotEmpty()) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("按标签浏览", fontSize = 13.sp, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f))
+                if (state.activeTag != null) {
+                    TextButton(text = "‹ 全部标签", onClick = viewModel::clearTag)
+                }
+            }
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                items(state.exploreTags) { tag ->
+                    TextButton(
+                        text = if (tag == state.activeTag) "✓ $tag" else tag,
+                        onClick = { viewModel.selectTag(tag) },
+                    )
+                }
+            }
+        }
         state.exploreMessage?.let { MessageCard(it) }
         state.searchMessage?.let { MessageCard(it) }
         if (state.exploreBusy) Text("正在加载公开榜单…", color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f), fontSize = 13.sp)
@@ -87,6 +108,13 @@ fun ExploreScreen(state: StudioUiState, viewModel: StudioViewModel, onLogin: () 
         }
         if (state.localResults.isNotEmpty()) Text("本地搜索结果 ${state.localResults.size} 条", fontSize = 13.sp, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f))
         val localItems = state.localResults.map { ExploreListItem.Book(it.toSearchBook()) }
+        // 标签结果排在最前：选中标签后用户最想看的就是它
+        val tagItems = buildList {
+            state.activeTag?.let { tag ->
+                add(ExploreListItem.Header("标签「$tag」· ${state.tagResults.size} 本"))
+                state.tagResults.forEach { add(ExploreListItem.Book(it)) }
+            }
+        }
         val exploreItems = buildList {
             state.exploreRows.forEach { row ->
                 add(ExploreListItem.Header(row.title))
@@ -95,6 +123,12 @@ fun ExploreScreen(state: StudioUiState, viewModel: StudioViewModel, onLogin: () 
         }
         // weight(1f) 让列表拿到剩余高度并自行滚动；否则内容被底部导航截断且无法滑动
         LazyColumn(Modifier.fillMaxWidth().weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(tagItems, key = { "tag-${it.key}" }) { item ->
+                when (item) {
+                    is ExploreListItem.Header -> Text(item.title, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    is ExploreListItem.Book -> ExploreBookCard(item.book, onOpen = { viewModel.openSearchBook(item.book) }, onAdd = { viewModel.addSearchToShelf(item.book) }, modifier = Modifier.animateItem())
+                }
+            }
             items(localItems, key = { "local-${it.key}" }) { item ->
                 (item as? ExploreListItem.Book)?.let { book ->
                     ExploreBookCard(book.book, onOpen = { viewModel.openSearchBook(book.book) }, onAdd = { viewModel.addSearchToShelf(book.book) }, modifier = Modifier.animateItem())
