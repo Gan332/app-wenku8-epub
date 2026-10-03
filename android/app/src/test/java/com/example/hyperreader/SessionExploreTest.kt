@@ -48,7 +48,8 @@ class SessionExploreTest {
         assertEquals(1, firstPage.page)
         assertEquals(3, firstPage.pageCount)
         assertTrue(firstPage.hasNextPage)
-        assertEquals(listOf("1", "2"), firstPage.books.map { it.id })
+        // 夹具里书链接是 /book/{page}01.htm，page=1 时 id 就是 101/102
+        assertEquals(listOf("101", "102"), firstPage.books.map { it.id })
 
         val last = searchPageHtml(page = 3, pageCount = 3, includeNext = false)
         val lastPage = Wenku8Parser.parseSearchPage(last, Wenku8Urls.SEARCH, 3)
