@@ -98,6 +98,8 @@ import com.example.hyperreader.model.ExportJob
 import com.example.hyperreader.model.JobStatus
 import com.example.hyperreader.model.SearchField
 import com.example.hyperreader.ui.ExportStep
+import com.example.hyperreader.ui.ExploreExpandedScreen
+import com.example.hyperreader.ui.Motion
 import com.example.hyperreader.ui.UiDimens
 import com.example.hyperreader.ui.StudioTab
 import com.example.hyperreader.ui.StudioUiState
