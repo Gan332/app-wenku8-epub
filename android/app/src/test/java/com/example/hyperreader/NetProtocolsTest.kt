@@ -1,7 +1,6 @@
 package com.example.hyperreader
 
 import com.example.hyperreader.core.Wenku8NetProtocols
-import okhttp3.ConnectionSpec
 import okhttp3.Protocol
 import okhttp3.TlsVersion
 import org.junit.Assert.assertEquals
@@ -23,19 +22,19 @@ class NetProtocolsTest {
 
     @Test
     fun tls13IsEnabledWithTls12Fallback() {
-        val spec: ConnectionSpec = Wenku8NetProtocols.tlsSpecs().single()
-        assertTrue("必须支持 TLS 1.3", spec.isCompatibleWith(TlsVersion.TLS_1_3))
-        assertTrue("必须保留 TLS 1.2 回落", spec.isCompatibleWith(TlsVersion.TLS_1_2))
+        val versions = Wenku8NetProtocols.tlsSpecs().single().tlsVersions
+        assertTrue("必须支持 TLS 1.3", versions?.contains(TlsVersion.TLS_1_3) == true)
+        assertTrue("必须保留 TLS 1.2 回落", versions?.contains(TlsVersion.TLS_1_2) == true)
         // 不应再支持 TLS 1.0/1.1 这类老协议
-        assertTrue(!spec.isCompatibleWith(TlsVersion.TLS_1_1))
-        assertTrue(!spec.isCompatibleWith(TlsVersion.TLS_1_0))
+        assertTrue(versions?.contains(TlsVersion.TLS_1_1) != true)
+        assertTrue(versions?.contains(TlsVersion.TLS_1_0) != true)
     }
 
     @Test
     fun cipherSuitesComeFromModernTls() {
         val spec = Wenku8NetProtocols.tlsSpecs().single()
-        // MODERN_TLS 的 cipher 集非空，且不应是空实现
-        assertTrue(spec.cipherSuites.isNotEmpty())
+        // MODERN_TLS 的 cipher 集非空（不是空实现）
+        assertTrue(!spec.cipherSuites.isNullOrEmpty())
     }
 
     @Test
