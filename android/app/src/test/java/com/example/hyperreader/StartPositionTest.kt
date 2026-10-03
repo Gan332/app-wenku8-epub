@@ -14,9 +14,9 @@ import org.junit.Test
 class StartPositionTest {
 
     private val catalog = listOf(
-        Chapter("10001", "第一章", "https://www.wenku8.net/novel/2/2365/10001.htm"),
-        Chapter("10002", "第二章", "https://www.wenku8.net/novel/2/2365/10002.htm"),
-        Chapter("10003", "第三章", "https://www.wenku8.net/novel/2/2365/10003.htm"),
+        Chapter("10001", "第一章", "https://www.wenku8.net/novel/2/2365/10001.htm", order = 1),
+        Chapter("10002", "第二章", "https://www.wenku8.net/novel/2/2365/10002.htm", order = 2),
+        Chapter("10003", "第三章", "https://www.wenku8.net/novel/2/2365/10003.htm", order = 3),
     )
 
     @Test

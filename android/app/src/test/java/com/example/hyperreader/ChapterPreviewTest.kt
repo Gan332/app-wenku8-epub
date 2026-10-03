@@ -18,6 +18,7 @@ class ChapterPreviewTest {
             title = "第${index}章",
             url = "https://www.wenku8.net/novel/2/2365/1000$index.htm",
             volume = if (index <= 30) "第一卷" else "第二卷",
+            order = index,
         )
     }
 
