@@ -2,6 +2,27 @@
 
 本项目遵循语义化版本。
 
+## [0.16.0] - 2026-10-05
+
+### 新增
+
+- **设置 → 概览新增「第三方中继（仅公开页）」开关**：直连被 Cloudflare 403 拦时，
+  可把**免登录公开页**（书目索引、公开榜单、封面图）改走用户自填的中继端点。
+  端点必须用户自己填（本项目不内置任何猜测地址，默认关闭）。
+- 公开端点（`articleinfo.php`、目录页、年度/月度榜、`authorarticle.php`）改由
+  `Wenku8Endpoint.publicBase()` 拼装；会话端点（`search.php` / `toplist.php` /
+  `tags.php` / 登录）与「来源地址」`book()` 始终直连。
+- 新增 `Wenku8Url.carriesSession`：`Wenku8SessionStore.cookieJar()` 的存取两侧都用它
+  按 host 把关，**中继永远收不到** `jieqiUserInfo` / `PHPSESSID`。
+- 解析出口统一 `Wenku8Endpoint.restoreToDirect`：书架、EPUB 内链、粘贴的来源网址
+  都还原成 wenku8 原域；封面/正文图片在下载前才用 `toRelayUrl` 改写，缓存键不变。
+
+### 不变
+
+- 端点集合、URL 白名单、内网拦截、限流与 HTTP 429 退避一律不变；中继只换传输路径，
+  不新增任何接口，也不涉及任何登录规避。
+- 关闭开关时行为与 0.15.0 逐字节一致（默认关闭且无内置端点）。
+
 ## [0.15.0] - 2026-10-05
 
 ### 变更

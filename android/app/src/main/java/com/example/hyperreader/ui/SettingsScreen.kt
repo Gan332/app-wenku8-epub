@@ -18,7 +18,11 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -27,6 +31,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.hyperreader.core.Wenku8Endpoint
 import com.example.hyperreader.settings.AppThemeMode
 import com.example.hyperreader.settings.AppThemeSettings
 import com.example.hyperreader.settings.ReaderBackground
@@ -38,6 +43,7 @@ import top.yukonga.miuix.kmp.basic.Slider
 import top.yukonga.miuix.kmp.basic.Switch
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
+import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 private val ROW_HEIGHT = 48.dp
@@ -139,6 +145,67 @@ private fun SettingsOverview(state: StudioUiState, viewModel: StudioViewModel) {
                     Text(engine.summary, fontSize = 12.sp, color = MiuixTheme.colorScheme.primary)
                 }
             }
+        }
+        // —— 第三方中继（0.16.0）：只影响免登录公开页，会话链路始终直连 ——
+        item { RelaySettings(viewModel) }
+    }
+}
+
+/**
+ * 第三方中继设置（AGENTS §4.11）。
+ *
+ * 端点必须由用户自己填写：上游从未公开其中继地址，本项目不内置任何猜测值。
+ * 开关默认关闭；端点为空或非法时，点开关会被 [StudioViewModel.setRelayEnabled] 拒绝并提示。
+ */
+@Composable
+private fun RelaySettings(viewModel: StudioViewModel) {
+    val enabled by viewModel.relayEnabled.collectAsStateWithLifecycle(initialValue = false)
+    val storedBase by viewModel.relayBase.collectAsStateWithLifecycle(initialValue = "")
+    var editing by remember { mutableStateOf(storedBase) }
+    LaunchedEffect(storedBase) { editing = storedBase }
+    val normalized = Wenku8Endpoint.normalizeRelayBase(editing)
+    val status = when {
+        normalized == null -> "端点未配置或无效：公开页当前直连 ${Wenku8Endpoint.DIRECT_BASE}"
+        enabled -> "公开页将走 $normalized；会话链路（搜索/榜单/标签/正文）仍直连"
+        else -> "端点已保存，开关关闭中；开启后公开页走中继"
+    }
+    Card(modifier = Modifier.fillMaxWidth(), insideMargin = PaddingValues(14.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth().heightIn(min = ROW_HEIGHT),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("第三方中继（仅公开页）", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Text(
+                        "书目索引、公开榜单与封面改走中继；登录与搜索始终直连，不发送任何 Cookie。",
+                        fontSize = 12.sp,
+                        color = MiuixTheme.colorScheme.onSurface.copy(alpha = .7f),
+                    )
+                }
+                Switch(
+                    checked = enabled,
+                    onCheckedChange = viewModel::setRelayEnabled,
+                )
+            }
+            TextField(
+                value = editing,
+                onValueChange = { editing = it },
+                label = "中继端点",
+                useLabelAsPlaceholder = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                TextButton(text = "保存端点", onClick = { viewModel.setRelayBase(editing) })
+                if (editing.isNotBlank()) TextButton(text = "清除", onClick = { editing = ""; viewModel.setRelayBase("") })
+            }
+            Text(status, fontSize = 12.sp, color = MiuixTheme.colorScheme.primary)
+            Text(
+                "上游声明：该中继服务由mewx.org 提供，与 wenku8 无关；仅供海外用户使用，" +
+                    "可能滞后网站 24 小时以上；请勿在中国大陆使用。本项目与 MewX 无隶属关系，非官方支持。",
+                fontSize = 12.sp,
+                color = MiuixTheme.colorScheme.onSurface.copy(alpha = .7f),
+            )
         }
     }
 }

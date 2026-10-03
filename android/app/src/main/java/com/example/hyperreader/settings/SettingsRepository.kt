@@ -36,6 +36,16 @@ class SettingsRepository(private val context: Context) {
         EpubEngine.fromName(prefs[EXPORT_ENGINE])
     }
 
+    /**
+     * 第三方中继开关（仅公开页链路，AGENTS §4.11）。
+     *
+     * 默认关闭；还需要 [relayBase] 填了合法 https 端点才实际生效。
+     */
+    val relayEnabled: Flow<Boolean> = data.safeData().map { it[RELAY_ENABLED] ?: false }
+
+    /** 中继端点原文（未配置为空串）。 */
+    val relayBase: Flow<String> = data.safeData().map { it[RELAY_BASE].orEmpty() }
+
     val readerSettings: Flow<ReaderSettings> = data.safeData().map { prefs ->
         val default = ReaderSettings()
         ReaderSettings(
@@ -78,6 +88,14 @@ class SettingsRepository(private val context: Context) {
 
     /** 切换 EPUB 导出引擎；只影响之后创建的导出任务。 */
     suspend fun setExportEngine(engine: EpubEngine) = edit { it[EXPORT_ENGINE] = engine.name }
+
+    /** 开关关闭时自动把已保存的端点清空，避免下次打开时误用过期端点。 */
+    suspend fun setRelayEnabled(enabled: Boolean) = edit {
+        it[RELAY_ENABLED] = enabled
+        if (!enabled) it.remove(RELAY_BASE)
+    }
+
+    suspend fun setRelayBase(value: String) = edit { it[RELAY_BASE] = value.trim() }
     suspend fun setDynamicColor(enabled: Boolean) = edit { it[USE_DYNAMIC_COLOR] = enabled }
     suspend fun setAccentColor(color: Int) = edit { it[ACCENT_COLOR] = color }
 
@@ -115,6 +133,10 @@ class SettingsRepository(private val context: Context) {
         val THEME_MODE = stringPreferencesKey("theme_mode")
         /** EPUB 导出引擎（`EpubEngine.name`）；缺失/非法回退 CLASSIC。 */
         val EXPORT_ENGINE = stringPreferencesKey("export_engine")
+        /** 第三方中继开关（仅公开页），默认 false。 */
+        val RELAY_ENABLED = booleanPreferencesKey("relay_enabled")
+        /** 第三方中继端点，如 `https://relay.example.com`；为空则中继不生效。 */
+        val RELAY_BASE = stringPreferencesKey("relay_base")
         val USE_DYNAMIC_COLOR = booleanPreferencesKey("use_dynamic_color")
         val ACCENT_COLOR = intPreferencesKey("accent_color")
         val READER_FONT_SIZE = floatPreferencesKey("reader_font_size")

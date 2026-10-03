@@ -12,9 +12,31 @@ data class SourceIds(val kind: SourceKind, val bookId: String, val categoryId: S
 object Wenku8Url {
     private val domains = listOf("wenku8.net", "wenku8.cc", "wenku8.com")
 
-    fun isAllowedHost(host: String?): Boolean {
+    /** wenku8 自身域名（直连链路）。中继端点会被拒绝，见 [Wenku8Endpoint.normalizeRelayBase]。 */
+    fun isDirectHost(host: String?): Boolean {
         val value = host?.lowercase() ?: return false
         return domains.any { value == it || value.endsWith(".$it") }
+    }
+
+    /**
+     * 该 host 是否**允许携带用户的会话 Cookie**。
+     *
+     * 只有 wenku8 自身域名为true：即便公开端点走了第三方中继（[Wenku8Endpoint]），
+     * 用户本人的 `jieqiUserInfo` / `PHPSESSID` 也不会发给中继方。
+     * `Wenku8SessionStore.cookieJar()` 的存取两侧都用它把关。
+     */
+    fun carriesSession(host: String?): Boolean = isDirectHost(host)
+
+    /**
+     * 允许的 host：wenku8 自身，**外加**用户已配置并启用的中继域（AGENTS §4.11）。
+     *
+     * 中继域只有开关打开且端点合法时才放行，关着时与未配置时行为完全不变；
+     * IP / 内网拦截、scheme 与凭据校验均不受影响。
+     */
+    fun isAllowedHost(host: String?): Boolean {
+        val value = host?.lowercase() ?: return false
+        if (isDirectHost(value)) return true
+        return Wenku8Endpoint.isRelayActive() && value == Wenku8Endpoint.relayHost()
     }
 
     fun assertAllowed(value: String): URI {
@@ -31,7 +53,9 @@ object Wenku8Url {
     fun normalizeSource(input: String): URI {
         val raw = input.trim()
         if (raw.isEmpty()) throw Wenku8Exception("请输入书籍或目录网址。", "URL_REQUIRED")
-        return assertAllowed(if (raw.all(Char::isDigit)) "https://www.wenku8.net/book/$raw.htm" else raw)
+        // 粘贴中继 URL 时先还原，避免把第三方地址带进解析管线
+        val restored = Wenku8Endpoint.restoreToDirect(raw)
+        return assertAllowed(if (restored.all(Char::isDigit)) "https://www.wenku8.net/book/$restored.htm" else restored)
     }
 
     fun sourceIds(uri: URI): SourceIds {
@@ -54,14 +78,15 @@ object Wenku8Url {
 
     fun validateBook(book: Book): Book {
         if (book.title.isBlank()) throw Wenku8Exception("书籍标题不能为空。", "BOOK_TITLE_REQUIRED")
-        val source = assertAllowed(book.sourceUrl.ifBlank { book.bookUrl }).toString()
+        // 入库前统一还原：即使上游页面或用户粘贴带来中继域，落库与 EPUB 内链也只用wenku8 原域
+        val source = assertAllowed(Wenku8Endpoint.restoreToDirect(book.sourceUrl.ifBlank { book.bookUrl })).toString()
         return book.copy(
             id = book.id?.filter(Char::isDigit)?.ifBlank { null },
             title = book.title.trim().take(200),
             author = book.author.trim().ifBlank { "未知作者" }.take(200),
             sourceUrl = source,
-            bookUrl = assertAllowed(book.bookUrl.ifBlank { source }).toString(),
-            directoryUrl = book.directoryUrl?.let { assertAllowed(it).toString() },
+            bookUrl = assertAllowed(Wenku8Endpoint.restoreToDirect(book.bookUrl.ifBlank { source })).toString(),
+            directoryUrl = book.directoryUrl?.let { assertAllowed(Wenku8Endpoint.restoreToDirect(it)).toString() },
         )
     }
 
@@ -70,7 +95,7 @@ object Wenku8Url {
         if (chapters.size > 2000) throw Wenku8Exception("单次最多支持 2000 个章节。", "TOO_MANY_CHAPTERS")
         val seen = mutableSetOf<String>()
         return chapters.mapIndexed { index, chapter ->
-            val url = assertAllowed(chapter.url).toString()
+            val url = assertAllowed(Wenku8Endpoint.restoreToDirect(chapter.url)).toString()
             if (!seen.add(url)) throw Wenku8Exception("章节重复：${chapter.title}", "DUPLICATE_CHAPTER")
             chapter.copy(id = chapter.id.ifBlank { (index + 1).toString() }, title = chapter.title.trim().ifBlank { "第 ${index + 1} 章" }, url = url)
         }.sortedBy { it.order }

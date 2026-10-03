@@ -3,6 +3,7 @@ package com.example.hyperreader
 import android.app.Application
 import com.example.hyperreader.core.CatalogSearchField
 import com.example.hyperreader.core.Wenku8BookSource
+import com.example.hyperreader.core.Wenku8Endpoint
 import com.example.hyperreader.core.Wenku8SessionStore
 import com.example.hyperreader.core.Wenku8SearchProvider
 import com.example.hyperreader.service.ExportJobManager
@@ -13,8 +14,31 @@ import com.example.hyperreader.core.Wenku8DataSource
 import com.example.hyperreader.settings.SettingsRepository
 import com.example.hyperreader.ui.toSearchBook
 import java.io.File
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.launch
 
 class Wenku8Application : Application() {
+    private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+    /**
+     * 把设置里的中继开关与端点应用到 [Wenku8Endpoint]。
+     *
+     * 公开页抓取（书目索引、公开榜单、封面）会经它改写端点；会话链路不受影响。
+     * 端点非法时 [Wenku8Endpoint.applyRelay] 直接清空，等价于关闭。
+     */
+    override fun onCreate() {
+        super.onCreate()
+        appScope.launch {
+            combine(settingsRepository.relayBase, settingsRepository.relayEnabled) { base, enabled -> base to enabled }
+                .collect { (base, enabled) ->
+                    Wenku8Endpoint.applyRelay(base)
+                    Wenku8Endpoint.setRelayEnabled(enabled)
+                }
+        }
+    }
     val settingsRepository: SettingsRepository by lazy { SettingsRepository(this) }
     val sessionStore: Wenku8SessionStore by lazy { Wenku8SessionStore(this) }
     val jobManager: ExportJobManager by lazy { ExportJobManager(this, sessionStore) }

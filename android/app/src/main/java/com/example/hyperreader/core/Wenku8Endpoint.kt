@@ -1,0 +1,115 @@
+package com.example.hyperreader.core
+
+import java.net.URI
+
+/**
+ * 公开页的传输端点：直连源站，或用户自填的**第三方中继**（AGENTS §4.11）。
+ *
+ * 中继只服务「免登录公开页」这条链路（书目索引、公开榜单、封面图）：
+ * - [Wenku8Urls] 的公开端点用 [publicBase] 拼地址；会话端点（搜索/榜单/标签/登录）一律用
+ *   直连 [Wenku8Urls.BASE]，**不携带任何 Cookie**
+ * - 端点集合、白名单、内网拦截、限流与 429 退避都不因中继而放宽
+ * - 解析结果在出口用 [restoreToDirect] 还原成 wenku8 原域，书架 / EPUB 内链不会指向第三方；
+ *   真正下载前再用 [toRelayUrl] 改写
+ *
+ * 导出 / 在线阅读链路与公开链路共用同一批 URL 工厂，因此开启后它们的 `articleinfo.php`
+ * 与目录页也可能走中继；会话 Cookie 由 [Wenku8Url.carriesSession] 按 host 把关，
+ * 中继**永远收不到** `jieqiUserInfo` / `PHPSESSID`。
+ *
+ * 端点必须由用户显式填写：MewX 官方 App 的中继地址从未公开（1.x 已把相关常量移除，
+ * `wenku8.mewx.org` 只是其前端页），内置任何猜测地址都不可取。
+ */
+object Wenku8Endpoint {
+    /** 直连源站，与 [Wenku8Urls.BASE] 同源。 */
+    const val DIRECT_BASE = "https://www.wenku8.net"
+
+    /** 开关关闭或端点非法时回落到直连。 */
+    fun publicBase(): String = relayBase() ?: DIRECT_BASE
+
+    @Volatile
+    private var enabled: Boolean = false
+
+    @Volatile
+    private var relay: String? = null
+
+    /** 中继是否**实际生效**：开关打开且端点合法。设置页据此禁用开关或提示原因。 */
+    fun isRelayActive(): Boolean = enabled && relay != null
+
+    fun isRelayEnabled(): Boolean = enabled
+
+    /** 当前中继 base（未配置返回 null）。 */
+    fun relayBase(): String? = relay
+
+    /** 中继 host（未配置返回 null），供 URL 白名单放行。 */
+    fun relayHost(): String? = relay?.let { value -> runCatching { URI(value).host }.getOrNull() }
+
+    /**
+     * 应用中继端点（可重复调用）。合法则生效，非法/空则**清空**中继（回落到直连）。
+     *
+     * 返回是否生效，便于设置页直接提示原因。
+     */
+    fun applyRelay(raw: String?): Boolean {
+        val normalized = normalizeRelayBase(raw)
+        relay = normalized
+        return normalized != null
+    }
+
+    /** 设置开关；关闭时保留端点以便再次开启。 */
+    fun setRelayEnabled(value: Boolean) {
+        enabled = value
+    }
+
+    /** 规范化中继端点：`https://host[:port]`，去掉路径/查询/尾斜杠；非法返回 null。 */
+    fun normalizeRelayBase(raw: String?): String? {
+        val value = raw?.trim().orEmpty()
+        if (value.isEmpty()) return null
+        val uri = runCatching { URI(value) }.getOrNull() ?: return null
+        if (!uri.scheme.equals("https", ignoreCase = true)) return null
+        if (uri.userInfo != null) return null
+        val host = uri.host?.lowercase()?.takeIf { it.isNotBlank() } ?: return null
+        if (host.toIpv4OrNull() != null || host == "::1" || host.startsWith("[")) return null
+        if (Wenku8Url.isDirectHost(host)) return null
+        val port = uri.port.takeIf { it > 0 }?.let { ":$it" }.orEmpty()
+        return "https://$host$port"
+    }
+
+    /**
+     * 直连 URL → 中继 URL（同路径同查询的反代形式）。
+     *
+     * 只改写 wenku8 自身域名；其它 URL（已是中继、或第三方图片域）原样返回。
+     */
+    fun toRelayUrl(url: String): String {
+        val base = relayBase() ?: return url
+        if (!isRelayActive()) return url
+        val uri = runCatching { URI(url.trim()) }.getOrNull() ?: return url
+        val host = uri.host?.lowercase() ?: return url
+        if (!Wenku8Url.isDirectHost(host)) return url
+        val suffix = buildString {
+            append(uri.rawPath.ifEmpty { "/" })
+            uri.rawQuery?.let { append('?').append(it) }
+        }
+        return base + suffix
+    }
+
+    /**
+     * 中继 URL → 直连 URL，解析出口统一调用，保证书架 / EPUB 内链不落到第三方。
+     *
+     * 与 [toRelayUrl] 互为逆运算；非中继 URL 原样返回。
+     */
+    fun restoreToDirect(url: String): String {
+        val host = relayHost() ?: return url
+        val prefix = "https://$host"
+        val trimmed = url.trim()
+        if (!trimmed.startsWith(prefix)) return trimmed
+        val suffix = trimmed.removePrefix(prefix)
+        if (suffix.isNotEmpty() && !suffix.startsWith('/')) return trimmed
+        return Wenku8Urls.BASE + suffix
+    }
+}
+
+/** 只含数字与点的字面量就是 IPv4；含其它字符则交给 URI 解析。 */
+private fun String.toIpv4OrNull(): String? = split('.')
+    .takeIf { parts ->
+        parts.size == 4 && parts.all { part -> part.isNotEmpty() && part.all(Char::isDigit) && part.toInt() in 0..255 }
+    }
+    ?.joinToString(".")

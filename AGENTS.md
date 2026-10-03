@@ -13,7 +13,7 @@
 
 当前主要发版对象是 **Android 原生应用**。Android 版本不需要 Node.js 服务，WebView 仅用于 wenku8 登录。
 
-当前版本：`0.15.0`（versionCode 22，见 `android/app/build.gradle.kts`，以该文件为准）
+当前版本：`0.16.0`（versionCode 23，见 `android/app/build.gradle.kts`，以该文件为准）
 包名：`com.example.hyperreader`（由 `com.wenku8.epubstudio` 于 0.9.0 重命名，非原地改名，升级需数据迁移）
 
 仓库地址：`https://github.com/Gan332/app-wenku8-epub`
@@ -151,6 +151,9 @@ android/app/src/main/java/io/nightfish/lightnovelreader/api/   ← LNR 书源抽
 免登录抓取（上表白名单）由 `CatalogCrawler` / `CatalogRepository` 负责，必须使用
 **独立的无 Cookie 客户端**，即使设备存在登录态也不得携带 Cookie——与会话链路分开，
 两条链路不要混用。
+
+用户可自行为公开页配置**第三方中继**（见 §4.11）；那是传输路径的可选替换，
+**不改变本节的端点白名单，也不新增任何接口**。
 
 ### 4.3 状态与持久化
 
@@ -341,6 +344,32 @@ MiuiX 化对照（上游全是 material3，本项目禁止 material，有守卫�
 - `so` 不入库：CI 用 `cargo-ndk` 在构建期产出到 `android/app/src/main/jniLibs/`
   （已 gitignore）；Rust 只依赖 `zip`/`serde`/`jni`，零 XML 库漂移风险
 - Rust 测试在 CI 跑（`working-directory: rust` 的 `cargo test`），改动 `rust/` 时同样要过 CI
+
+### 4.11 第三方中继（0.16.0 起，仅公开页）
+
+用户可为「免登录公开页」链路自选**第三方中继**（设置 → 概览 →「第三方中继（仅公开页）」）。
+起因是源站对部分网络返回 Cloudflare 403 直连不通；中继只是**换传输路径**，
+不改变端点集合、限流与 429 退避，也**不允许任何形式的登录规避**。
+
+实现全在 `core/Wenku8Endpoint.kt`（单例路由状态），硬约束五条：
+
+1. **端点必须用户填写，禁止内置猜测值**。MewX 官方 App 的中继地址从未公开
+   （1.x 已移除相关常量，`wenku8.mewx.org` 只是其前端页），只接受 `https://域名[:端口]`；
+   拒绝 http、IP 字面量（含内网）、明文凭据、wenku8 自身域名。默认关闭。
+2. **只作用于公开端点**：`Wenku8Urls` 里`articleInfo` / `index` / `sugoi` / `booklist` /
+   `authorArticle` 走 `publicBase()`；`search.php` / `toplist.php` / `tags.php` / `login.php`
+   与「来源地址」`book()` **永远直连**。
+3. **Cookie 不出wenku8**：`Wenku8Url.carriesSession` 是唯一判据，
+   `Wenku8SessionStore.cookieJar()` 的存取两侧都用它过滤；中继永远收不到
+   `jieqiUserInfo` / `PHPSESSID`。
+4. **URL 双向变换**：解析出口`Wenku8Endpoint.restoreToDirect` 把中继 URL 还原成wenku8 原域
+   （书架、EPUB 内链、再次抓取都不得指向第三方）；真正下载前用 `toRelayUrl` 改写，
+   封面缓存键保持直连 URL。粘贴来源网址也先还原再 `assertAllowed`。
+5. **白名单不放宽**：`Wenku8Url.isAllowedHost` 只在「开关开且端点合法」时额外放行中继 host，
+   内网拦截、重定向复校验、scheme 与凭据校验一律不变。
+
+设置流由 `Wenku8Application.onCreate` 监听（`relay_base` + `relay_enabled`）后应用；
+关开关时自动清空端点。回归见单测 `RelayEndpointTest`。
 
 ## 5. 构建与验证
 

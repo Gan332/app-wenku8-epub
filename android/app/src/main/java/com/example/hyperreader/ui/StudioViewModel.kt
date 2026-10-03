@@ -8,6 +8,7 @@ import com.example.hyperreader.core.CatalogEntry
 import com.example.hyperreader.core.CatalogSearchField
 import com.example.hyperreader.core.ExploreBooksRow
 import com.example.hyperreader.core.ExplorePage
+import com.example.hyperreader.core.Wenku8Endpoint
 import com.example.hyperreader.core.Wenku8Exception
 import com.example.hyperreader.core.Wenku8HttpClient
 import com.example.hyperreader.core.Wenku8Parser
@@ -29,6 +30,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import java.io.File
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.first
@@ -177,6 +179,12 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     val exportEngine: kotlinx.coroutines.flow.Flow<com.example.hyperreader.settings.EpubEngine> =
         settingsRepository.exportEngine
 
+    /** 第三方中继开关（仅公开页，AGENTS §4.11）。 */
+    val relayEnabled: kotlinx.coroutines.flow.Flow<Boolean> = settingsRepository.relayEnabled
+
+    /** 中继端点原文；空串表示未配置。 */
+    val relayBase: kotlinx.coroutines.flow.Flow<String> = settingsRepository.relayBase
+
     /**
      * 官方标签（登录后从 `tags.php` 拉取）；未登录或抓取失败时为空，标签区只显示本地内容。
      * 声明必须在 `init` 之前：冷启动的 collector 会经 [mergedTags] 读到它。
@@ -185,6 +193,50 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
 
     fun setExportEngine(engine: com.example.hyperreader.settings.EpubEngine) {
         viewModelScope.launch { runCatching { settingsRepository.setExportEngine(engine) } }
+    }
+
+    /**
+     * 开关中继：需要先填合法端点，否则拒绝并说明原因。
+     *
+     * 真正生效由 [com.example.hyperreader.core.Wenku8Endpoint] 决定（Application 监听设置流应用），
+     * 这里只做入参校验，不自己改运行态。
+     */
+    fun setRelayEnabled(enabled: Boolean) {
+        if (!enabled) {
+            viewModelScope.launch { runCatching { settingsRepository.setRelayEnabled(false) } }
+            return
+        }
+        viewModelScope.launch {
+            val current = settingsRepository.relayBase.first()
+            when {
+                current.isBlank() -> mutable.update { it.copy(message = "请先填写中继端点再开启。") }
+                Wenku8Endpoint.normalizeRelayBase(current) == null ->
+                    mutable.update { it.copy(message = RELAY_BASE_INVALID) }
+
+                else -> runCatching { settingsRepository.setRelayEnabled(true) }
+            }
+        }
+    }
+
+    /**
+     * 保存中继端点：非法地址直接拒绝并提示，**不**写库、不改动运行中的端点。
+     * 清空则同时关闭开关，避免留下「开着但没端点」的死配置。
+     */
+    fun setRelayBase(value: String) {
+        val trimmed = value.trim()
+        if (trimmed.isEmpty()) {
+            viewModelScope.launch {
+                Wenku8Endpoint.applyRelay(null)
+                runCatching { settingsRepository.setRelayEnabled(false) }
+                runCatching { settingsRepository.setRelayBase("") }
+            }
+            return
+        }
+        if (Wenku8Endpoint.normalizeRelayBase(trimmed) == null) {
+            mutable.update { it.copy(message = RELAY_BASE_INVALID) }
+            return
+        }
+        viewModelScope.launch { runCatching { settingsRepository.setRelayBase(trimmed) } }
     }
 
     /** 书架「读到哪了」：bookId → 阅读断点。 */
@@ -828,6 +880,9 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
          */
         const val EXPLORE_AUTO_FETCH_LIMIT = 20
     }
+
+    /** 中继端点非法时的统一提示（要求 https 域名，禁止 IP 与 wenku8 自身域名）。 */
+    private const val RELAY_BASE_INVALID = "中继端点无效：需形如 https://relay.example.com，不能用 IP 或 wenku8 自身域名。"
 
     fun save(id: String) {
         runCatching { manager.save(id) }

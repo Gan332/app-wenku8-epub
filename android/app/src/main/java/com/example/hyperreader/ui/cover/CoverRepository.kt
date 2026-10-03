@@ -5,6 +5,7 @@ import android.graphics.BitmapFactory
 import android.util.LruCache
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import com.example.hyperreader.core.Wenku8Endpoint
 import com.example.hyperreader.core.Wenku8HttpClient
 import com.example.hyperreader.core.Wenku8Url
 import java.io.File
@@ -19,6 +20,10 @@ import kotlinx.coroutines.withContext
  * img.wenku8.com。复用现有客户端更安全，也保持与导出流程一致的下载路径。
  *
  * 缓存分两层：内存 LruCache + 磁盘 cacheDir/covers。
+ *
+ * 缓存键始终是wenku8 原域 URL（解析出口已用 [Wenku8Endpoint.restoreToDirect] 还原），
+ * 只有真正发请求时才用 [Wenku8Endpoint.toRelayUrl] 改写到中继——这样开关切换不会
+ * 重复占缓存，EPUB 与书架里存的也始终是 wenku8 地址。
  */
 class CoverRepository(context: Context) {
     private val directory = File(context.cacheDir, "covers").apply { mkdirs() }
@@ -64,7 +69,7 @@ class CoverRepository(context: Context) {
         }
 
         val downloaded = runCatching {
-            client.downloadImage(key, REFERER, "cover", "cover")
+            client.downloadImage(Wenku8Endpoint.toRelayUrl(key), REFERER, "cover", "cover")
         }.getOrNull() ?: return@withContext null
 
         val source = File(downloaded.path)
@@ -86,7 +91,7 @@ class CoverRepository(context: Context) {
         val key = normalize(url)
         val file = cacheFile(key)
         if (file.isFile) runCatching { file.readBytes() }.getOrNull()?.let { return@withContext it }
-        val downloaded = runCatching { client.downloadImage(key, REFERER, "reader-image", "image") }.getOrNull()
+        val downloaded = runCatching { client.downloadImage(Wenku8Endpoint.toRelayUrl(key), REFERER, "reader-image", "image") }.getOrNull()
             ?: return@withContext null
         val bytes = runCatching { File(downloaded.path).readBytes() }.getOrNull()
         File(downloaded.path).delete()

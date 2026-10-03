@@ -66,8 +66,15 @@ class Wenku8SessionStore(context: Context) : SessionGate {
     }
 
     fun cookieJar(): CookieJar = object : CookieJar {
+        /**
+         * 会话 Cookie **只发给 wenku8 自身域名**。
+         *
+         * [Wenku8Url.carriesSession] 是这一层的唯一判据：启用第三方中继后，
+         * 公开页会请求中继 host，而这里的过滤保证 `jieqiUserInfo` / `PHPSESSID`
+         * 永远不会被第三方看到（存与取两侧同时把关，避免中继发来的 Set-Cookie 落盘）。
+         */
         override fun saveFromResponse(url: HttpUrl, cookies: List<Cookie>) {
-            if (!url.host.endsWith("wenku8.net")) return
+            if (!Wenku8Url.carriesSession(url.host)) return
             val values = allCookies().toMutableMap()
             cookies.forEach { cookie ->
                 if (cookie.persistent || cookie.name == "PHPSESSID" || cookie.name == "jieqiUserInfo") values[cookie.name] = cookie.value
@@ -76,7 +83,7 @@ class Wenku8SessionStore(context: Context) : SessionGate {
         }
 
         override fun loadForRequest(url: HttpUrl): List<Cookie> {
-            if (!url.host.endsWith("wenku8.net")) return emptyList()
+            if (!Wenku8Url.carriesSession(url.host)) return emptyList()
             return allCookies().mapNotNull { (name, value) -> Cookie.parse(url, "$name=$value") }
         }
     }

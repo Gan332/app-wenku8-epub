@@ -27,6 +27,14 @@ object Wenku8Parser {
 
     fun looksLikeChallenge(html: String): Boolean = Regex("<title[^>]*>\\s*(Just a moment|Attention Required)|Checking your browser|cf-chl-|__cf_chl", RegexOption.IGNORE_CASE).containsMatchIn(html.take(20_000))
 
+    /**
+     * 解析出口统一把 URL 还原成 wenku8 原域。
+     *
+     * 启用第三方中继时，页面里的链接会带着中继 host（见 [Wenku8Endpoint]）；
+     * 书架、EPUB 内链与再次抓取都必须使用 wenku8 原域，否则导出文件会指向第三方。
+     */
+    private fun direct(url: String?): String? = url?.let { Wenku8Endpoint.restoreToDirect(it) }
+
     fun parseBook(html: String, bookUrl: String, requestedDirectoryUrl: String? = null): Book {
         if (looksLikeChallenge(html)) throw Wenku8Exception("源站要求浏览器验证。", "UPSTREAM_CHALLENGE")
         val document = Jsoup.parse(html, bookUrl)
@@ -52,10 +60,10 @@ object Wenku8Parser {
             isComplete = fieldValue(document, "文章状态", "文章状态：", "文章状态:").contains("完结"),
             tags = tags,
             summary = cleanText(summary).replace(Regex("^内容简介\\s*[：:]\\s*"), ""),
-            coverUrl = Wenku8Url.resolve(bookUrl, coverNode?.attr("src")),
-            sourceUrl = bookUrl,
-            bookUrl = bookUrl,
-            directoryUrl = directoryUrl,
+            coverUrl = direct(Wenku8Url.resolve(bookUrl, coverNode?.attr("src"))),
+            sourceUrl = direct(bookUrl) ?: bookUrl,
+            bookUrl = direct(bookUrl) ?: bookUrl,
+            directoryUrl = direct(directoryUrl),
         )
     }
 
@@ -74,7 +82,7 @@ object Wenku8Parser {
             for (anchor in row.select("td.ccss a[href]")) {
                 val title = cleanInline(anchor.text())
                 if (title.isBlank() || title in setOf("上一页", "下一页", "返回目录")) continue
-                val url = Wenku8Url.resolve(finalUrl, anchor.attr("href")) ?: continue
+                val url = direct(Wenku8Url.resolve(finalUrl, anchor.attr("href"))) ?: continue
                 runCatching { Wenku8Url.assertAllowed(url) }
                 if (!seen.add(url)) continue
                 val id = Regex("/(\\d+)\\.html?$", RegexOption.IGNORE_CASE).find(java.net.URI(url).path.orEmpty())?.groupValues?.get(1) ?: (chapters.size + 1).toString()
@@ -100,7 +108,7 @@ object Wenku8Parser {
         root.select("[id^=adv],[class*=advert],[class*=banner]").remove()
         val imageUrls = mutableListOf<String>()
         for (image in root.select("img").toList()) {
-            val url = sequenceOf("data-original", "data-src", "data-lazy-src", "src").mapNotNull { Wenku8Url.resolve(pageUrl, image.attr(it)) }.firstOrNull()
+            val url = direct(sequenceOf("data-original", "data-src", "data-lazy-src", "src").mapNotNull { Wenku8Url.resolve(pageUrl, image.attr(it)) }.firstOrNull())
             val width = image.attr("width").toIntOrNull() ?: 0
             val height = image.attr("height").toIntOrNull() ?: 0
             if (url == null || (width in 1..3) || (height in 1..3) || Regex("spacer|blank\\.(gif|png)|pixel", RegexOption.IGNORE_CASE).containsMatchIn(image.attr("src"))) {
@@ -268,7 +276,7 @@ object Wenku8Parser {
                 status = Regex("状态\\s*[：:]\\s*([^\\s/]+)").find(raw)?.groupValues?.get(1).orEmpty(),
                 updatedAt = Regex("(?:更新|最后更新)\\s*[：:]\\s*(\\d{4}-\\d{2}-\\d{2})").find(raw)?.groupValues?.get(1).orEmpty(),
                 wordCount = Regex("(?:字数|全文长度)\\s*[：:]\\s*([\\d,，]+)\\s*字").find(raw)?.groupValues?.get(1)?.replace(",", "")?.replace("，", "")?.toLongOrNull(),
-                coverUrl = image,
+                coverUrl = direct(image),
                 latestChapter = Regex("最新章节\\s*[：:]\\s*(.+)").find(raw)?.groupValues?.get(1).orEmpty(),
                 sourceUrl = Wenku8Urls.book(id),
             )
