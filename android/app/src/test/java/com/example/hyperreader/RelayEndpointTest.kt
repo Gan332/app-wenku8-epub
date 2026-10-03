@@ -24,7 +24,10 @@ import java.net.URI
 class RelayEndpointTest {
 
     @Before
-    fun setUp() = reset()
+    fun setUp() {
+        reset()
+        Wenku8Endpoint.resetHosts()
+    }
 
     @After
     fun tearDown() = reset()

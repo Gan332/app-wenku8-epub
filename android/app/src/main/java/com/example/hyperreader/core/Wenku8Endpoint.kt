@@ -23,8 +23,50 @@ object Wenku8Endpoint {
     /** 直连源站，与 [Wenku8Urls.BASE] 同源。 */
     const val DIRECT_BASE = "https://www.wenku8.net"
 
-    /** 公开页基址：只有「开关开且端点合法」才用中继，否则回直连。 */
-    fun publicBase(): String = if (isRelayActive()) relay ?: DIRECT_BASE else DIRECT_BASE
+    /**
+     * 直连候选边缘入口（按 403 轮换；对照 LNR `Wenku8Api.hosts`）。
+     *
+     * 起始用 `wenku8.net`；遇到 Cloudflare 拦截时 [rotateHost] 依次换到 `.cc`、`.com`——
+     * 换的是**边缘入口**而非接口语义，白名单与合规边界不变。
+     */
+    val DIRECT_HOSTS: List<String> = listOf(DIRECT_BASE, "https://www.wenku8.cc", "https://www.wenku8.com")
+
+    @Volatile
+    private var hostIndex: Int = 0
+
+    /** 本会话已试过的直连入口；全部试过则不再轮换（避免把三个域都打进风控）。 */
+    private val triedHosts = LinkedHashSet<Int>()
+
+    /** 公开页基址：中继优先（若启用），否则当前直连入口。 */
+    fun publicBase(): String = relayBase() ?: DIRECT_HOSTS[hostIndex]
+
+    /** 当前使用的直连入口（设置页展示用）。 */
+    fun activeDirectBase(): String = DIRECT_HOSTS[hostIndex]
+
+    /**
+     * 换一个直连边缘入口重试；返回 false 表示已经没有未试过的入口。
+     * 中继生效时不做轮换（中继端点由用户自己决定）。
+     */
+    fun rotateHost(): Boolean {
+        if (isRelayActive()) return false
+        for (offset in 1..DIRECT_HOSTS.size) {
+            val candidate = (hostIndex + offset) % DIRECT_HOSTS.size
+            if (triedHosts.add(candidate)) {
+                hostIndex = candidate
+                return true
+            }
+        }
+        return false
+    }
+
+    /** 把任意 wenku8 URL 的 scheme+host 换成当前入口（路径与查询保留）。 */
+    fun rewire(url: String): String = url.replaceFirst(HOST_PREFIX, publicBase())
+
+    /** 恢复默认入口（App 启动时调用，避免上一次会话的轮换结果影响本次）。 */
+    fun resetHosts() {
+        hostIndex = 0
+        triedHosts.clear()
+    }
 
     @Volatile
     private var enabled: Boolean = false
@@ -134,6 +176,9 @@ object Wenku8Endpoint {
         return Wenku8Urls.BASE + suffix
     }
 }
+
+/** 匹配 URL 的 scheme+host 前缀，用于换边缘入口。 */
+private val HOST_PREFIX = Regex("^https://[^/]+")
 
 /** 只含数字与点的字面量就是 IPv4；含其它字符则交给 URI 解析。 */
 private fun String.toIpv4OrNull(): String? = split('.')

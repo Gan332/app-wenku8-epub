@@ -31,6 +31,8 @@ class Wenku8Application : Application() {
      */
     override fun onCreate() {
         super.onCreate()
+        // 每次启动从默认入口开始，避免上一次会话的轮换结果影响本次
+        Wenku8Endpoint.resetHosts()
         appScope.launch {
             combine(settingsRepository.relayBase, settingsRepository.relayEnabled) { base, enabled -> base to enabled }
                 .collect { (base, enabled) ->

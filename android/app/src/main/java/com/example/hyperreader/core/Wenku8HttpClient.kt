@@ -48,7 +48,7 @@ class Wenku8HttpClient(private val cacheDirectory: File, sessionCookieJar: Cooki
     }
 
     suspend fun downloadImage(url: String, referer: String, jobId: String, name: String): DownloadedResource = withContext(Dispatchers.IO) {
-        val result = execute(url, jobId, 30 * 1024 * 1024, referer)
+        val result = execute(url, jobId, 30 * 1024 * 1024, referer, image = true)
         val type = detectImage(result.bytes, result.contentType) ?: throw Wenku8Exception("不支持的图片格式。", "UNSUPPORTED_IMAGE")
         val safeJob = jobId.replace(Regex("[^A-Za-z0-9_-]"), "_")
         val directory = File(cacheDirectory, safeJob).apply { mkdirs() }
@@ -61,12 +61,39 @@ class Wenku8HttpClient(private val cacheDirectory: File, sessionCookieJar: Cooki
         activeCalls[jobId]?.toList()?.forEach(Call::cancel)
     }
 
+    /**
+     * 执行请求；遇到 Cloudflare 拦截时**换一个直连边缘入口重试一次**（.net → .cc → .com）。
+     *
+     * 换的是边缘入口而不是接口语义：端点集合、白名单、限流与退避都不变。
+     * 三个入口都试过则原样抛出，避免把全部镜像都打进风控。
+     */
     private fun execute(
         rawUrl: String,
         jobId: String,
         maxBytes: Int,
         referer: String?,
         mode: HttpRateLimiter.Mode = HttpRateLimiter.Mode.BATCH,
+        image: Boolean = false,
+    ): HttpResult {
+        var rotated = false
+        while (true) {
+            try {
+                return executeOnce(Wenku8Endpoint.rewire(rawUrl), jobId, maxBytes, referer, mode, image)
+            } catch (error: Wenku8Exception) {
+                if (error.code != "UPSTREAM_CHALLENGE" || rotated) throw error
+                if (!Wenku8Endpoint.rotateHost()) throw error
+                rotated = true
+            }
+        }
+    }
+
+    private fun executeOnce(
+        rawUrl: String,
+        jobId: String,
+        maxBytes: Int,
+        referer: String?,
+        mode: HttpRateLimiter.Mode,
+        image: Boolean,
     ): HttpResult {
         var current = validateUrl(rawUrl)
         var redirects = 0
@@ -76,8 +103,10 @@ class Wenku8HttpClient(private val cacheDirectory: File, sessionCookieJar: Cooki
             val request = Request.Builder()
                 .url(current)
                 .header("User-Agent", Wenku8NetProtocols.USER_AGENT)
-                .header("Accept-Language", Wenku8NetProtocols.ACCEPT_LANGUAGE)
-                .header("Accept", "text/html,application/xhtml+xml,image/*;q=0.8,*/*;q=0.5")
+                .apply {
+                    val headers = if (image) Wenku8NetProtocols.imageHeaders() else Wenku8NetProtocols.headers()
+                    headers.forEach { (name, value) -> header(name, value) }
+                }
                 .apply { if (!referer.isNullOrBlank()) header("Referer", referer) }
                 .build()
             val call = client.newCall(request)
@@ -161,11 +190,9 @@ class Wenku8HttpClient(private val cacheDirectory: File, sessionCookieJar: Cooki
     }
 
     private fun decodeHtml(bytes: ByteArray, contentType: String): String {
+        // wenku8 声明 gbk 但实际输出 GB18030（issue #485），归一化见 Wenku8Encoding
         val head = String(bytes, 0, minOf(bytes.size, 4096), Charsets.ISO_8859_1)
-        val declared = Regex("charset\\s*=\\s*[\"']?([^;\\s\"'/>]+)", RegexOption.IGNORE_CASE)
-            .find("$contentType\n$head")?.groupValues?.get(1)?.lowercase().orEmpty()
-        val normalized = if (declared == "gb2312" || declared == "gbk") "GBK" else declared
-        return String(bytes, runCatching { Charset.forName(normalized) }.getOrDefault(Charsets.UTF_8))
+        return Wenku8Encoding.decode(bytes, Wenku8Encoding.declaredCharset(contentType, head))
     }
 
     private fun detectImage(bytes: ByteArray, contentType: String): ImageType? {

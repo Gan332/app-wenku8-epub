@@ -42,5 +42,31 @@ object Wenku8NetProtocols {
         "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
 
     /** 默认语言头，与 UA 配套（显式带，避免服务端按地区语种做差异处理时我们没声明）。 */
-    const val ACCEPT_LANGUAGE = "zh-CN,zh;q=0.9,en;q=0.6"
+    const val ACCEPT_LANGUAGE = "zh-CN,zh;q=0.9,en;q=0.8"
+
+    /**
+     * 完整「顶层导航」头组（对照 LNR `Wenku8Api` 的 Ktor `DefaultRequest`）。
+     *
+     * 关键在 `Sec-Fetch-*`：它们声明「这是一次用户主动导航」，而我们此前只有 UA/Accept，
+     * 缺这一组会被许多 WAF/Bot 判据当成脚本客户端。这也是 LNR 能在同样网络下直连的原因之一。
+     */
+    fun headers(): Map<String, String> = linkedMapOf(
+        "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        "Accept-Language" to ACCEPT_LANGUAGE,
+        "Cache-Control" to "max-age=0",
+        "Upgrade-Insecure-Requests" to "1",
+        "Sec-Fetch-Dest" to "document",
+        "Sec-Fetch-Mode" to "navigate",
+        "Sec-Fetch-Site" to "none",
+        "Sec-Fetch-User" to "?1",
+    )
+
+    /** 图片等子资源用的头组（语义上应是 `image`，不能冒用 `document`）。 */
+    fun imageHeaders(): Map<String, String> = linkedMapOf(
+        "Accept" to "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+        "Accept-Language" to ACCEPT_LANGUAGE,
+        "Sec-Fetch-Dest" to "image",
+        "Sec-Fetch-Mode" to "no-cors",
+        "Sec-Fetch-Site" to "same-origin",
+    )
 }

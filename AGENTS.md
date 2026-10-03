@@ -138,11 +138,15 @@ android/app/src/main/java/io/nightfish/lightnovelreader/api/   ← LNR 书源抽
 
 ### 4.2.1 客户端协议与 403 口径（0.18.0）
 
-**协议**：HTTP/2 优先（ALPN 协商，回落 HTTP/1.1）、TLS 1.3 优先（回落 1.2），
-在 `core/Wenku8NetProtocols.kt` 显式声明并由 `NetProtocolsTest` 锁定。不要手加
-`Accept-Encoding: br`（OkHttp 只自动处理 gzip）。**User-Agent 使用标准浏览器 UA**
-（与平台一致的 Android Chrome 形态）+ `Accept-Language`，让请求在 Cloudflare 侧呈常规客户端外观；
-但 UA **不用于**绕过任何访问控制（实测对 403 无效，见下），登录墙与验证页照旧按 §4.2 处理。
+**客户端口径（对齐 LNR `Wenku8Api`，0.18.0）**：
+- **HTTP/2 优先**（ALPN 协商，回落 HTTP/1.1）、**TLS 1.3 优先**（回落 1.2），在`core/Wenku8NetProtocols.kt` 声明并由 `NetProtocolsTest` 锁定；
+- 请求头是**完整导航头组**（`Sec-Fetch-Dest: document` / `Sec-Fetch-Mode: navigate` / `Sec-Fetch-Site` / `Sec-Fetch-User`、`Upgrade-Insecure-Requests`、`Accept: …image/avif,image/webp`），
+  图片请求用独立的 `image` 语义头组（`Wenku8NetProtocols.imageHeaders`），不冒用 `document`；
+- **不要手加 `Accept-Encoding: br`**（OkHttp 只自动处理 gzip）；
+- **User-Agent 使用标准浏览器 UA**（与平台一致的 Android Chrome 形态）——但 UA **不用于**绕过任何访问控制，登录墙与验证页照旧按§4.2 处理；
+- **编码**：源站声明 gbk/gb2312 但实际输出 GB18030，一律按 **GB18030** 解码（`Wenku8Encoding`，LNR issue #485）；
+- **直连入口轮换**：`.net → .cc → .com`，遇到 CF 拦截换一个边缘入口重试一次（`Wenku8Endpoint.rotateHost`），
+  三个都试过则原样抛出，避免把全部镜像打进风控。
 
 **403 排查口径**（实测于 2026-10）：匿名公开页前置 Cloudflare，对部分网络会返回
 403「Attention Required」（约 5.5KB 拦截页）：
