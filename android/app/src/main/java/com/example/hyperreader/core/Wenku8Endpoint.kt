@@ -37,8 +37,8 @@ object Wenku8Endpoint {
     /** 本会话已试过的直连入口；全部试过则不再轮换（避免把三个域都打进风控）。 */
     private val triedHosts = LinkedHashSet<Int>()
 
-    /** 公开页基址：中继优先（若启用），否则当前直连入口。 */
-    fun publicBase(): String = relayBase() ?: DIRECT_HOSTS[hostIndex]
+    /** 公开页基址：中继优先（仅在开关开且端点合法时），否则当前直连入口。 */
+    fun publicBase(): String = if (isRelayActive()) relay ?: DIRECT_HOSTS[hostIndex] else DIRECT_HOSTS[hostIndex]
 
     /** 当前使用的直连入口（设置页展示用）。 */
     fun activeDirectBase(): String = DIRECT_HOSTS[hostIndex]
