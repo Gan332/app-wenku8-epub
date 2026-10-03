@@ -149,7 +149,10 @@ class RelayEndpointTest {
             Wenku8Urls.sugoi(2025),
             Wenku8Urls.booklist("202609"),
             Wenku8Urls.authorArticle("伏濑"),
-        ).forEach { url -> assertTrue(Wenku8Endpoint.isRelayablePath(URI(url).path), url) }
+        ).forEach { url ->
+            // JUnit4 的 assertTrue 签名是 (message, condition)
+            assertTrue(url, Wenku8Endpoint.isRelayablePath(URI(url).path))
+        }
     }
 
     @Test
