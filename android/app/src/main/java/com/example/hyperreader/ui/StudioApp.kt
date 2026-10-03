@@ -194,7 +194,7 @@ private fun StudioApp(
     onImportFont: () -> Unit,
     onExportConfig: () -> Unit,
     onImportConfig: () -> Unit,
-    /** 打开 Cloudflare 验证窗口（由 Activity 侧的 launcher 实现）。 */
+    /** 打开 Cloudflare 验证窗口（由 Activity 侧的 launcher 实现）；仅设置里手动触发。 */
     onOpenChallenge: (String) -> Unit,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -214,11 +214,6 @@ private fun StudioApp(
     val snackbarHostState = remember { SnackbarHostState() }
 
     // Cloudflare 拦截时自动弹验证窗口（用户亲手完成交互，通过后自动关闭并重试）
-    LaunchedEffect(state.challengeUrl) {
-        val url = state.challengeUrl ?: return@LaunchedEffect
-        onOpenChallenge(url)
-    }
-
     LaunchedEffect(state.message) {
         val msg = state.message
         if (msg != null) {
@@ -245,15 +240,7 @@ private fun StudioApp(
                 },
                 // 0.18.0：顶栏账号入口——未登录点登录，已登录进设置 → 账号分类
                 // （登录只走官方登录页，不保存密码，AGENTS §4.2）
-                actions = {
-                    TextButton(
-                        text = if (state.loggedIn) "账号" else "登录",
-                        onClick = {
-                            if (state.loggedIn) viewModel.openSettingsSection(SettingsSection.ACCOUNT) else onLogin()
-                        },
-                    )
-                },
-            )
+                )
         },
         bottomBar = {
             // 全屏覆盖页（探索详情、导出记录、榜单展开、搜索）不显示底部导航
@@ -393,6 +380,7 @@ private fun StudioApp(
                     onImportFont = onImportFont,
                     onExportConfig = onExportConfig,
                     onImportConfig = onImportConfig,
+                    onOpenChallenge = onOpenChallenge,
                 )
                             }
                         }

@@ -5,8 +5,11 @@ import android.os.Bundle
 import android.os.SystemClock
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -27,6 +30,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
@@ -145,14 +149,9 @@ class OnlineReaderActivity : ComponentActivity() {
                 is OnlineReaderResult.NeedsLogin -> showOpenError(result.message)
                 is OnlineReaderResult.Failed ->
                     if (result.code == "UPSTREAM_CHALLENGE") {
-                        // 注意：此处 this 是 CoroutineScope（launch 的 receiver），必须显式指回Activity
-                        val host = this@OnlineReaderActivity
-                        challengeLauncher.launch(
-                            com.example.hyperreader.auth.CfChallengeActivity.intent(
-                                host,
-                                com.example.hyperreader.core.Wenku8Urls.index(hostBookId, null),
-                            ),
-                        )
+                        // 不自动弹窗：403 是常态策略而非可点击的挑战，自动打断没有意义；
+                        // 只给错误页加一个「打开验证页」按钮，由用户自己决定何时验证。
+                        showOpenError(result.message, canVerify = true)
                     } else {
                         showOpenError(result.message)
                     }
@@ -160,19 +159,37 @@ class OnlineReaderActivity : ComponentActivity() {
         }
     }
 
-    private fun showOpenError(message: String) {
+    private fun showOpenError(message: String, canVerify: Boolean = false) {
         setContent {
             AppMiuixTheme {
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Text(
-                        text = message,
-                        modifier = Modifier.padding(24.dp),
-                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                        style = MiuixTheme.textStyles.body1,
-                    )
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Text(
+                            text = message,
+                            modifier = Modifier.padding(24.dp),
+                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                            style = MiuixTheme.textStyles.body1,
+                        )
+                        if (canVerify) {
+                            Button(
+                                onClick = {
+                                    challengeLauncher.launch(
+                                        com.example.hyperreader.auth.CfChallengeActivity.intent(
+                                            this@OnlineReaderActivity,
+                                            com.example.hyperreader.core.Wenku8Urls.index(hostBookId, null),
+                                        ),
+                                    )
+                                },
+                                modifier = Modifier.heightIn(min = 48.dp),
+                            ) { Text("打开验证页（浏览器）") }
+                        }
+                    }
                 }
             }
         }

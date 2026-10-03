@@ -183,7 +183,7 @@ data class StudioUiState(
     /** 展开页对应的榜单；刷新时按它重新抓取。 */
     val activeExplorePage: ExplorePage? = null,
     /** 0.18.0：待完成的 Cloudflare 验证地址；非空时 UI 自动弹验证窗口。 */
-    val challengeUrl: String? = null,
+    val clearancePresent: Boolean = false,
     /** 0.18.0：公开端点诊断矩阵（设置 → 网络 → 深度诊断）。 */
     val endpointProbes: List<EndpointProbe> = emptyList(),
     val jobs: List<ExportJob> = emptyList(),
@@ -249,9 +249,6 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
      * 用户中途改关键词/切字段/连点「加载更多」时，旧响应直接丢弃。
      */
     private var searchRequestId = 0L
-
-    /** 用户已关闭/完成过一次验证：本次会话不再自动弹窗（设置里可手动再开）。 */
-    private var challengeDismissed = false
     private val mutable = MutableStateFlow(StudioUiState())
     val state: StateFlow<StudioUiState> = mutable.asStateFlow()
     val appTheme = settingsRepository.appTheme
@@ -324,6 +321,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     val readingProgress = settingsRepository.allProgress()
 
     init {
+        refreshClearanceState()
         viewModelScope.launch {
             manager.jobs.collect { jobs ->
                 mutable.update { current ->
@@ -361,8 +359,6 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
                         catalogLoading = catalog.loading,
                         catalogProgress = catalog.progress,
                         exploreMessage = catalog.message ?: it.exploreMessage,
-                        // 刷新书目被 CF 拦截：弹验证窗口（用年榜URL 作为验证目标）
-                        challengeUrl = if (catalog.challengeSuspended && !challengeDismissed) Wenku8Urls.sugoi(java.time.Year.now().value) else it.challengeUrl,
                     )
                 }
             }
@@ -415,29 +411,28 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
      * 干等；超过上限的部分留到用户手动刷新或进入详情时再取。
      */
     /**
-     * 0.18.0：Cloudflare 验证窗口。
+     * 0.18.0：Cloudflare 验证完成后的重试。
      *
-     * [challengeUrl] 非空时 UI 自动打开验证窗口（用户在 WebView 里亲手完成交互）；
-     * [onChallengeVerified] 在窗口关闭且通过后重试失败的请求。
+     * 模型（实测）：CF 对非浏览器客户端启用**需要执行 JS 的挑战**——WebView 能跑JS 所以
+     * 能过（登录、验证窗都正常），OkHttp 跑不了就直接 403。浏览器通过后拿到的 `cf_clearance`
+     * 与 UA/IP 绑定，因此复用同一份 UA 的 OkHttp 带上 clearance 后即可放行。
+     *
+     * 验证窗口**不自动弹**（403 是常态策略、不是需要点击的挑战，自动打断没有意义），
+     * 只在设置 → 网络手动打开；通过后调用本方法重试失败的请求。
      */
-    fun openChallengeVerification(url: String) {
-        challengeDismissed = false
-        mutable.update { it.copy(challengeUrl = url) }
-    }
-
-    fun dismissChallengeVerification() {
-        // 本次会话不再自动弹（否则关闭后 catalog 状态一变又会弹，形成循环）
-        challengeDismissed = true
-        mutable.update { it.copy(challengeUrl = null) }
-    }
-
     fun onChallengeVerified() {
         val current = state.value
-        challengeDismissed = true
-        mutable.update { it.copy(challengeUrl = null, message = "验证完成，正在重试…") }
+        mutable.update { it.copy(clearancePresent = app.sessionStore.hasClearance(), message = "验证完成，正在重试…") }
         current.activeExplorePage?.let { page -> loadExplore(page) }
         current.exploreDetailId?.let { id -> loadExploreDetail(id, current.exploreDetailSeed) }
     }
+
+    /** 刷新验证状态读数（是否存在 `cf_clearance`）。 */
+    fun refreshClearanceState() = mutable.update { it.copy(clearancePresent = app.sessionStore.hasClearance()) }
+
+    /** 403 / 挑战页时的统一提示：说明这是「浏览器 JS 挑战」而非可点击的验证。 */
+    fun challengeHint(): String =
+        if (state.value.clearancePresent) "当前网络下 Cloudflare 仍在拦截本客户端。" else "Cloudflare 要求浏览器执行验证；验证一次后即可继续。"
 
     /** 判断错误是否为 Cloudflare 拦截页（解析层已把挑战页转成该错误码）。 */
     private fun isChallenge(error: Throwable): Boolean =
@@ -529,9 +524,12 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
                     Wenku8Parser.parseBookLinks(resource.html, resource.finalUrl).map { it.id }
                 }
             }.getOrElse { error ->
-                mutable.update { it.copy(exploreBusy = false, exploreMessage = error.message ?: "加载失败。") }
-                // Cloudflare 拦截：弹验证窗口让用户本人完成交互，通过后自动重试（0.18.0）
-                if (isChallenge(error)) mutable.update { it.copy(challengeUrl = page.url) }
+                mutable.update {
+                    it.copy(
+                        exploreBusy = false,
+                        exploreMessage = if (isChallenge(error)) "被 Cloudflare 拦截：${challengeHint()}" else (error.message ?: "加载失败。"),
+                    )
+                }
                 return@launch
             }
             if (ids.isEmpty()) {

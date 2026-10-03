@@ -152,12 +152,17 @@ android/app/src/main/java/io/nightfish/lightnovelreader/api/   ← LNR 书源抽
 - 图域`img.wenku8.com` 走 nginx、不经 Cloudflare，**不受影响**（封面/插图链路正常）；
 - `wenku8.com` 镜像当前长期无响应，白名单里留着但不要指望。
 
-应用侧无需为 403 改解析逻辑：`Wenku8Parser.looksLikeChallenge()` 会转成 `UPSTREAM_CHALLENGE`，
-用户可用「设置 → 网络 → 测试公开端点」判断当前该直连还是走自建中继（§4.13）。
-遇到挑战时 App 自动弹出 `auth/CfChallengeActivity`（MiuiX 界面 + WebView）：**用户本人**
-完成 Cloudflare 官方交互 → 拿到 `cf_clearance` → CookieManager 落盘加密 → 窗口自动关闭 →
-失败请求自动重试。注意登录页 WebView 也必须用 `Wenku8NetProtocols.USER_AGENT`
-（早先版本用的是 App 自家 UA，会被 Cloudflare 当可疑客户端拦下）。
+应用侧无需为 403 改解析逻辑：`Wenku8Parser.looksLikeChallenge()` 会转成 `UPSTREAM_CHALLENGE`。
+遇到该错误时**不自动弹窗**（403 是常态策略，不是需要点击的挑战，自动打断无意义）；
+验证入口只在「设置 → 网络 → 浏览器验证」与在线阅读的错误页按钮里，由用户主动打开。
+注意登录页 WebView 必须用 `Wenku8NetProtocols.USER_AGENT`（早先版本用的是 App 自家 UA，
+会被当可疑客户端拦下）。
+
+**为什么 WebView 能过而 OkHttp 不能（实测结论，0.18.0）**：Cloudflare 对非浏览器客户端
+启用了**需要执行 JavaScript 的挑战**——浏览器能执行JS 故通过（登录与验证页都正常），
+OkHttp 执行不了故直接 403。浏览器通过后下发的 `cf_clearance` **与 UA/IP 绑定**，
+只要OkHttp 用同一份 UA（同一个 `Wenku8NetProtocols.USER_AGENT`）并带上它即可放行——
+公开链路的 `clearanceCookieJar()` 就是干这个的。若已有凭证仍被拦，则只剩自建中继（§4.13）。
 
 ### 4.3 状态与持久化
 

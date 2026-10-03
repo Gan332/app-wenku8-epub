@@ -89,6 +89,8 @@ fun SettingsScreen(
     onImportFont: () -> Unit,
     onExportConfig: () -> Unit,
     onImportConfig: () -> Unit,
+    /** 手动打开 Cloudflare 验证窗口（由Activity 侧 launcher 实现）。 */
+    onOpenChallenge: (String) -> Unit,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val configState by viewModel.configUi.collectAsStateWithLifecycle()
@@ -102,7 +104,7 @@ fun SettingsScreen(
         SettingsSection.ACCOUNT -> AccountSection(state = state, viewModel = viewModel, onLogin = onLogin)
         SettingsSection.APPEARANCE -> AppearanceSection(viewModel)
         SettingsSection.READER -> ReaderSection(state, viewModel, onImportFont)
-        SettingsSection.NETWORK -> NetworkSection(state = state, viewModel = viewModel)
+        SettingsSection.NETWORK -> NetworkSection(state = state, viewModel = viewModel, onOpenChallenge = onOpenChallenge)
         SettingsSection.STATISTICS -> ReadingStatsScreen(state.readingStats, viewModel::clearReadingStats)
         SettingsSection.CATALOG -> CatalogSection(state, viewModel, onImportEpub)
         SettingsSection.CONFIG -> ConfigSection(
@@ -349,9 +351,37 @@ private fun AccountSection(state: StudioUiState, viewModel: StudioViewModel, onL
 
 /** 网络分区（0.18.0）：第三方中继设置 + 公开端点连通性测试。 */
 @Composable
-private fun NetworkSection(state: StudioUiState, viewModel: StudioViewModel) {
+private fun NetworkSection(state: StudioUiState, viewModel: StudioViewModel, onOpenChallenge: (String) -> Unit) {
     SettingsScaffold("网络", viewModel::backSettings, listOf(
         { RelaySettings(viewModel) },
+        {
+            // Cloudflare 验证状态：有没有浏览器验证凭证（cf_clearance）
+            Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(UiDimens.cardInset)) {
+                Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS), modifier = Modifier.padding(UiDimens.cardInset)) {
+                    Text("浏览器验证", fontWeight = FontWeight.Bold, fontSize = UiDimens.section)
+                    FieldCard(
+                        label = "验证状态",
+                        value = if (state.clearancePresent) "已有验证凭证" else "尚无（公开页可能被拦）",
+                    )
+                    Text(
+                        "Cloudflare 要求浏览器执行验证：WebView 能通过，App 的网络请求不行。" +
+                            "用下面按钮在浏览器里验证一次，凭证会被复用；若已有凭证却仍然被拦，请配置中继。",
+                        fontSize = UiDimens.captionSmall,
+                        color = MiuixTheme.colorScheme.onSurface.copy(alpha = .7f),
+                    )
+                    TextButton(
+                        text = "打开验证页（浏览器）",
+                        onClick = { onOpenChallenge(com.example.hyperreader.core.Wenku8Urls.sugoi(java.time.Year.now().value)) },
+                        modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
+                    )
+                    TextButton(
+                        text = "刷新验证状态",
+                        onClick = viewModel::refreshClearanceState,
+                        modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
+                    )
+                }
+            }
+        },
         {
             Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(UiDimens.cardInset)) {
                 Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS), modifier = Modifier.padding(UiDimens.cardInset)) {
@@ -367,8 +397,8 @@ private fun NetworkSection(state: StudioUiState, viewModel: StudioViewModel) {
                         color = MiuixTheme.colorScheme.onSurface.copy(alpha = .7f),
                     )
                     TextButton(
-                        text = "手动完成 Cloudflare 验证",
-                        onClick = { viewModel.openChallengeVerification(com.example.hyperreader.core.Wenku8Urls.sugoi(java.time.Year.now().value)) },
+                        text = "打开验证页（浏览器）",
+                        onClick = { onOpenChallenge(com.example.hyperreader.core.Wenku8Urls.sugoi(java.time.Year.now().value)) },
                         modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
                     )
                     TextButton(
