@@ -410,19 +410,6 @@ private fun JobHistoryScreen(state: StudioUiState, viewModel: StudioViewModel) {
     }
 }
 
-/**
- * 字数按千分位分组（如 207559 → 207,559）。
- *
- * 原先定义在 0.17.0 删除的 `BookDetailScreen.kt` 里，书架与探索详情都在用，
- * 因此迁到本文件继续共享（`internal`，同包可见）。
- */
-internal fun formatWordCount(value: Long): String {
-    val negative = value < 0
-    val digits = kotlin.math.abs(value).toString()
-    val grouped = digits.reversed().chunked(3).joinToString(",").reversed()
-    return if (negative) "-$grouped" else grouped
-}
-
 @Composable
 private fun ChaptersScreen(state: StudioUiState, viewModel: StudioViewModel) {
     val book = state.book ?: return
