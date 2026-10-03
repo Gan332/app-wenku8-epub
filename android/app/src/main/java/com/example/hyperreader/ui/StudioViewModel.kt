@@ -152,8 +152,8 @@ internal object ExportWizard {
     )
 }
 
-/** 设置二级界面分区。 */
-enum class SettingsSection { OVERVIEW, APPEARANCE, READER, STATISTICS, CATALOG, CONFIG, ABOUT }
+/** 设置二级界面分区。0.18.0：新增 ACCOUNT（账号）与 NETWORK（网络/中继）两类。 */
+enum class SettingsSection { OVERVIEW, ACCOUNT, APPEARANCE, READER, NETWORK, STATISTICS, CATALOG, CONFIG, ABOUT }
 
 data class StudioUiState(
     val tab: StudioTab = StudioTab.BOOKSHELF,
@@ -665,6 +665,37 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
             )
         }
     }
+    /** 0.18.0：退出登录 = 只清本地会话（不碰服务器），并同步顶栏与各处登录态。 */
+    fun logout() {
+        app.sessionStore.clear()
+        refreshSession()
+    }
+
+    /**
+     * 0.18.0：测试中继连通性。
+     *
+     * 拿一个**匿名公开页**（`articleinfo.php`）去请求当前公开端点：
+     * 中继关闭时测的就是直连；请求不带会话 Cookie（`carriesSession` 只允许 wenku8 域携带）。
+     */
+    fun testRelay() {
+        viewModelScope.launch {
+            mutable.update { it.copy(message = "正在测试公开端点…") }
+            val url = com.example.hyperreader.core.Wenku8Urls.articleInfo("2365")
+            runCatching { manager.httpClient().fetchTextInteractive(url, "relay-test", com.example.hyperreader.core.Wenku8Urls.BASE) }
+                .onSuccess { response ->
+                    val ok = !com.example.hyperreader.core.Wenku8Parser.looksLikeChallenge(response.html)
+                    mutable.update {
+                        it.copy(
+                            message = if (ok) "公开端点可用（${com.example.hyperreader.core.Wenku8Endpoint.publicBase()}）" else "源站返回了浏览器验证页，当前网络下直连/中继都无法匿名取数。"
+                        )
+                    }
+                }
+                .onFailure { error ->
+                    mutable.update { it.copy(message = "公开端点不可用：${error.message ?: "请求失败"}") }
+                }
+        }
+    }
+
     fun refreshSession() {
         val loggedIn = app.sessionStore.hasSession()
         mutable.update { it.copy(loggedIn = loggedIn) }

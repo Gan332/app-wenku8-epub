@@ -221,6 +221,16 @@ private fun StudioApp(
                     state.tab == StudioTab.EXPLORE -> "探索"
                     else -> settingsTitle
                 },
+                // 0.18.0：顶栏账号入口——未登录点登录，已登录进设置 → 账号分类
+                // （登录只走官方登录页，不保存密码，AGENTS §4.2）
+                actions = {
+                    TextButton(
+                        text = if (state.loggedIn) "账号" else "登录",
+                        onClick = {
+                            if (state.loggedIn) viewModel.openSettingsSection(SettingsSection.ACCOUNT) else onLogin()
+                        },
+                    )
+                },
             )
         },
         bottomBar = {
@@ -356,6 +366,7 @@ private fun StudioApp(
                 )
                 state.tab == StudioTab.SETTINGS -> SettingsScreen(
                     viewModel = viewModel,
+                    onLogin = onLogin,
                     onImportEpub = onImportEpub,
                     onImportFont = onImportFont,
                     onExportConfig = onExportConfig,

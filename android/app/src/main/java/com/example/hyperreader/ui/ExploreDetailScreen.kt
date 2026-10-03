@@ -282,7 +282,7 @@ fun ExploreDetailScreen(
  * 字段级隔离：每张卡只承载一个「标签 + 值」，行高不低于 [UiDimens.rowMin]，便于扫读。
  */
 @Composable
-private fun FieldCard(label: String, value: String, index: Int = 0) {
+internal fun FieldCard(label: String, value: String, index: Int = 0) {
     Card(Modifier.fillMaxWidth().staggeredEnter(index), insideMargin = PaddingValues(vertical = 2.dp)) {
         Row(
             modifier = Modifier

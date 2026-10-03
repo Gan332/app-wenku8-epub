@@ -3,6 +3,8 @@ package com.example.hyperreader.ui
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,6 +15,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -36,6 +41,7 @@ import com.example.hyperreader.settings.AppThemeMode
 import com.example.hyperreader.settings.AppThemeSettings
 import com.example.hyperreader.settings.ReaderBackground
 import com.example.hyperreader.settings.ReaderPageTurnMode
+import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.ColorPicker
 import top.yukonga.miuix.kmp.basic.HorizontalDivider
@@ -44,22 +50,31 @@ import top.yukonga.miuix.kmp.basic.Switch
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.TextField
+import top.yukonga.miuix.kmp.overlay.OverlayBottomSheet
+import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 
-private data class SettingsEntry(
-    val section: SettingsSection,
-    val title: String,
-    val summary: String,
-)
+/**
+ * 设置分类（0.18.0 对齐 Kazumi 的 `_SettingsCategory` / `_SettingsGroup` 信息架构）。
+ *
+ * 每个分类对应一个二级页；分组只是索引页上的标题分组。
+ */
+private enum class SettingsCategory(val title: String, val summary: String, val section: SettingsSection) {
+    ACCOUNT("账号", "登录状态、会话与退出", SettingsSection.ACCOUNT),
+    READING("阅读", "背景、字体、字号、行距与翻页", SettingsSection.READER),
+    APPEARANCE("外观", "配色模式、动态色与强调色", SettingsSection.APPEARANCE),
+    NETWORK("网络", "第三方中继与公开端点连通性", SettingsSection.NETWORK),
+    DATA("数据", "书目缓存、阅读统计与配置备份", SettingsSection.CATALOG),
+    ABOUT("关于", "版本、数据来源与使用边界", SettingsSection.ABOUT),
+}
 
-private val SETTINGS_ENTRIES = listOf(
-    SettingsEntry(SettingsSection.APPEARANCE, "主题与外观", "配色模式、动态色与强调色"),
-    SettingsEntry(SettingsSection.READER, "阅读器设置", "背景、字体、字号、行距与翻页"),
-    SettingsEntry(SettingsSection.STATISTICS, "阅读统计", "阅读时长、连续天数与每本书排行"),
-    SettingsEntry(SettingsSection.CATALOG, "书目缓存", "搜索与探索使用的本地书目索引"),
-    SettingsEntry(SettingsSection.CONFIG, "配置导入导出", "主题与阅读器设置的备份与迁移"),
-    SettingsEntry(SettingsSection.ABOUT, "关于", "版本、数据来源与使用边界"),
+/** 索引页的分组（Kazumi `_SettingsGroup`）。 */
+private val SETTINGS_GROUPS: List<Pair<String, List<SettingsCategory>>> = listOf(
+    "账号与网络" to listOf(SettingsCategory.ACCOUNT, SettingsCategory.NETWORK),
+    "内容" to listOf(SettingsCategory.READING, SettingsCategory.APPEARANCE),
+    "数据" to listOf(SettingsCategory.DATA),
+    "应用" to listOf(SettingsCategory.ABOUT),
 )
 
 /**
@@ -69,6 +84,7 @@ private val SETTINGS_ENTRIES = listOf(
 @Composable
 fun SettingsScreen(
     viewModel: StudioViewModel,
+    onLogin: () -> Unit,
     onImportEpub: () -> Unit,
     onImportFont: () -> Unit,
     onExportConfig: () -> Unit,
@@ -83,8 +99,10 @@ fun SettingsScreen(
 
     when (state.settingsSection) {
         SettingsSection.OVERVIEW -> SettingsOverview(state, viewModel)
+        SettingsSection.ACCOUNT -> AccountSection(state = state, viewModel = viewModel, onLogin = onLogin)
         SettingsSection.APPEARANCE -> AppearanceSection(viewModel)
         SettingsSection.READER -> ReaderSection(state, viewModel, onImportFont)
+        SettingsSection.NETWORK -> NetworkSection(state = state, viewModel = viewModel)
         SettingsSection.STATISTICS -> ReadingStatsScreen(state.readingStats, viewModel::clearReadingStats)
         SettingsSection.CATALOG -> CatalogSection(state, viewModel, onImportEpub)
         SettingsSection.CONFIG -> ConfigSection(
@@ -97,72 +115,261 @@ fun SettingsScreen(
     }
 }
 
+/**
+ * 设置索引页（0.18.0 对齐 Kazumi `_SettingsIndexPage`）：分组标题 + 分类卡片。
+ *
+ * 分类侧栏：宽屏直接渲染左侧 rail（[SettingsRail]），窄屏用「分类」按钮拉出
+ * `OverlayBottomSheet`（Kazumi 窄屏抽屉的等价物，MiuiX 组件）。
+ */
 @Composable
 private fun SettingsOverview(state: StudioUiState, viewModel: StudioViewModel) {
-    LazyColumn(
-        modifier = Modifier.fillMaxWidth(),
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS),
-    ) {
-        item { Text("设置", fontSize = UiDimens.display, fontWeight = FontWeight.Bold) }
-        items(SETTINGS_ENTRIES) { entry ->
-            Card(
-                modifier = Modifier.fillMaxWidth().clickable { viewModel.openSettingsSection(entry.section) },
-                insideMargin = PaddingValues(14.dp),
+    var railOpen by remember { mutableStateOf(false) }
+    var engineSheet by remember { mutableStateOf(false) }
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val wide = maxWidth >= 600.dp
+        Row(Modifier.fillMaxSize()) {
+            if (wide) {
+                SettingsRail(
+                    current = null,
+                    onSelect = { category ->
+                        viewModel.openSettingsSection(category.section)
+                        railOpen = false
+                    },
+                )
+            }
+            LazyColumn(
+                modifier = Modifier.weight(1f),
+                contentPadding = PaddingValues(horizontal = UiDimens.pagePadding, vertical = UiDimens.spaceL),
+                verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS),
             ) {
-                Row(Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin), verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text(entry.title, fontWeight = FontWeight.Bold, fontSize = UiDimens.section)
-                        Text(entry.summary, fontSize = UiDimens.captionSmall, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .7f))
+                item(key = "title") {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text("设置", modifier = Modifier.weight(1f), fontSize = UiDimens.display, fontWeight = FontWeight.Bold)
+                        if (!wide) {
+                            TextButton(text = "分类", onClick = { railOpen = true }, modifier = Modifier.heightIn(min = UiDimens.touchMin))
+                        }
                     }
-                    Text("›", color = MiuixTheme.colorScheme.onSurface.copy(alpha = .5f), fontSize = UiDimens.title)
+                }
+                SETTINGS_GROUPS.forEach { (groupTitle, categories) ->
+                    item(key = "group-$groupTitle") {
+                        Text(
+                            groupTitle,
+                            modifier = Modifier.padding(top = UiDimens.spaceS),
+                            fontSize = UiDimens.caption,
+                            color = MiuixTheme.colorScheme.onSurface.copy(alpha = .6f),
+                        )
+                    }
+                    items(categories, key = { it.name }) { category ->
+                        CategoryCard(
+                            title = category.title,
+                            summary = category.summary,
+                            onClick = { viewModel.openSettingsSection(category.section) },
+                        )
+                    }
+                }
+                // —— EPUB 导出引擎：轻量编辑走Sheet（Kazumi 的 proxy / danmaku 编辑器等价物）——
+                item(key = "engine") {
+                    val engine by viewModel.exportEngine.collectAsStateWithLifecycle(
+                        initialValue = com.example.hyperreader.settings.EpubEngine.CLASSIC,
+                    )
+                    CategoryCard(
+                        title = "EPUB 导出引擎",
+                        summary = "${engine.label} · ${engine.summary}",
+                        onClick = { engineSheet = true },
+                    )
+                }
+                // —— 导出记录（0.17.0）——
+                item(key = "job-history") {
+                    CategoryCard(
+                        title = "导出记录",
+                        summary = "历史导出任务，可保存或分享已生成的 EPUB。",
+                        onClick = { viewModel.setShowJobHistory(true) },
+                    )
+                }
+                // —— 配置导入导出（Kazumi 的 sync 分类入口）——
+                item(key = "config") {
+                    CategoryCard(
+                        title = "配置备份",
+                        summary = "主题与阅读器设置的备份与迁移。",
+                        onClick = { viewModel.openSettingsSection(SettingsSection.CONFIG) },
+                    )
+                }
+                item(key = "statistics") {
+                    CategoryCard(
+                        title = "阅读统计",
+                        summary = "阅读时长、连续天数与每本书排行。",
+                        onClick = { viewModel.openSettingsSection(SettingsSection.STATISTICS) },
+                    )
                 }
             }
-            HorizontalDivider(Modifier.fillMaxWidth())
         }
-        // —— EPUB 导出引擎（0.14.0）：两个引擎产出的 EPUB 结构一致，区别在行内强调是否保留 ——
-        item {
+        if (!wide && railOpen) {
+            OverlayBottomSheet(show = true, onDismissRequest = { railOpen = false }) {
+                SettingsRail(
+                    current = null,
+                    onSelect = { category ->
+                        viewModel.openSettingsSection(category.section)
+                        railOpen = false
+                    },
+                    modifier = Modifier.padding(UiDimens.spaceL),
+                )
+            }
+        }
+        if (engineSheet) {
             val engine by viewModel.exportEngine.collectAsStateWithLifecycle(
                 initialValue = com.example.hyperreader.settings.EpubEngine.CLASSIC,
             )
-            Card(modifier = Modifier.fillMaxWidth(), insideMargin = PaddingValues(14.dp)) {
-                Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
-                    Text("EPUB 导出引擎", fontWeight = FontWeight.Bold, fontSize = UiDimens.section)
+            OverlayBottomSheet(show = true, onDismissRequest = { engineSheet = false }) {
+                Column(
+                    modifier = Modifier.padding(UiDimens.spaceL),
+                    verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS),
+                ) {
+                    Text("EPUB 导出引擎", fontSize = UiDimens.section, fontWeight = FontWeight.Bold)
                     Text(
                         "只影响之后创建的导出任务；已导出的文件不受影响。",
                         fontSize = UiDimens.captionSmall,
                         color = MiuixTheme.colorScheme.onSurface.copy(alpha = .7f),
                     )
-                    Row(horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
-                        com.example.hyperreader.settings.EpubEngine.entries.forEach { option ->
-                            TextButton(
-                                text = (if (option == engine) "✓ " else "") + option.label,
-                                onClick = { viewModel.setExportEngine(option) },
-                            )
-                        }
+                    com.example.hyperreader.settings.EpubEngine.entries.forEach { option ->
+                        TextButton(
+                            text = (if (option == engine) "✓ ${option.label}" else option.label),
+                            onClick = { viewModel.setExportEngine(option) },
+                            modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
+                        )
                     }
                     Text(engine.summary, fontSize = UiDimens.captionSmall, color = MiuixTheme.colorScheme.primary)
                 }
             }
         }
-        // —— 导出记录（0.17.0）：导出降级为二级页，任务历史跟着导出走，不再占据书架页顶部 ——
-        item {
-            Card(
-                modifier = Modifier.fillMaxWidth().clickable { viewModel.setShowJobHistory(true) },
-                insideMargin = PaddingValues(14.dp),
-            ) {
-                Row(Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin), verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text("导出记录", fontWeight = FontWeight.Bold, fontSize = UiDimens.section)
-                        Text("历史导出任务，可保存或分享已生成的 EPUB。", fontSize = UiDimens.captionSmall, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .7f))
-                    }
-                    Text("›", color = MiuixTheme.colorScheme.onSurface.copy(alpha = .5f), fontSize = UiDimens.title)
-                }
+    }
+}
+
+/** 分类卡片（Kazumi `SettingsCategoryTile`）：标题 + 摘要 + `›`。 */
+@Composable
+private fun CategoryCard(title: String, summary: String, onClick: () -> Unit) {
+    val interaction = remember { MutableInteractionSource() }
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(interactionSource = interaction, indication = null, onClick = onClick)
+            .pressableScale(interaction),
+        insideMargin = PaddingValues(UiDimens.cardInset),
+    ) {
+        Row(Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(title, fontWeight = FontWeight.Bold, fontSize = UiDimens.section)
+                Text(summary, fontSize = UiDimens.captionSmall, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .7f))
+            }
+            Text("›", color = MiuixTheme.colorScheme.onSurface.copy(alpha = .5f), fontSize = UiDimens.title)
+        }
+    }
+}
+
+/** 分类侧栏（Kazumi `_RailDestination`）：宽屏常驻左侧，窄屏在 Sheet 里。 */
+@Composable
+private fun SettingsRail(current: SettingsCategory?, onSelect: (SettingsCategory) -> Unit, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier.width(RAIL_WIDTH).verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXS),
+    ) {
+        SETTINGS_GROUPS.forEach { (_, categories) ->
+            categories.forEach { category ->
+                val selected = category == current
+                TextButton(
+                    text = if (selected) "✓ ${category.title}" else category.title,
+                    onClick = { onSelect(category) },
+                    modifier = Modifier.fillMaxWidth(),
+                )
             }
         }
-        // —— 第三方中继（0.16.0）：只影响免登录公开页，会话链路始终直连 ——
-        item { RelaySettings(viewModel) }
     }
+}
+
+private val RAIL_WIDTH = 112.dp
+
+/**
+ * 账号分区（0.18.0）：登录状态、登录与退出。
+ *
+ * 不保存账号密码——登录走 WebView 的 wenku8 官方登录页，会话 Cookie 由 Keystore 加密存放（AGENTS §4.2）。
+ */
+@Composable
+private fun AccountSection(state: StudioUiState, viewModel: StudioViewModel, onLogin: () -> Unit) {
+    var confirmLogout by remember { mutableStateOf(false) }
+    SettingsScaffold("账号", viewModel::backSettings, listOf(
+        {
+            Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(UiDimens.cardInset)) {
+                Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS), modifier = Modifier.padding(UiDimens.cardInset)) {
+                    Text("wenku8 账号", fontWeight = FontWeight.Bold, fontSize = UiDimens.section)
+                    FieldCard(
+                        label = "状态",
+                        value = if (state.loggedIn) "已登录（使用你自己的会话）" else "未登录",
+                    )
+                    if (!state.loggedIn) {
+                        TextButton(
+                            text = "登录 wenku8",
+                            onClick = onLogin,
+                            modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
+                        )
+                    } else {
+                        TextButton(
+                            text = "退出登录",
+                            onClick = { confirmLogout = true },
+                            modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
+                        )
+                    }
+                    Text(
+                        "登录只在官方登录页进行，应用不保存你的账号密码；会话失效时搜索与标签会自动退回本地内容。",
+                        fontSize = UiDimens.captionSmall,
+                        color = MiuixTheme.colorScheme.onSurface.copy(alpha = .7f),
+                    )
+                }
+            }
+        },
+    ))
+    if (confirmLogout) {
+        OverlayDialog(
+            show = true,
+            title = "退出登录",
+            summary = "将清除本机保存的会话 Cookie（不影响服务器账号）。",
+            onDismissRequest = { confirmLogout = false },
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
+                Button(
+                    onClick = { confirmLogout = false; viewModel.logout() },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("确认退出") }
+                TextButton(text = "取消", onClick = { confirmLogout = false }, modifier = Modifier.fillMaxWidth())
+            }
+        }
+    }
+}
+
+/** 网络分区（0.18.0）：第三方中继设置 + 公开端点连通性测试。 */
+@Composable
+private fun NetworkSection(state: StudioUiState, viewModel: StudioViewModel) {
+    SettingsScaffold("网络", viewModel::backSettings, listOf(
+        { RelaySettings(viewModel) },
+        {
+            Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(UiDimens.cardInset)) {
+                Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS), modifier = Modifier.padding(UiDimens.cardInset)) {
+                    Text("连通性测试", fontWeight = FontWeight.Bold, fontSize = UiDimens.section)
+                    Text(
+                        "用一个匿名公开页（articleinfo.php）测试当前公开端点；测试请求不携带会话 Cookie。",
+                        fontSize = UiDimens.captionSmall,
+                        color = MiuixTheme.colorScheme.onSurface.copy(alpha = .7f),
+                    )
+                    TextButton(
+                        text = "测试公开端点",
+                        onClick = viewModel::testRelay,
+                        modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
+                    )
+                }
+            }
+        },
+    ))
 }
 
 /**
