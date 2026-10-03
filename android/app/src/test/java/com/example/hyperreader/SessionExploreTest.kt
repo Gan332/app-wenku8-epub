@@ -208,7 +208,7 @@ class SessionExploreTest {
         sourceUrl = Wenku8Urls.book(id),
     )
 
-    private fun searchPageHtml(page: Int, pageCount: Int?, includeNext: Boolean, stats: String? = null): String {
+    private fun searchPageHtml(page: Int, pageCount: Int?, includeNext: Boolean = false, stats: String? = null): String {
         val statsText = stats ?: pageCount?.let { "当前页$page/$it 页" } ?: "当前页$page"
         val next = if (includeNext) "<a href='?searchkey=x&page=${page + 1}'>下一页</a>" else ""
         return """
