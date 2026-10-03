@@ -188,6 +188,8 @@ private fun StudioApp(
     val context = LocalContext.current
     val settingsTitle = when (state.settingsSection) {
         SettingsSection.OVERVIEW -> "设置"
+                SettingsSection.ACCOUNT -> "账号"
+                SettingsSection.NETWORK -> "网络"
         SettingsSection.APPEARANCE -> "主题与外观"
         SettingsSection.READER -> "阅读器设置"
         SettingsSection.STATISTICS -> "阅读统计"
