@@ -145,9 +145,11 @@ class OnlineReaderActivity : ComponentActivity() {
                 is OnlineReaderResult.NeedsLogin -> showOpenError(result.message)
                 is OnlineReaderResult.Failed ->
                     if (result.code == "UPSTREAM_CHALLENGE") {
+                        // 注意：此处 this 是 CoroutineScope（launch 的 receiver），必须显式指回Activity
+                        val host = this@OnlineReaderActivity
                         challengeLauncher.launch(
                             com.example.hyperreader.auth.CfChallengeActivity.intent(
-                                this,
+                                host,
                                 com.example.hyperreader.core.Wenku8Urls.index(hostBookId, null),
                             ),
                         )
