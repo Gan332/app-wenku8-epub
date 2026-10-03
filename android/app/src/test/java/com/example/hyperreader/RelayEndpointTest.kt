@@ -154,7 +154,7 @@ class RelayEndpointTest {
             <tr><td>小说作者：测试作者</td><td>文章状态：连载中</td></tr>
             <tr><td>最后更新：2026-09-20</td><td>全文长度：207,559字</td></tr>
             <tr><td><a href="$relayBase/novel/2/2365/index.htm">目录</a></td></tr>
-            <tr><td><img src="$relayBase/images/c/2365.jpg"></td></tr>
+            <tr><td><img src="$relayBase/image/2365.jpg"></td></tr>
             </table></div></body></html>
         """.trimIndent()
         val book = Wenku8Parser.parseBook(detailHtml, "${relayBase}/modules/article/articleinfo.php?id=2365")
@@ -163,7 +163,7 @@ class RelayEndpointTest {
         assertEquals("https://www.wenku8.net/novel/2/2365/index.htm", book.directoryUrl)
         assertEquals("https://www.wenku8.net/modules/article/articleinfo.php?id=2365", book.sourceUrl)
         assertEquals("https://www.wenku8.net/modules/article/articleinfo.php?id=2365", book.bookUrl)
-        assertEquals("https://www.wenku8.net/images/c/2365.jpg", book.coverUrl)
+        assertEquals("https://www.wenku8.net/image/2365.jpg", book.coverUrl)
 
         val indexHtml = """
             <html><body><div>

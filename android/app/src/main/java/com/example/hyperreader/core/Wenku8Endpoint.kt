@@ -23,8 +23,8 @@ object Wenku8Endpoint {
     /** 直连源站，与 [Wenku8Urls.BASE] 同源。 */
     const val DIRECT_BASE = "https://www.wenku8.net"
 
-    /** 开关关闭或端点非法时回落到直连。 */
-    fun publicBase(): String = relayBase() ?: DIRECT_BASE
+    /** 公开页基址：只有「开关开且端点合法」才用中继，否则回直连。 */
+    fun publicBase(): String = if (isRelayActive()) relay ?: DIRECT_BASE else DIRECT_BASE
 
     @Volatile
     private var enabled: Boolean = false
