@@ -47,7 +47,7 @@ class LoginActivity : Activity() {
         webView = WebView(this).apply {
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
-            settings.userAgentString = "Wenku8EPUBStudio-Android/0.3.0"
+            settings.userAgentString = com.example.hyperreader.core.Wenku8NetProtocols.USER_AGENT
             webViewClient = object : WebViewClient() {
                 override fun onPageFinished(view: WebView, url: String) {
                     CookieManager.getInstance().flush()

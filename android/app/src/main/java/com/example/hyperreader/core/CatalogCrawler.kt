@@ -28,8 +28,14 @@ class CatalogCrawler(context: Context) {
     private val entriesFile = File(directory, "catalog.json")
     private val cursorFile = File(directory, "index.json")
 
-    /** 独立的无 Cookie 客户端。 */
-    private val http = Wenku8HttpClient(File(context.cacheDir, "wenku8-catalog"))
+    /**
+     * 公开页客户端：**不携带会话 Cookie**，但携带 Cloudflare 的 `cf_clearance`
+     * （人机验证通过凭证，不是账号凭据）——否则用户验证完了公开页仍然 403。
+     */
+    private val http = Wenku8HttpClient(
+        File(context.cacheDir, "wenku8-catalog"),
+        (context.applicationContext as com.example.hyperreader.Wenku8Application).sessionStore.clearanceCookieJar(),
+    )
     private val jobId = "catalog"
 
     fun loadEntries(): MutableMap<String, CatalogEntry> {

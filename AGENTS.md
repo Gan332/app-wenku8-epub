@@ -126,8 +126,12 @@ android/app/src/main/java/io/nightfish/lightnovelreader/api/   ← LNR 书源抽
 请求序号（`StudioViewModel.searchRequestId`）保证旧响应不覆盖新结果。
 
 免登录抓取（上表白名单）由 `CatalogCrawler` / `CatalogRepository` 负责，必须使用
-**独立的无 Cookie 客户端**，——与会话链路分开，
-两条链路不要混用。
+**独立的无会话 Cookie 客户端**，即使设备存在登录态也不得携带 `jieqiUserInfo` / `PHPSESSID`；
+与会话链路分开，两条链路不要混用。
+
+唯一例外是 Cloudflare 的 `cf_clearance`（人机验证通过凭证，**不是账号凭据**）：
+用户在验证窗口亲手通过后，公开链路必须能带上它，否则验证对公开页无效（见 §4.2.1）。
+它由 `Wenku8SessionStore.clearanceCookieJar()` 单独承载——只发这一枚，且只发往 wenku8 域名。
 
 用户可自行为公开页配置**第三方中继**（见 §4.11）；那是传输路径的可选替换，
 **不改变本节的端点白名单，也不新增任何接口**。
@@ -148,8 +152,12 @@ android/app/src/main/java/io/nightfish/lightnovelreader/api/   ← LNR 书源抽
 - 图域`img.wenku8.com` 走 nginx、不经 Cloudflare，**不受影响**（封面/插图链路正常）；
 - `wenku8.com` 镜像当前长期无响应，白名单里留着但不要指望。
 
-应用侧无需为 403 改逻辑：`Wenku8Parser.looksLikeChallenge()` 会转成 `UPSTREAM_CHALLENGE`，
+应用侧无需为 403 改解析逻辑：`Wenku8Parser.looksLikeChallenge()` 会转成 `UPSTREAM_CHALLENGE`，
 用户可用「设置 → 网络 → 测试公开端点」判断当前该直连还是走自建中继（§4.13）。
+遇到挑战时 App 自动弹出 `auth/CfChallengeActivity`（MiuiX 界面 + WebView）：**用户本人**
+完成 Cloudflare 官方交互 → 拿到 `cf_clearance` → CookieManager 落盘加密 → 窗口自动关闭 →
+失败请求自动重试。注意登录页 WebView 也必须用 `Wenku8NetProtocols.USER_AGENT`
+（早先版本用的是 App 自家 UA，会被 Cloudflare 当可疑客户端拦下）。
 
 ### 4.3 状态与持久化
 

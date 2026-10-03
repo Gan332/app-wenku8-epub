@@ -26,10 +26,13 @@ import java.io.File
  * 而且它走批量节流，点一下要等满 1 秒。这里只做两次只读请求 + 解析。
  *
  * 安全边界与全站一致：仅 wenku8 公开页、复用 `Wenku8HttpClient`（白名单 + 内网拦截 +
- * 429 退避），不携带登录 Cookie，不触碰受登录控制的端点。
+ * 429 退避），不携带**会话** Cookie（只可能带 cf_clearance 人机验证凭证），不触碰受登录控制的端点。
  */
 class ExploreDetailRepository(context: android.content.Context) {
-    private val http = Wenku8HttpClient(File(context.cacheDir, "wenku8-detail"))
+    private val http = Wenku8HttpClient(
+        File(context.cacheDir, "wenku8-detail"),
+        (context.applicationContext as com.example.hyperreader.Wenku8Application).sessionStore.clearanceCookieJar(),
+    )
     private val lock = Mutex()
 
     /**

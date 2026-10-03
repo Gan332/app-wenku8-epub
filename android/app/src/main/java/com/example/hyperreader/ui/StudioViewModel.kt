@@ -450,7 +450,8 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
                     cards = exploreRepository.load(page)
                     cards.map { it.id }
                 } else {
-                    val publicClient = Wenku8HttpClient(File(app.cacheDir, "wenku8-explore"))
+                    // 公开页客户端：不带会话 Cookie，但带 cf_clearance（否则验证过后依然403）
+                    val publicClient = Wenku8HttpClient(File(app.cacheDir, "wenku8-explore"), app.sessionStore.clearanceCookieJar())
                     val resource = publicClient.fetchText(page.url, "explore-public", Wenku8Urls.BASE)
                     Wenku8Parser.parseBookLinks(resource.html, resource.finalUrl).map { it.id }
                 }

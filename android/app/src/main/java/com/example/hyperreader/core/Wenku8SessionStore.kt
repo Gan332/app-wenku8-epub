@@ -65,6 +65,32 @@ class Wenku8SessionStore(context: Context) : SessionGate {
         CookieManager.getInstance().flush()
     }
 
+    /** 当前是否已通过 Cloudflare 人机验证。 */
+    fun hasClearance(): Boolean = clearanceValue(allCookies()) != null
+
+    /**
+     * 只携带 `cf_clearance` 的 CookieJar（0.18.0）。
+     *
+     * 给**免登录公开链路**用：验证窗口完成后，Cloudflare 下的 clearance 必须随请求回传，
+     * 否则公开页永远是 403（我们实测过）。它与 [cookieJar] 的区别是**只给这一枚**——
+     * `jieqiUserInfo` / `PHPSESSID` 绝不外泄，符合 AGENTS §4.2「免登录链路不得携带会话」。
+     */
+    fun clearanceCookieJar(): CookieJar = object : CookieJar {
+        override fun saveFromResponse(url: HttpUrl, cookies: List<Cookie>) {
+            val clearance = cookies.firstOrNull { it.name == CLEARANCE_COOKIE && Wenku8Url.carriesSession(url.host) }
+                ?: return
+            val values = allCookies().toMutableMap()
+            values[CLEARANCE_COOKIE] = clearance.value
+            preferences.edit().putString(COOKIE_KEY, jsonObject(values).toString()).apply()
+        }
+
+        override fun loadForRequest(url: HttpUrl): List<Cookie> {
+            val value = clearanceValue(allCookies()) ?: return emptyList()
+            if (!Wenku8Url.carriesSession(url.host)) return emptyList()
+            return listOfNotNull(Cookie.parse(url, "$CLEARANCE_COOKIE=$value"))
+        }
+    }
+
     fun cookieJar(): CookieJar = object : CookieJar {
         /**
          * 会话 Cookie **只发给 wenku8 自身域名**。
@@ -90,8 +116,19 @@ class Wenku8SessionStore(context: Context) : SessionGate {
 
     private fun jsonObject(values: Map<String, String>): JSONObject = JSONObject().apply { values.forEach { (key, value) -> put(key, value) } }
 
-    private companion object {
-        const val FILE_NAME = "wenku8_session"
-        const val COOKIE_KEY = "cookies"
+    /**
+ * 内部常量与方法：internal 让同模块单测能直接断言 [clearanceValue]，
+ * 而 [FILE_NAME]/[COOKIE_KEY] 仍保持 private（它们只是加密存储的文件名与键名，不是密钥本身）。
+ */
+internal companion object {
+        private const val FILE_NAME = "wenku8_session"
+        private const val COOKIE_KEY = "cookies"
+
+        /** 人机验证通过凭证（Cloudflare 写入）；不是账号凭据，但和会话 Cookie 存于同一处。 */
+        const val CLEARANCE_COOKIE = "cf_clearance"
+
+        /** 从 CookieMap 里取出 [CLEARANCE_COOKIE] 的值（companion 里以便单测直接调用）。 */
+        fun clearanceValue(cookies: Map<String, String>): String? =
+            cookies[CLEARANCE_COOKIE]?.takeIf { it.isNotBlank() }
     }
 }

@@ -22,11 +22,14 @@ data class CatalogState(
 
 /**
  * 免登录书目仓库：协调抓取、持久化与内存索引。
- * 使用独立的无 Cookie 客户端，不携带登录态。
+ * 使用独立的无**会话** Cookie 客户端（只可能携带 cf_clearance 人机验证凭证）。
  */
 class CatalogRepository(private val context: Context) {
     private val crawler = CatalogCrawler(context)
-    private val http = Wenku8HttpClient(File(context.cacheDir, "wenku8-catalog"))
+    private val http = Wenku8HttpClient(
+        File(context.cacheDir, "wenku8-catalog"),
+        (context.applicationContext as com.example.hyperreader.Wenku8Application).sessionStore.clearanceCookieJar(),
+    )
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val lock = Mutex()
 
