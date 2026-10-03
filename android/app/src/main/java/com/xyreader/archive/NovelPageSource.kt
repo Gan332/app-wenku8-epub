@@ -248,6 +248,7 @@ class NovelPageSource internal constructor(
     private val imagePaint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)
 
     override val cachedPageCount: Int get() = pages.size
+    override val styleDependent: Boolean get() = true
 
     init {
         val (paged, firstPages) = paginate()
@@ -487,7 +488,7 @@ class NovelPageSource internal constructor(
      * 取某一页的可见文字（「复制文字」用）：按片段行范围从 StaticLayout 还原行内字符，
      * 段间以换行拼接；跨页段落只给出本页部分。与渲染共用 [renderMutex] 串行化。
      */
-    suspend fun pageText(page: Int): String {
+    override suspend fun pageText(page: Int): String {
         checkPage(page)
         return renderMutex.withLock {
             withContext(Dispatchers.IO) {

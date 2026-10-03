@@ -14,8 +14,10 @@
 - `settings/ConfigTransfer.kt`：配置编解码、逐字段校验与写入
 - `reader/XyReaderActivity.kt`：本地 EPUB 阅读器宿主（装配仓库与页面源，见下）
 - `reader/XyReaderBridge.kt`：阅读器数据桥——DataStore 实现 + EPUB → 排版引擎
-- `reader/ReaderActions.kt`：阅读界面回调接口（在线阅读与本地 EPUB 共用）
-- `reader/ReaderScreen.kt`：wenku8 **在线阅读**界面（`ReaderScreenCore`）
+- `reader/ReaderActions.kt`：旧阅读界面回调接口（历史兼容）
+- `reader/OnlineReaderActivity.kt` + `reader/OnlinePageSource.kt`：wenku8 在线阅读宿主，
+  已接入 xy-reader `ReaderScreen`，按章增长页轴并保存起始章进度
+- `reader/OnlineReaderBridge.kt`：在线阅读专用 `ReaderRepository` 与同步页面源打开器
 - `reader/OnlineReaderSource.kt`：wenku8 目录与正文装配为 `ReaderBook`
 - `reader/OnlineChapterCache.kt`：在线章节缓存（50 章 LRU、墓碑、原子写）
 - `reader/RemoteImage.kt`：正文插图加载，复用封面加载器与限流客户端

@@ -1,264 +1,171 @@
 package com.example.hyperreader.reader
 
-import android.app.Application
 import android.content.Intent
 import android.os.Bundle
 import android.os.SystemClock
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.activity.viewModels
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.getValue
-import androidx.lifecycle.AndroidViewModel
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewModelScope
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.lifecycleScope
 import com.example.hyperreader.Wenku8Application
-import com.example.hyperreader.file.FontStore
-import com.example.hyperreader.settings.ReadingProgress
-import com.example.hyperreader.settings.ReaderBackground
-import com.example.hyperreader.settings.ReaderPageTurnMode
 import com.example.hyperreader.ui.AppMiuixTheme
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import com.xyreader.core.BookEntity
+import com.xyreader.core.BookFormat
+import com.xyreader.core.ReaderGraph
+import com.xyreader.reader.ReaderScreen
+import com.xyreader.ui.ReaderConfigScreen
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 /**
- * 在线阅读的状态持有者。
+ * wenku8 在线阅读宿主。
  *
- * 它实现 [ReaderActions]——与本地 EPUB 侧 **同一个接口**，
- * 因此在线与 EPUB 两种模式共用同一份渲染界面（`ReaderScreenCore`），
- * 字体、背景、沉浸模式、目录面板、阅读进度、时长统计的行为完全一致。
- *
- * 与 EPUB 的唯一差别是数据来源：目录来自 wenku8 的公开目录页，正文按需抓取并落盘缓存。
- */
-class OnlineReaderViewModel(application: Application) : AndroidViewModel(application), ReaderActions {
-    private val app = application as Wenku8Application
-    private val source = app.onlineReaderSource
-    private val settingsRepository = app.settingsRepository
-    private val mutable = MutableStateFlow(ReaderUiState())
-    val state: StateFlow<ReaderUiState> = mutable.asStateFlow()
-
-    private var bookId: String = ""
-    private var bookshelfId: String = ""
-    private var bookTitle: String = ""
-    private var catalog: List<com.example.hyperreader.model.Chapter> = emptyList()
-    private var sessionStartedAt: Long? = null
-    private var chapterJob: Job? = null
-
-    init {
-        viewModelScope.launch {
-            val settings = settingsRepository.readerSettings.first()
-            mutable.update { it.copy(settings = settings, isImmersive = settings.immersiveMode, controlsVisible = !settings.immersiveMode) }
-        }
-    }
-
-    fun load(bookId: String, title: String, author: String, bookshelfId: String) {
-        this.bookId = bookId
-        this.bookTitle = title
-        this.bookshelfId = bookshelfId
-        viewModelScope.launch {
-            mutable.update { it.copy(loading = true, error = null, notice = null) }
-            // 进入在线阅读时在书架打点
-            runCatching { app.bookshelfRepository.recordRead(bookshelfId) }
-            when (val result = source.loadIndex(bookId, title = title, author = author)) {
-                is OnlineReaderResult.Ready -> {
-                    catalog = result.value.catalog.chapters
-                    val progress = settingsRepository.progress(bookId).first()
-                    val index = progress?.chapterIndex?.coerceIn(0, (catalog.size - 1).coerceAtLeast(0)) ?: 0
-                    bookTitle = result.value.book.title
-                    mutable.update {
-                        it.copy(
-                            loading = false,
-                            error = null,
-                            book = result.value.book,
-                            chapterIndex = index,
-                            paragraphIndex = progress?.paragraphIndex ?: 0,
-                        )
-                    }
-                    loadCurrentChapter()
-                }
-                is OnlineReaderResult.NeedsLogin -> mutable.update { it.copy(loading = false, error = result.message) }
-                is OnlineReaderResult.Failed -> mutable.update { it.copy(loading = false, error = result.message) }
-            }
-        }
-    }
-
-    /**
-     * 抓取当前章节。**串行**：一次只跑一个任务，切换章节会取消上一个，
-     * 不做任何并发预取——预取会打爆共享的 1 秒/请求限流器。
-     */
-    fun loadCurrentChapter() {
-        val index = state.value.chapterIndex
-        val target = catalog.getOrNull(index) ?: return
-        chapterJob?.cancel()
-        chapterJob = viewModelScope.launch {
-            mutable.update { it.copy(chapterLoading = true, notice = null) }
-            when (val result = source.loadChapter(bookId, target, catalog)) {
-                is OnlineReaderResult.Ready -> {
-                    // 只有当前章被填充正文；其它章保持空块，**不做预取**
-                    val book = state.value.book
-                    val chapters = book?.chapters?.toMutableList()
-                    if (chapters != null) {
-                        chapters.getOrNull(index)?.let { chapters[index] = it.copy(blocks = result.value.blocks) }
-                    }
-                    mutable.update {
-                        it.copy(chapterLoading = false, error = null, book = if (chapters == null) it.book else it.book?.copy(chapters = chapters))
-                    }
-                }
-                is OnlineReaderResult.NeedsLogin ->
-                    // 只如实提示，绝不绕过登录
-                    mutable.update { it.copy(chapterLoading = false, notice = result.message) }
-                is OnlineReaderResult.Failed -> {
-                    val total = state.value.book?.chapters?.size ?: 0
-                    if (result.code == OnlineReaderResult.CODE_CHAPTER_GONE) {
-                        // 章节被源站删除：跳到相邻章节
-                        val next = source.nearestChapterIndex(index, total, step = 1)
-                        if (next != index) {
-                            mutable.update { it.copy(notice = result.message, chapterLoading = false) }
-                            selectChapter(next)
-                        } else {
-                            mutable.update { it.copy(chapterLoading = false, error = result.message) }
-                        }
-                    } else {
-                        mutable.update { it.copy(chapterLoading = false, error = result.message) }
-                    }
-                }
-            }
-        }
-    }
-
-    fun clearNotice() = mutable.update { it.copy(notice = null) }
-
-    // ---- ReaderActions：与本地 EPUB 侧同签名，实现见下 ----
-
-    override fun selectChapter(index: Int) {
-        val book = state.value.book ?: return
-        val safe = index.coerceIn(0, book.chapters.lastIndex.coerceAtLeast(0))
-        mutable.update { it.copy(chapterIndex = safe, paragraphIndex = 0, showToc = false, error = null) }
-        persistProgress()
-        loadCurrentChapter()
-    }
-
-    override fun nextChapter() = selectChapter(state.value.chapterIndex + 1)
-    override fun previousChapter() = selectChapter(state.value.chapterIndex - 1)
-    override fun setParagraph(index: Int) {
-        mutable.update { it.copy(paragraphIndex = index.coerceAtLeast(0)) }
-        persistProgress()
-    }
-
-    // 与本地 EPUB 侧保持一致：只切 controlsVisible，不翻转持久化的沉浸设置
-    override fun toggleControls() = mutable.update { it.copy(controlsVisible = !it.controlsVisible) }
-
-    override fun setImmersive(value: Boolean) = mutable.update { it.copy(isImmersive = value, controlsVisible = !value) }
-    // 与本地 EPUB 侧一致：面板开合互斥，避免两个 OverlayBottomSheet 的窗口互相叠压
-    override fun showSettings(show: Boolean) = mutable.update { it.withPanel(showSettings = show) }
-    override fun showToc(show: Boolean) = mutable.update { it.withPanel(showToc = show) }
-    override fun closeOverlays() = mutable.update { it.copy(showSettings = false, showToc = false) }
-
-    // ReaderActions 声明返回 Unit，因此这里必须用块体；表达式体会把 launch 的 Job 暴露成返回类型
-    override fun updateFontSize(value: Float) { viewModelScope.launch { settingsRepository.setReaderFontSize(value); refreshSettings() } }
-    override fun updateFontWeight(value: Int) { viewModelScope.launch { settingsRepository.setReaderFontWeight(value); refreshSettings() } }
-    override fun updateLineHeight(value: Float) { viewModelScope.launch { settingsRepository.setReaderLineHeight(value); refreshSettings() } }
-    override fun updateSpacing(value: Int) { viewModelScope.launch { settingsRepository.setReaderParagraphSpacing(value); refreshSettings() } }
-    override fun updatePadding(value: Int) { viewModelScope.launch { settingsRepository.setReaderHorizontalPadding(value); refreshSettings() } }
-    override fun updateBackground(value: ReaderBackground) { viewModelScope.launch { settingsRepository.setReaderBackground(value); refreshSettings() } }
-    override fun updateBackgroundColor(value: Int) { viewModelScope.launch { settingsRepository.setReaderCustomBackground(value); refreshSettings() } }
-    override fun updateTextColor(value: Int) { viewModelScope.launch { settingsRepository.setReaderTextColor(value); refreshSettings() } }
-    override fun updatePageMode(value: ReaderPageTurnMode) { viewModelScope.launch { settingsRepository.setReaderPageTurn(value); refreshSettings() } }
-    override fun updateKeepScreenOn(value: Boolean) { viewModelScope.launch { settingsRepository.setReaderKeepScreenOn(value); refreshSettings() } }
-    override fun updateImmersive(value: Boolean) { viewModelScope.launch { settingsRepository.setReaderImmersive(value); setImmersive(value); refreshSettings() } }
-    override fun updateFontUri(value: String?) { viewModelScope.launch { settingsRepository.setReaderFontUri(value) } }
-
-    fun startSession() {
-        if (sessionStartedAt == null) sessionStartedAt = SystemClock.elapsedRealtime()
-    }
-
-    fun stopSession() {
-        val started = sessionStartedAt ?: return
-        sessionStartedAt = null
-        val seconds = ((SystemClock.elapsedRealtime() - started) / 1000L).coerceIn(0L, 1800L)
-        if (seconds > 0 && bookId.isNotBlank()) {
-            viewModelScope.launch { app.readingStatsRepository.recordSession(bookId, bookTitle, seconds) }
-        }
-    }
-
-    override fun onCleared() {
-        stopSession()
-        super.onCleared()
-    }
-
-    private fun refreshSettings() {
-        viewModelScope.launch { mutable.update { it.copy(settings = settingsRepository.readerSettings.first()) } }
-    }
-
-    private fun persistProgress() {
-        val current = state.value
-        val book = current.book ?: return
-        val chapter = book.chapters.getOrNull(current.chapterIndex) ?: return
-        if (bookId.isBlank()) return
-        viewModelScope.launch {
-            settingsRepository.saveProgress(
-                ReadingProgress(bookId, chapter.id, current.chapterIndex, current.paragraphIndex, System.currentTimeMillis()),
-            )
-        }
-    }
-}
-
-/**
- * 在线阅读 Activity。
- *
- * 与 [ReaderActivity] 的区别只有数据来源：这里不需要 `epub_uri`，
- * 只需要 wenku8 的书籍编号。渲染界面通过 `ReaderScreenCore` 与 EPUB 完全共用。
+ * 0.14.0 的 step 3/3：目录先在 IO 协程预取，然后安装在线专用 [OnlineReaderRepository]，
+ * 把 [OnlinePageSourceOpener] 注入 xy-reader 的 [ReaderScreen]。在线与本地 EPUB 因此共用
+ * 同一套位图排版、手势、目录、书签与进度链路；网络仍全部经共享限流客户端。
  */
 class OnlineReaderActivity : ComponentActivity() {
-    private val viewModel: OnlineReaderViewModel by viewModels()
-    private val fontPicker = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri == null) return@registerForActivityResult
-        runCatching { contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
-        FontStore(this).import(uri)?.let { viewModel.updateFontUri(it) }
+
+    private var sessionStartedAt: Long? = null
+    private var hostBookId: String = ""
+    private var bookTitle: String = ""
+    private var bookshelfId: String = ""
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        hostBookId = intent.getStringExtra(EXTRA_BOOK_ID).orEmpty().filter(Char::isDigit)
+        bookTitle = intent.getStringExtra(EXTRA_TITLE).orEmpty()
+        bookshelfId = intent.getStringExtra(EXTRA_BOOKSHELF_ID)
+            ?.takeIf(String::isNotBlank)
+            ?: "wenku8:$hostBookId"
+        if (hostBookId.isBlank()) {
+            finish()
+            return
+        }
+        lifecycleScope.launch {
+            runCatching {
+                (application as Wenku8Application).bookshelfRepository.recordRead(bookshelfId)
+            }
+        }
+
+        lifecycleScope.launch {
+            val app = application as Wenku8Application
+            val result = withContext(Dispatchers.IO) {
+                app.onlineReaderSource.loadIndex(
+                    hostBookId,
+                    title = bookTitle,
+                    author = intent.getStringExtra(EXTRA_AUTHOR).orEmpty(),
+                )
+            }
+            when (result) {
+                is OnlineReaderResult.Ready -> {
+                    val index = result.value
+                    bookTitle = index.book.title
+                    val readerBookId = xyBookIdOf(hostBookId)
+                    val book = BookEntity(
+                        id = readerBookId,
+                        title = bookTitle.ifBlank { "未命名轻小说" },
+                        uri = "wenku8://" + index.catalog.bookId,
+                        format = BookFormat.UNKNOWN.name,
+                    )
+                    val repository = OnlineReaderRepository(
+                        context = this@OnlineReaderActivity,
+                        book = book,
+                        hostBookId = hostBookId,
+                        bookshelfId = bookshelfId,
+                    )
+                    if (!repository.hasStoredReaderPrefs()) {
+                        runCatching {
+                            repository.importLegacySettings(app.settingsRepository.readerSettings.first())
+                        }
+                    }
+                    val opener = OnlinePageSourceOpener(app.onlineReaderSource, app, hostBookId)
+                    opener.prepare(index.catalog.chapters)
+                    val stored = repository.currentProgress()
+                    val startChapterId = repository.resolveStartChapterId(index.catalog.chapters)
+                    // xy 页进度只与「已按起始章打开的页轴」配对；没有在线页进度时从章首开始。
+                    val initialPage = stored?.page ?: runCatching {
+                        repository.legacyProgress(hostBookId)?.chapterIndex ?: 0
+                    }.getOrDefault(0)
+                    opener.setStartChapterId(startChapterId)
+                    ReaderGraph.install(repository)
+                    setContent {
+                        AppMiuixTheme {
+                            var showReaderConfig by rememberSaveable { mutableStateOf(false) }
+                            if (showReaderConfig) {
+                                ReaderConfigScreen(
+                                    repository = repository,
+                                    onBack = { showReaderConfig = false },
+                                )
+                            } else {
+                                ReaderScreen(
+                                    bookId = readerBookId,
+                                    onBack = { finish() },
+                                    initialPage = initialPage,
+                                    sourceOpener = { context, readerBook, style ->
+                                        opener.open(context, readerBook, style).also(repository::attach)
+                                    },
+                                    onOpenReaderConfig = { showReaderConfig = true },
+                                )
+                            }
+                        }
+                    }
+                }
+                is OnlineReaderResult.NeedsLogin -> showOpenError(result.message)
+                is OnlineReaderResult.Failed -> showOpenError(result.message)
+            }
+        }
+    }
+
+    private fun showOpenError(message: String) {
+        setContent {
+            AppMiuixTheme {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = message,
+                        modifier = Modifier.padding(24.dp),
+                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                        style = MiuixTheme.textStyles.body1,
+                    )
+                }
+            }
+        }
     }
 
     override fun onStart() {
         super.onStart()
-        viewModel.startSession()
+        if (sessionStartedAt == null) sessionStartedAt = SystemClock.elapsedRealtime()
     }
 
     override fun onStop() {
-        viewModel.stopSession()
-        super.onStop()
-    }
-
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        val bookId = intent.getStringExtra(EXTRA_BOOK_ID).orEmpty().filter(Char::isDigit)
-        if (bookId.isBlank()) {
-            finish()
-            return
-        }
-        viewModel.load(
-            bookId = bookId,
-            title = intent.getStringExtra(EXTRA_TITLE).orEmpty(),
-            author = intent.getStringExtra(EXTRA_AUTHOR).orEmpty(),
-            bookshelfId = intent.getStringExtra(EXTRA_BOOKSHELF_ID)?.takeIf { it.isNotBlank() } ?: "wenku8:$bookId",
-        )
-        setContent {
-            AppMiuixTheme {
-                val state by viewModel.state.collectAsStateWithLifecycle()
-                ReaderScreenCore(
-                    state = state,
-                    actions = viewModel,
-                    imageResolver = { block -> rememberRemoteImage(block.path) },
-                    onImportFont = { fontPicker.launch(arrayOf("font/ttf", "font/otf", "application/x-font-ttf", "application/octet-stream")) },
-                    // 在线模式没有 EPUB 可导入
-                    onImportEpub = {},
-                    onBack = { finish() },
-                )
+        val started = sessionStartedAt
+        sessionStartedAt = null
+        if (started != null && hostBookId.isNotBlank()) {
+            val seconds = ((SystemClock.elapsedRealtime() - started) / 1000L).coerceIn(0L, 1800L)
+            if (seconds > 0) {
+                val stats = (application as Wenku8Application).readingStatsRepository
+                lifecycleScope.launch {
+                    runCatching { stats.recordSession(hostBookId, bookTitle, seconds) }
+                }
             }
         }
+        super.onStop()
     }
 
     companion object {

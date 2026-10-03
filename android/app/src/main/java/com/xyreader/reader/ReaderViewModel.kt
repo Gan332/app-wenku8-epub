@@ -100,7 +100,7 @@ private class PageBitmapCache(
  * @param sourceOpener 页面源打开策略。默认（null）走 [ArchiveFactory]——按 `book.format`
  *   路由到各格式的页面源，其中 EPUB 由 [com.xyreader.archive.NovelTextExtractor.parseEpub]
  *   解析。宿主可注入自己的实现以复用既有 EPUB 解析管线（本工程走 Rust 原生结构解析 +
- *   兜底链，见 `com.example.hyperreader.reader.XyReaderBridge`）。样式变化触发的重排会
+ *   兜底链，见宿主应用的阅读器数据桥）。样式变化触发的重排会
  *   再次调用它，实现方应自行缓存与样式无关的解析结果。
  */
 class ReaderViewModel(
@@ -287,7 +287,7 @@ class ReaderViewModel(
                 // 初次打开或样式重排时 source 会暂时为空；openSource 完成后会比较最新偏好。
                 if (source == null) return@collect
                 // 图片页的背景由 UI 绘制；字体配置不应导致 PDF/漫画重新解包或下载。
-                if (source !is NovelPageSource) {
+                if (source?.styleDependent != true) {
                     if (_state.value.phase == ReaderPhase.Ready) openedStyleKey = key
                     return@collect
                 }
@@ -367,7 +367,7 @@ class ReaderViewModel(
             val src = sourceOpener?.invoke(appContext, book, style)
                 ?: ArchiveFactory.open(appContext, book, style)
             source = src
-            _isTextNovel.value = src is NovelPageSource
+            _isTextNovel.value = src.styleDependent
             val count = src.pageCount
             // 章节结构：打开成功后普通属性读取（实现已在 open 时建好索引，非 suspend）；
             // 兜底异常转空列表，避免个别格式章节解析失败拖垮整本书的打开
@@ -418,16 +418,16 @@ class ReaderViewModel(
 
     /** 打开期间若偏好再次变化，完成后按最新样式补一次防抖重排。 */
     private fun scheduleLatestStyleSync() {
-        if (source !is NovelPageSource || _state.value.phase != ReaderPhase.Ready) return
+        if (source?.styleDependent != true || _state.value.phase != ReaderPhase.Ready) return
         if (styleKey(readerPrefs.value) == openedStyleKey) return
         restyleJob?.cancel()
         restyleJob = viewModelScope.launch {
             delay(300)
             val book = _book.value ?: return@launch
-            if (source !is NovelPageSource || styleKey(readerPrefs.value) == openedStyleKey) return@launch
+            if (source?.styleDependent != true || styleKey(readerPrefs.value) == openedStyleKey) return@launch
             sourceLifecycleMutex.withLock {
                 withContext(NonCancellable + Dispatchers.IO) {
-                    if (source is NovelPageSource && styleKey(readerPrefs.value) != openedStyleKey) {
+                    if (source?.styleDependent == true && styleKey(readerPrefs.value) != openedStyleKey) {
                         replaceSource(book)
                     }
                 }
@@ -699,7 +699,7 @@ class ReaderViewModel(
      * 非文字源 / 越界 / 失败一律返回 null，由 UI 降级提示。
      */
     suspend fun pageText(page: Int): String? {
-        val src = source as? NovelPageSource ?: return null
+        val src = source ?: return null
         if (page !in 0 until src.pageCount) return null
         return runCatching { src.pageText(page) }.getOrNull()
     }

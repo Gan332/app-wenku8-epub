@@ -9,9 +9,14 @@ import com.example.hyperreader.reader.OnlineChapterCache
 import com.example.hyperreader.reader.OnlineChapterCacheEntry
 import com.example.hyperreader.reader.OnlineReaderResult
 import com.example.hyperreader.reader.OnlineReaderSource
+import com.example.hyperreader.reader.OnlineLoadedChapter
+import com.example.hyperreader.reader.OnlineReaderProgress
 import com.example.hyperreader.reader.OnlineTextFetcher
 import com.example.hyperreader.reader.ReaderBlock
 import com.example.hyperreader.reader.isAuthWall
+import com.example.hyperreader.reader.decodeOnlineReaderProgress
+import com.example.hyperreader.reader.onlineChapterAtPage
+import com.example.hyperreader.reader.onlineProgressJson
 import com.example.hyperreader.reader.toReaderBlocks
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -27,6 +32,37 @@ import java.io.File
  * 以及 4.5 的被动触发约束：命中缓存时一次网络请求都不发。
  */
 class OnlineReaderTest {
+    @Test
+    fun onlineProgressRoundTripKeepsPageAxisChapter() {
+        val progress = OnlineReaderProgress(
+            page = 17,
+            totalPages = 42,
+            startChapterId = "101",
+            startChapterIndex = 3,
+            currentChapterId = "104",
+            currentChapterIndex = 6,
+        )
+        val encoded = onlineProgressJson.encodeToString(
+            OnlineReaderProgress.serializer(),
+            progress,
+        )
+        assertEquals(progress, decodeOnlineReaderProgress(encoded))
+        assertEquals(null, decodeOnlineReaderProgress("not-json"))
+    }
+
+    @Test
+    fun onlineChapterAtPageUsesInclusiveRangesAndFallsBackToFirstChapter() {
+        val chapters = listOf(
+            OnlineLoadedChapter("101", 3, 0, 4),
+            OnlineLoadedChapter("104", 6, 5, 9),
+        )
+        assertEquals("101", onlineChapterAtPage(chapters, 0)?.id)
+        assertEquals("101", onlineChapterAtPage(chapters, 4)?.id)
+        assertEquals("104", onlineChapterAtPage(chapters, 5)?.id)
+        assertEquals("104", onlineChapterAtPage(chapters, 9)?.id)
+        assertEquals("101", onlineChapterAtPage(chapters, 99)?.id)
+        assertEquals(null, onlineChapterAtPage(emptyList(), 0))
+    }
     private val bookId = "2835"
     private val chapterUrl = "https://www.wenku8.net/novel/2/2835/100.htm"
 

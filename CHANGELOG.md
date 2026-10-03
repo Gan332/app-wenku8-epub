@@ -2,6 +2,20 @@
 
 本项目遵循语义化版本。
 
+## [0.14.0] - 2026-10-03
+
+### 变更
+
+- 完成在线阅读迁移 step 3/3：`OnlineReaderActivity` 从旧 `ReaderScreenCore` 切到
+  xy-reader 的 `ReaderScreen`，在线目录先预取，再由 `OnlinePageSourceOpener` 注入
+  可增长页面源。
+- 新增在线专用 `OnlineReaderRepository`：页进度与页轴起始章、当前章一起持久化，
+  避免恢复页码错位；书架 `recordRead` 使用传入的真实书架条目 id。
+- 在线正文标题、段落和插图统一进入 `NovelPageSource` 分页；插图下载复用
+  `CoverRepository` 与共享 `Wenku8HttpClient` 限流客户端。
+- 为 `PageSource` 增加 `styleDependent`，在线组合源与文字小说支持字号/背景变化后的
+  重排；设置页旧阅读配置仅在首次打开 xy 配置时迁移。
+
 ## [0.13.0] - 2026-10-01
 
 ### 变更

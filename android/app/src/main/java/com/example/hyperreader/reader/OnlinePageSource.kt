@@ -5,6 +5,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import com.example.hyperreader.model.Chapter as HostChapter
 import com.xyreader.archive.AbstractPageSource
 import com.xyreader.archive.ChapterMark
+import com.xyreader.archive.EpubImageGroup
 import com.xyreader.archive.NovelPageSource
 import com.xyreader.archive.NovelStyle
 import com.xyreader.archive.Paragraph
@@ -27,7 +28,7 @@ import com.xyreader.core.PageSource
  * 前面各章页数之和。[chapters] 用同样的累加规则给出每章的 `startPage` /
  * `endPageInclusive`，阅读界面的「上一章 / 下一章」因此可以直接按页跳转。
  *
- * 抓取本身由宿主注入 [fetchParagraphs]（走 `OnlineReaderSource` + 全局限流），
+ * 抓取本身由宿主注入 [fetchContent]（走 OnlineReaderSource 与全局限流），
  * 本类不关心网络细节，也不反向依赖 `com.example.hyperreader` 之外的任何东西。
  */
 class OnlinePageSource private constructor(
@@ -35,8 +36,8 @@ class OnlinePageSource private constructor(
     /** 全书目录（源站目录页的顺序），用于决定「下一章抓哪个」。 */
     private val catalog: List<HostChapter>,
     private val style: NovelStyle?,
-    /** 抓取并解析某一章的正文段落；返回空列表表示该章没有正文。 */
-    private val fetchParagraphs: suspend (HostChapter) -> List<String>,
+    /** 抓取并解析某一章的正文段落与插图；没有段落表示该章没有正文。 */
+    private val fetchContent: suspend (HostChapter) -> OnlineChapterContent,
     private val startIndex: Int,
     initial: LoadedChapter,
 ) : AbstractPageSource(), PageSource {
@@ -62,6 +63,27 @@ class OnlinePageSource private constructor(
     private val loading = java.util.concurrent.atomic.AtomicBoolean(false)
 
     override val growable: Boolean = true
+    override val styleDependent: Boolean get() = true
+
+    /** 供在线仓库保存页进度时同时定位起始章和当前章。 */
+    val loadedChapterProgress: List<OnlineLoadedChapter>
+        get() {
+            val pages = snapshot
+            var offset = 0
+            return pages.mapIndexed { loadedIndex, chapter ->
+                val pageCount = chapter.source.pageCount
+                val catalogIndex = catalog.indexOfFirst { it.id == chapter.id }
+                    .takeIf { it >= 0 } ?: loadedIndex
+                val start = offset
+                offset += pageCount
+                OnlineLoadedChapter(
+                    id = chapter.id,
+                    index = catalogIndex,
+                    startPage = start,
+                    endPageInclusive = (offset - 1).coerceAtLeast(start),
+                )
+            }
+        }
 
     protected override val cachedPageCount: Int
         get() = snapshot.sumOf { it.source.pageCount }
@@ -104,6 +126,17 @@ class OnlinePageSource private constructor(
         return null
     }
 
+    override suspend fun pageText(index: Int): String? {
+        val pages = snapshot
+        var remaining = index
+        for (chapter in pages) {
+            val count = chapter.source.pageCount
+            if (remaining < count) return chapter.source.pageText(remaining)
+            remaining -= count
+        }
+        return null
+    }
+
     /**
      * 抓取下一章并接到页轴尾部。
      *
@@ -119,7 +152,8 @@ class OnlinePageSource private constructor(
                 val chapter = catalog[cursor]
                 cursor += 1
                 nextIndex = cursor
-                val paragraphs = runCatching { fetchParagraphs(chapter) }.getOrDefault(emptyList())
+                val content = runCatching { fetchContent(chapter) }.getOrDefault(OnlineChapterContent(emptyList()))
+                val paragraphs = content.paragraphs
                 if (paragraphs.isEmpty()) continue
                 val source = runCatching {
                     NovelPageSource.open(
@@ -127,6 +161,9 @@ class OnlinePageSource private constructor(
                         paragraphs = paragraphs.map { Paragraph(it, chapterIndex = 0) },
                         marks = listOf(ChapterMark(chapter.title, 0)),
                         style = style,
+                        imageGroups = content.images
+                            .filter { (index, bytes) -> index in 0..paragraphs.size && bytes.isNotEmpty() }
+                            .map { (index, bytes) -> EpubImageGroup(index, listOf(bytes)) },
                     )
                 }.getOrNull() ?: continue
                 if (source.pageCount <= 0) continue
@@ -156,7 +193,7 @@ class OnlinePageSource private constructor(
             catalog: List<HostChapter>,
             startChapterId: String?,
             style: NovelStyle?,
-            fetchParagraphs: suspend (HostChapter) -> List<String>,
+            fetchContent: suspend (HostChapter) -> OnlineChapterContent,
         ): OnlinePageSource {
             if (catalog.isEmpty()) throw java.io.IOException("目录为空，无法在线阅读")
             val startIndex = catalog.indexOfFirst { it.id == startChapterId }.takeIf { it >= 0 } ?: 0
@@ -166,13 +203,17 @@ class OnlinePageSource private constructor(
             var first: LoadedChapter? = null
             while (cursor < catalog.size && first == null) {
                 val chapter = catalog[cursor]
-                val paragraphs = runCatching { fetchParagraphs(chapter) }.getOrDefault(emptyList())
+                val content = runCatching { fetchContent(chapter) }.getOrDefault(OnlineChapterContent(emptyList()))
+                val paragraphs = content.paragraphs
                 if (paragraphs.isNotEmpty()) {
                     val source = NovelPageSource.open(
                         context = context,
                         paragraphs = paragraphs.map { Paragraph(it, chapterIndex = 0) },
                         marks = listOf(ChapterMark(chapter.title, 0)),
                         style = style,
+                        imageGroups = content.images
+                            .filter { (index, bytes) -> index in 0..paragraphs.size && bytes.isNotEmpty() }
+                            .map { (index, bytes) -> EpubImageGroup(index, listOf(bytes)) },
                     )
                     if (source.pageCount > 0) first = LoadedChapter(chapter.id, chapter.title, source)
                 }
@@ -184,7 +225,7 @@ class OnlinePageSource private constructor(
                 context = context,
                 catalog = catalog,
                 style = style,
-                fetchParagraphs = fetchParagraphs,
+                fetchContent = fetchContent,
                 startIndex = cursor - 1,
                 initial = initial,
             )

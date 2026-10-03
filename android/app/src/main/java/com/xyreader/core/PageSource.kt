@@ -53,12 +53,21 @@ interface PageSource : Closeable {
     val growable: Boolean get() = false
 
     /**
+     * 是否依赖 NovelStyle 重新分页。文字小说（含在线阅读的组合源）为 true；
+     * PDF / 漫画位图源为 false，避免字体与段落设置变化触发无意义重开。
+     */
+    val styleDependent: Boolean get() = false
+
+    /**
      * 按需加载更多内容（仅 [growable] 为 `true` 时有意义）。
      *
      * @return `true` 表示确实新增了页；调用方据此刷新 [pageCount] 与 [chapters]。
      *   默认不做事。
      */
     suspend fun loadMore(): Boolean = false
+
+    /** 取文字页文本；非文字源默认不支持，阅读器据此隐藏复制文字。 */
+    suspend fun pageText(page: Int): String? = null
 
     override fun close()
 }

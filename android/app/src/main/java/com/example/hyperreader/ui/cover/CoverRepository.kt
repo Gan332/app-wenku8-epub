@@ -78,6 +78,21 @@ class CoverRepository(context: Context) {
         bitmap
     }
 
+    /**
+     * 读取图片原始字节，供 xy-reader 的整页图片排版使用。
+     * 与 [load] 共用内存/磁盘缓存和同一限流客户端；失败返回 null，正文可降级继续阅读。
+     */
+    suspend fun loadBytes(url: String): ByteArray? = withContext(Dispatchers.IO) {
+        val key = normalize(url)
+        val file = cacheFile(key)
+        if (file.isFile) runCatching { file.readBytes() }.getOrNull()?.let { return@withContext it }
+        val downloaded = runCatching { client.downloadImage(key, REFERER, "reader-image", "image") }.getOrNull()
+            ?: return@withContext null
+        val bytes = runCatching { File(downloaded.path).readBytes() }.getOrNull()
+        File(downloaded.path).delete()
+        bytes?.takeIf { it.isNotEmpty() }?.also { runCatching { file.writeBytes(it) } }
+    }
+
     private fun decode(file: File, targetWidthPx: Int): ImageBitmap? {
         if (!file.isFile) return null
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }

@@ -288,16 +288,15 @@ LightNovelReader 阅读器（126 个文件）已在 0.13.0 整体移除。
 进度口径：上游是「页 / 总页数」，本工程 `ReadingProgress` 是「章 + 段」，两者**不换算**
 （分页依赖字号与边距）。页进度单独存并作为续读唯一依据，同时刷书架 `recordRead`。
 
-在线阅读（`OnlineReaderActivity`）**不走** xy-reader，仍用本工程的
-`reader/ReaderScreen.kt`（`ReaderScreenCore`）+ `ReaderActions`。改阅读器 UI 时注意
-`ReaderActions` 接口定义在 `reader/ReaderActions.kt`，两个阅读器共用。
-
-**迁移进行中（0.14.0，step 2/3 已提交）**：`reader/OnlinePageSource.kt` 已实现——
-在线阅读按章抓取后，用与本地 EPUB 完全同一套 `StaticLayout` 分页生成位图页，实现
-xy-reader 的**可增长** `PageSource`（`growable = true` + `loadMore`，读到近末尾时
-`ReaderViewModel.maybeGrow` 追加章节）。但 **step 3（接入）未完成**：`OnlinePageSource`
-目前没有任何调用方，`OnlineReaderActivity` 仍走 `ReaderScreenCore`。接入完成前
-不要删除 `ReaderScreenCore`，也不要误以为在线阅读已切到 xy-reader。
+在线阅读（OnlineReaderActivity）已完成 0.14.0 step 3/3，走 xy-reader：
+OnlinePageSource 按章抓取后，用与本地 EPUB 完全同一套 StaticLayout 分页生成位图页，
+并以 growable = true + loadMore 在接近末尾时追加章节。Activity 先在 IO 协程预取目录，
+再安装 OnlineReaderRepository 并把 OnlinePageSourceOpener 注入 xy-reader 的 ReaderScreen。
+在线页进度保存在 xy_reader_online_progress_<bookId>，必须同时保存页轴起始章与当前章，
+恢复时先按起始章重建页轴再应用页码；旧 ReadingProgress 只用于第一次迁移时选择起始章，
+不做页↔章换算。在线正文插图经 CoverRepository.loadBytes 下载，仍走共享 Wenku8HttpClient
+限流链路。旧 reader/ReaderScreen.kt（ReaderScreenCore）与 ReaderActions 仍保留给历史代码
+和单测兼容，但在线入口不再调用它们。
 
 MiuiX 化对照（上游全是 material3，本项目禁止 material，有守卫单测）：
 `Text/Icon/IconButton/Button/Slider/Switch/Surface/Card/RadioButton/CircularProgressIndicator`

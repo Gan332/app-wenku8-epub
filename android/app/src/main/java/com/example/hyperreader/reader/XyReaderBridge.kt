@@ -72,6 +72,9 @@ class XyReaderPrefsStore(private val data: DataStore<Preferences>) {
             ?: ReaderPrefs()
     }
 
+    /** 是否已有 xy 阅读器自己的配置；用于在线阅读只在首次打开时导入旧设置。 */
+    suspend fun hasStored(): Boolean = data.safeData().map { it.contains(KEY_READER_PREFS) }.first()
+
     suspend fun set(prefs: ReaderPrefs) {
         data.edit { p ->
             p[KEY_READER_PREFS] = xyJson.encodeToString(ReaderPrefs.serializer(), prefs)

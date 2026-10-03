@@ -10,7 +10,7 @@ import kotlinx.coroutines.flow.Flow
  * DataStore 书架 + EPUB 仓储，不需要也不应该把那套搬进来。
  *
  * 因此这里按「阅读器真正用到的能力」收窄成 8 个成员——`ReaderViewModel` /
- * `ReaderScreen` 只依赖本接口，实现由 `com.example.hyperreader.reader` 侧提供，
+ * `ReaderScreen` 只依赖本接口，实现由宿主阅读器侧提供，
  * 把本工程的书架、阅读进度、阅读统计接进去。
  *
  * 全部方法可在任意线程调用（实现内部切 IO）。
