@@ -209,8 +209,11 @@ class CoreSmokeTest {
 
     @Test
     fun settingsSectionsCoverEveryCategory() {
-        assertEquals(7, SettingsSection.entries.size)
+        // 0.18.0：新增 ACCOUNT（账号）与 NETWORK（网络/中继）
+        assertEquals(9, SettingsSection.entries.size)
         assertEquals(SettingsSection.OVERVIEW, SettingsSection.entries.first())
+        assertTrue(SettingsSection.entries.contains(SettingsSection.ACCOUNT))
+        assertTrue(SettingsSection.entries.contains(SettingsSection.NETWORK))
         assertTrue(SettingsSection.entries.contains(SettingsSection.READER))
         assertTrue(SettingsSection.entries.contains(SettingsSection.STATISTICS))
         assertTrue(SettingsSection.entries.contains(SettingsSection.CATALOG))
