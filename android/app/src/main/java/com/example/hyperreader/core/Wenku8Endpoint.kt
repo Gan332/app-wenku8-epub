@@ -59,6 +59,34 @@ object Wenku8Endpoint {
         enabled = value
     }
 
+    /** 与 `relay/worker.js` 的 `ALLOWED` / `DENIED` 保持一致的路径正则（路径契约，由单测锁定）。 */
+    private val RELAY_ALLOWED = listOf(
+        Regex("^/modules/article/articleinfo\\.php$"),
+        Regex("^/modules/article/authorarticle\\.php$"),
+        Regex("^/novel/\\d+/\\d+/index\\.html?$"),
+        Regex("^/zt/sugoi/\\d{4}\\.php$"),
+        Regex("^/zt/booklist/\\d{6}\\.php$"),
+    )
+
+    private val RELAY_DENIED = listOf(
+        Regex("^/login\\.php$"),
+        Regex("^/modules/article/(search|toplist|tags|articlelist)\\.php$"),
+        Regex("^/api/"),
+    )
+
+    /**
+     * 该路径是否允许经中继转发。
+     *
+     * 与 Worker 端是同一份契约：登录墙内接口在这里先被拒，即便 Worker 配置写错，
+     * App 也不会把会话类请求发给第三方。单测 `relayPathContractMatchesWorkerAllowList` 锁定。
+     */
+    fun isRelayablePath(path: String?): Boolean {
+        val value = path.orEmpty()
+        if (value.isBlank()) return false
+        if (RELAY_DENIED.any { it.matches(value) }) return false
+        return RELAY_ALLOWED.any { it.matches(value) }
+    }
+
     /** 规范化中继端点：`https://host[:port]`，去掉路径/查询/尾斜杠；非法返回 null。 */
     fun normalizeRelayBase(raw: String?): String? {
         val value = raw?.trim().orEmpty()

@@ -1,0 +1,12 @@
+# 复制为 wrangler.toml 后按需修改（name 必须是你的子域内唯一名字）
+name = "my-wenku8-relay"
+main = "worker.js"
+compatibility_date = "2026-09-01"
+
+# 可选：绑定自定义域名（需先在 Cloudflare 添加该域的 DNS 记录）
+# [[routes]]
+# pattern = "wenku8-relay.example.com"
+# custom_domain = true
+
+# 可选：部署到自己的账号时无需任何 KV/变量绑定；本 Worker 是完全无状态的
+# （限流计数只在单实例内存里，多实例部署时按实例计，属可接受的保守近似）

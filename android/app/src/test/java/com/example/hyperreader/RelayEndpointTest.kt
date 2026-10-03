@@ -11,6 +11,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import java.net.URI
 
 /**
  * 第三方中继（AGENTS §4.11）的夹具。
@@ -122,6 +123,33 @@ class RelayEndpointTest {
         // 中继关闭后白名单立刻回到原样
         Wenku8Endpoint.setRelayEnabled(false)
         assertFalse(Wenku8Url.isAllowedHost("relay.example.com"))
+    }
+
+    @Test
+    fun relayPathContractMatchesWorkerAllowList() {
+        // 与 relay/worker.js 的 ALLOWED 一一对应
+        assertTrue(Wenku8Endpoint.isRelayablePath("/modules/article/articleinfo.php"))
+        assertTrue(Wenku8Endpoint.isRelayablePath("/modules/article/authorarticle.php"))
+        assertTrue(Wenku8Endpoint.isRelayablePath("/novel/2/2365/index.htm"))
+        assertTrue(Wenku8Endpoint.isRelayablePath("/novel/2/2365/index.html"))
+        assertTrue(Wenku8Endpoint.isRelayablePath("/zt/sugoi/2025.php"))
+        assertTrue(Wenku8Endpoint.isRelayablePath("/zt/booklist/202609.php"))
+        // 登录墙内接口与未知路径一律不经中继
+        assertFalse(Wenku8Endpoint.isRelayablePath("/login.php"))
+        assertFalse(Wenku8Endpoint.isRelayablePath("/modules/article/search.php"))
+        assertFalse(Wenku8Endpoint.isRelayablePath("/modules/article/toplist.php"))
+        assertFalse(Wenku8Endpoint.isRelayablePath("/modules/article/tags.php"))
+        assertFalse(Wenku8Endpoint.isRelayablePath("/modules/article/articlelist.php"))
+        assertFalse(Wenku8Endpoint.isRelayablePath("/api/anything"))
+        assertFalse(Wenku8Endpoint.isRelayablePath(null))
+        // App 实际会经中继请求的公开端点全部命中白名单
+        listOf(
+            Wenku8Urls.articleInfo("2365"),
+            Wenku8Urls.index("2365"),
+            Wenku8Urls.sugoi(2025),
+            Wenku8Urls.booklist("202609"),
+            Wenku8Urls.authorArticle("伏濑"),
+        ).forEach { url -> assertTrue(Wenku8Endpoint.isRelayablePath(URI(url).path), url) }
     }
 
     @Test

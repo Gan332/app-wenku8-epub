@@ -13,7 +13,8 @@
 
 当前主要发版对象是 **Android 原生应用**。Android 版本不需要 Node.js 服务，WebView 仅用于 wenku8 登录。
 
-当前版本：`0.17.0`（versionCode 24，见 `android/app/build.gradle.kts`，以该文件为准）
+当前版本：`0.18.0-alpha01`（versionCode 25，见 `android/app/build.gradle.kts`，以该文件为准）
+发布节奏：0.18.x 为**预发布**（prerelease，标签带 `-alphaNN`），功能收敛后再转正式版。
 包名：`com.example.hyperreader`（由 `com.wenku8.epubstudio` 于 0.9.0 重命名，非原地改名，升级需数据迁移）
 
 仓库地址：`https://github.com/Gan332/app-wenku8-epub`
@@ -164,7 +165,13 @@ android/app/src/main/java/io/nightfish/lightnovelreader/api/   ← LNR 书源抽
 
 ### 4.4 Compose 约定
 
-- 按钮最小触摸区域 48dp
+- 按钮最小触摸区域 48dp（用 `UiDimens.touchMin`，**不要**写裸 `48.dp`）
+- **尺寸令牌**（0.18.0）：控件高度、页面边距、字号一律取 `ui/UiDimens.kt` 的令牌
+  （`touchMin` / `rowMin`、`spaceXXS…spaceXL`、`captionSmall…display`、`MOTION_*`）；
+  只有装饰性小值（进度圈直径、圆角等）允许直接写数值
+- **动效**（0.18.0）：统一用 `ui/Motion.kt`（交错入场/按压/展开/shimmer），
+  时长经 `Motion.duration()` 换算，**必须尊重系统「移除动画」**（`ANIMATOR_DURATION_SCALE=0` 时归零）；
+  长列表交错延迟只对前 `Motion.STAGGER_VISIBLE_LIMIT` 项累加，否则靠后的项会等几秒才出现
 - 长列表使用 `LazyColumn`，不要一次性构建全部条目
 - 读图/解析类操作放 `Dispatchers.IO`
 - MiuX 组件**唯一**：0.9.3 起 material/material3/material-icons 全量移除，
@@ -388,6 +395,36 @@ MiuiX 化对照（上游全是 material3，本项目禁止 material，有守卫�
 设置流由 `Wenku8Application.onCreate` 监听（`relay_base` + `relay_enabled`）后应用；
 关开关时自动清空端点。回归见单测 `RelayEndpointTest`。
 
+### 4.12 设置页信息架构（0.18.0，对齐 Kazumi）
+
+设置索引页采用「分类 + 分组」结构（Kazumi 的 `_SettingsCategory` / `_SettingsGroup`）：
+
+- 分类枚举在 `ui/SettingsScreen.kt` 的 `SettingsCategory`，每个分类对应一个
+  `SettingsSection` 二级页；`SETTINGS_GROUPS` 决定索引页的分组标题；
+- 分类侧栏：宽屏常驻左侧 rail（`SettingsRail`），窄屏用 `OverlayBottomSheet` 抽屉；
+- **编辑型设置用Sheet 轻量编辑**（如 EPUB 导出引擎）；长内容（阅读器、外观）仍走二级页；
+- 新增分类必须在 `SettingsSection` 加枚举 + 在 `CoreSmokeTest.settingsSectionsCoverEveryCategory`
+  更新计数（该测试会卡住遗漏）。
+
+### 4.13 自建 Cloudflare Worker 中继（0.18.0）
+
+`relay/worker.js` 是完整可部署的中继实现，用**用户自己的** Cloudflare 账号部署
+（`wrangler deploy`，说明见 `relay/README.md`），App 在「设置 → 网络」填端点。
+
+硬约束（Worker 与 App 两侧都写死，并由契约测试锁定）：
+
+1. **只代理匿名白名单端点**：`articleinfo.php`、`authorarticle.php`、目录页、
+   `/zt/sugoi/`、`/zt/booklist/`；
+2. **拒绝登录墙内接口**：`login.php`、`search.php`、`toplist.php`、`tags.php`、
+   `articlelist.php`、`/api/*`；App 侧先由 `Wenku8Endpoint.isRelayablePath` 拒绝，
+   Worker 侧再用 `DENIED` 兜底；
+3. **不转发 Cookie / Authorization**，不记录访问日志，不透传客户端 IP；
+4. 保留上游 GBK 原始字节（不解码/重编码），5 分钟缓存 + 每 IP 每分钟 60 次令牌桶限流；
+5. Worker 与 App 的路径白名单是**同一份契约**，改一边必须改另一边，否则
+   `RelayEndpointTest.relayPathContractMatchesWorkerAllowList` 会失败。
+
+不得内置或推荐任何第三方中继端点（包括上游作者的）：它是可选路径，不是默认路径。
+
 ## 5. 构建与验证
 
 ### 5.1 Web 版（Node，改动 `src/` / `public/` / `server.js` 时）
@@ -519,6 +556,8 @@ API 创建的 commit **SHA 与本地不同**（内容等价，但换行可能被
 
 ## 7. 发版流程
 
+0. 选预发布还是正式版：`v0.x.y-alphaNN` / `-betaNN` / `-rcN` 打 **prerelease** 标签，
+   `v0.x.y` 才是正式版；版本号语义化、不覆盖已发布标签
 1. 更新 `android/app/build.gradle.kts`：
    - `versionCode` +1
    - `versionName` 改为新版本
