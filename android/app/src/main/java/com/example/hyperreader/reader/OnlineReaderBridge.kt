@@ -27,12 +27,14 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.SetSerializer
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
 
 /** 在线阅读进度：页码与页轴起始章、当前章必须一起保存，避免下次页码错位。 */
+@Serializable
 data class OnlineReaderProgress(
     val page: Int,
     val totalPages: Int,
@@ -42,13 +44,18 @@ data class OnlineReaderProgress(
     val currentChapterIndex: Int,
 )
 
-internal val onlineProgressJson = Json { ignoreUnknownKeys = true; encodeDefaults = true }
+internal val onlineProgressJson = Json {
+    ignoreUnknownKeys = true
+    encodeDefaults = true
+}
 
 private fun onlineProgressKey(bookId: String) =
     stringPreferencesKey("xy_reader_online_progress_$bookId")
 
 fun decodeOnlineReaderProgress(raw: String?): OnlineReaderProgress? = raw?.let {
-    runCatching { onlineProgressJson.decodeFromString(OnlineReaderProgress.serializer(), it) }.getOrNull()
+    runCatching {
+        onlineProgressJson.decodeFromString<OnlineReaderProgress>(it)
+    }.getOrNull()
 }
 
 suspend fun readOnlineReaderProgress(data: DataStore<Preferences>, bookId: String): OnlineReaderProgress? =
@@ -115,7 +122,7 @@ class OnlineReaderRepository(
             )
             data.edit { prefs ->
                 prefs[onlineProgressKey(hostBookId)] =
-                    onlineProgressJson.encodeToString(OnlineReaderProgress.serializer(), progress)
+                    onlineProgressJson.encodeToString<OnlineReaderProgress>(progress)
             }
         }
         runCatching { app.bookshelfRepository.recordRead(bookshelfId) }

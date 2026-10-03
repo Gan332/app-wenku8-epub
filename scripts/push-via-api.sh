@@ -19,7 +19,8 @@ set -euo pipefail
 REPO="Gan332/app-wenku8-epub"
 GH="D:/SW/gh/gh.exe"
 BRANCH="main"
-PY="C:/Users/fish/.workbuddy-ai/binaries/python/versions/3.13.12/python.exe"
+# 本机预置的 Python 运行时（旧工作区路径已不可用）。
+PY="${PYTHON_BIN:-C:/Users/fish/.dsh/dsh-runtimes/dsh-primary-runtime/dependencies/python/python.exe}"
 # 本地「内容等价于远端 main」的提交：本次改动的 diff 基准
 LOCAL_BASE="${LOCAL_BASE:-9bce89f}"
 
