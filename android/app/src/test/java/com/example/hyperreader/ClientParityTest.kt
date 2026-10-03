@@ -67,21 +67,23 @@ class ClientParityTest {
 
     @Test
     fun hostsRotateOnBlockAndExhaustAfterThreeTries() {
-        assertEquals("https://www.wenku8.net", Wenku8Endpoint.publicBase())
-        assertTrue(Wenku8Endpoint.rotateHost())
-        assertEquals("https://www.wenku8.cc", Wenku8Endpoint.publicBase())
-        assertTrue(Wenku8Endpoint.rotateHost())
-        assertEquals("https://www.wenku8.com", Wenku8Endpoint.publicBase())
+        Wenku8Endpoint.resetHosts()
+        assertEquals("初始应为 wenku8.net", "https://www.wenku8.net", Wenku8Endpoint.publicBase())
+        assertTrue("第一次轮换应成功", Wenku8Endpoint.rotateHost())
+        assertEquals("第二次应换到 .cc", "https://www.wenku8.cc", Wenku8Endpoint.publicBase())
+        assertTrue("第二次轮换应成功", Wenku8Endpoint.rotateHost())
+        assertEquals("第三次应换到 .com", "https://www.wenku8.com", Wenku8Endpoint.publicBase())
         // 三个入口都试过：不再轮换（避免把全部镜像打进风控）
-        assertFalse(Wenku8Endpoint.rotateHost())
-        assertEquals("https://www.wenku8.com", Wenku8Endpoint.publicBase())
+        assertFalse("耗尽后不应再轮换", Wenku8Endpoint.rotateHost())
+        assertEquals("耗尽后保持 .com", "https://www.wenku8.com", Wenku8Endpoint.publicBase())
         // 重置回到默认入口
         Wenku8Endpoint.resetHosts()
-        assertEquals("https://www.wenku8.net", Wenku8Endpoint.publicBase())
+        assertEquals("重置后回到 .net", "https://www.wenku8.net", Wenku8Endpoint.publicBase())
     }
 
     @Test
     fun rewireKeepsPathAndQuery() {
+        Wenku8Endpoint.resetHosts()
         Wenku8Endpoint.rotateHost()
         val rewired = Wenku8Endpoint.rewire("https://www.wenku8.net/modules/article/articleinfo.php?id=2365")
         assertEquals("https://www.wenku8.cc/modules/article/articleinfo.php?id=2365", rewired)

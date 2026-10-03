@@ -47,6 +47,7 @@ object Wenku8Endpoint {
      * 换一个直连边缘入口重试；返回 false 表示已经没有未试过的入口。
      * 中继生效时不做轮换（中继端点由用户自己决定）。
      */
+    @Synchronized
     fun rotateHost(): Boolean {
         if (isRelayActive()) return false
         for (offset in 1..DIRECT_HOSTS.size) {
@@ -63,6 +64,7 @@ object Wenku8Endpoint {
     fun rewire(url: String): String = url.replaceFirst(HOST_PREFIX, publicBase())
 
     /** 恢复默认入口（App 启动时调用，避免上一次会话的轮换结果影响本次）。 */
+    @Synchronized
     fun resetHosts() {
         hostIndex = 0
         // 初始入口也算已试过一次，避免它被当成“新鲜的”再轮回去
