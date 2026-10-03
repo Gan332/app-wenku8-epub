@@ -76,7 +76,7 @@ class Wenku8HttpClient(private val cacheDirectory: File, sessionCookieJar: Cooki
             val request = Request.Builder()
                 .url(current)
                 .header("User-Agent", Wenku8NetProtocols.USER_AGENT)
-                .header("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.4")
+                .header("Accept-Language", Wenku8NetProtocols.ACCEPT_LANGUAGE)
                 .header("Accept", "text/html,application/xhtml+xml,image/*;q=0.8,*/*;q=0.5")
                 .apply { if (!referer.isNullOrBlank()) header("Referer", referer) }
                 .build()

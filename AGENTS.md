@@ -136,7 +136,9 @@ android/app/src/main/java/io/nightfish/lightnovelreader/api/   ← LNR 书源抽
 
 **协议**：HTTP/2 优先（ALPN 协商，回落 HTTP/1.1）、TLS 1.3 优先（回落 1.2），
 在 `core/Wenku8NetProtocols.kt` 显式声明并由 `NetProtocolsTest` 锁定。不要手加
-`Accept-Encoding: br`（OkHttp 只自动处理 gzip）；User-Agent 诚实标识，**不伪装浏览器**。
+`Accept-Encoding: br`（OkHttp 只自动处理 gzip）。**User-Agent 使用标准浏览器 UA**
+（与平台一致的 Android Chrome 形态）+ `Accept-Language`，让请求在 Cloudflare 侧呈常规客户端外观；
+但 UA **不用于**绕过任何访问控制（实测对 403 无效，见下），登录墙与验证页照旧按 §4.2 处理。
 
 **403 排查口径**（实测于 2026-10）：匿名公开页前置 Cloudflare，对部分网络会返回
 403「Attention Required」（约 5.5KB 拦截页）：

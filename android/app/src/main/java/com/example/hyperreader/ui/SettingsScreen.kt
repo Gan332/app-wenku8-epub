@@ -361,6 +361,16 @@ private fun NetworkSection(state: StudioUiState, viewModel: StudioViewModel) {
                         fontSize = UiDimens.captionSmall,
                         color = MiuixTheme.colorScheme.onSurface.copy(alpha = .7f),
                     )
+                    Text(
+                        "若公开页被 Cloudflare 拦截（提示“要求浏览器验证”），可在这里打开验证窗口，由你亲手完成官方验证；通过后窗口自动关闭，公开页即可恢复。",
+                        fontSize = UiDimens.captionSmall,
+                        color = MiuixTheme.colorScheme.onSurface.copy(alpha = .7f),
+                    )
+                    TextButton(
+                        text = "手动完成 Cloudflare 验证",
+                        onClick = { viewModel.openChallengeVerification(com.example.hyperreader.core.Wenku8Urls.sugoi(java.time.Year.now().value)) },
+                        modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
+                    )
                     TextButton(
                         text = "测试公开端点",
                         onClick = viewModel::testRelay,

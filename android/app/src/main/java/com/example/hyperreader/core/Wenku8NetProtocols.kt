@@ -17,8 +17,13 @@ import okhttp3.TlsVersion
  *    不需要我们做版本判断；
  * 3. **不要手加 `Accept-Encoding: br`**：OkHttp 只自动处理 gzip，声明 br 会拿到
  *    压不动的响应体（这是协议协商，不是压缩偏好）；
- * 4. **User-Agent 诚实标识**，不伪装成浏览器——既是对源站的尊重，也是长期最稳的选择
- *    （伪装随时被识别，且会让我们自己难以判断问题出在哪）。
+ * 4. **User-Agent 使用标准浏览器 UA**（平台一致的 Android Chrome 形态），让请求在
+ *    Cloudflare 侧看起来是常规客户端而不是脚本工具。
+ *
+ * 关于第 4 条的边界：UA 只影响“像什么客户端”，**不能**绕过任何访问控制——
+ * 实测补齐浏览器 UA / Referer / Accept-Language 对匿名公开页的 403 并无帮助（仍是 403），
+ * 登录墙、验证码、Cloudflare 验证页一律照旧按 AGENTS §4.2 处理，不解析、不重试绕过。
+ * 若站方按 UA 规则收紧，应回头改这一行并重测，而不是叠加更多伪装头。
  */
 object Wenku8NetProtocols {
     /** 协议顺序：HTTP/2 优先，HTTP/1.1 兜底。 */
@@ -32,6 +37,10 @@ object Wenku8NetProtocols {
             .build(),
     )
 
-    /** 诚实标识的 UA（不做浏览器伪装，见规则 4）。 */
-    const val USER_AGENT = "Wenku8EPUBStudio-Android/0.18"
+    /** 标准浏览器 UA（Android Chrome 形态，与 App 运行平台一致）。 */
+    const val USER_AGENT =
+        "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
+
+    /** 默认语言头，与 UA 配套（显式带，避免服务端按地区语种做差异处理时我们没声明）。 */
+    const val ACCEPT_LANGUAGE = "zh-CN,zh;q=0.9,en;q=0.6"
 }

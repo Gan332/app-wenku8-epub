@@ -123,6 +123,16 @@ class MainActivity : ComponentActivity() {
         if (path != null) studioViewModel.applyImportedFont(path)
     }
     private val loginLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { studioViewModel.refreshSession() }
+
+    /**
+     * Cloudflare 验证窗口（0.18.0）：用户在 WebView 里亲手完成官方交互。
+     *
+     * 通过（RESULT_OK）后重试失败的抓取；直接关闭则清掉待验证标记。
+     */
+    private val challengeLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == android.app.Activity.RESULT_OK) studioViewModel.onChallengeVerified()
+        else studioViewModel.dismissChallengeVerification()
+    }
     private val exportConfigLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         if (uri != null) studioViewModel.exportConfigTo(uri)
     }
@@ -199,6 +209,13 @@ private fun StudioApp(
     }
     // 根消息走 Snackbar（可滑走、自动消失），替代源站页的内联错误卡
     val snackbarHostState = remember { SnackbarHostState() }
+
+    // Cloudflare 拦截时自动弹验证窗口（用户亲手完成交互，通过后自动关闭并重试）
+    LaunchedEffect(state.challengeUrl) {
+        val url = state.challengeUrl ?: return@LaunchedEffect
+        challengeLauncher.launch(com.example.hyperreader.auth.CfChallengeActivity.intent(context, url))
+    }
+
     LaunchedEffect(state.message) {
         val msg = state.message
         if (msg != null) {

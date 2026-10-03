@@ -39,12 +39,18 @@ class NetProtocolsTest {
     }
 
     @Test
-    fun userAgentIsHonestAndVersioned() {
-        // 不伪装成浏览器：真实标识长期最稳，也便于排查
+    fun userAgentUsesStandardBrowserForm() {
+        // 标准浏览器 UA（Android Chrome 形态）：在 Cloudflare 侧呈常规客户端外观
         val ua = Wenku8NetProtocols.USER_AGENT
-        assertTrue(ua.startsWith("Wenku8EPUBStudio-Android/"))
-        assertTrue(ua.none { it == ' ' }) // 无空格，避免 Header 拼接歧义
-        assertTrue(!ua.contains("Mozilla"))
-        assertTrue(!ua.contains("Chrome"))
+        assertTrue(ua.startsWith("Mozilla/5.0"))
+        assertTrue(ua.contains("AppleWebKit/537.36"))
+        assertTrue(ua.contains("Chrome/131."))
+        assertTrue(ua.contains("Mobile Safari/537.36"))
+        assertTrue(ua.none { it == '\n' || it == '\r' })
+    }
+
+    @Test
+    fun acceptLanguageIsDeclaredAndPairedWithTheUserAgent() {
+        assertTrue(Wenku8NetProtocols.ACCEPT_LANGUAGE.startsWith("zh-CN"))
     }
 }

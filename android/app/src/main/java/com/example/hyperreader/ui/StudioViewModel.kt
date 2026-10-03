@@ -175,6 +175,8 @@ data class StudioUiState(
     val exploreExpanded: Boolean = false,
     /** 展开页对应的榜单；刷新时按它重新抓取。 */
     val activeExplorePage: ExplorePage? = null,
+    /** 0.18.0：待完成的 Cloudflare 验证地址；非空时 UI 自动弹验证窗口。 */
+    val challengeUrl: String? = null,
     val jobs: List<ExportJob> = emptyList(),
     val searchQuery: String = "",
     val searchField: SearchField = SearchField.TITLE,
@@ -398,6 +400,29 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
      * 补全上限 [EXPLORE_AUTO_FETCH_LIMIT]：全局限流是 1 秒/请求，一次榜单全抓会让用户
      * 干等；超过上限的部分留到用户手动刷新或进入详情时再取。
      */
+    /**
+     * 0.18.0：Cloudflare 验证窗口。
+     *
+     * [challengeUrl] 非空时 UI 自动打开验证窗口（用户在 WebView 里亲手完成交互）；
+     * [onChallengeVerified] 在窗口关闭且通过后重试失败的请求。
+     */
+    fun openChallengeVerification(url: String) {
+        mutable.update { it.copy(challengeUrl = url) }
+    }
+
+    fun dismissChallengeVerification() = mutable.update { it.copy(challengeUrl = null) }
+
+    fun onChallengeVerified() {
+        val current = state.value
+        mutable.update { it.copy(challengeUrl = null, message = "验证完成，正在重试…") }
+        current.activeExplorePage?.let { page -> loadExplore(page) }
+        current.exploreDetailId?.let { id -> loadExploreDetail(id, current.exploreDetailSeed) }
+    }
+
+    /** 判断错误是否为 Cloudflare 拦截页（解析层已把挑战页转成该错误码）。 */
+    private fun isChallenge(error: Throwable): Boolean =
+        (error as? Wenku8Exception)?.code == "UPSTREAM_CHALLENGE"
+
     /** 0.18.0：进入/离开独立搜索页（探索页 TopBar 搜索入口）。 */
     fun openSearchPage() = mutable.update { it.copy(searchPageOpen = true) }
     fun closeSearchPage() = mutable.update { it.copy(searchPageOpen = false) }
@@ -431,6 +456,8 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
                 }
             }.getOrElse { error ->
                 mutable.update { it.copy(exploreBusy = false, exploreMessage = error.message ?: "加载失败。") }
+                // Cloudflare 拦截：弹验证窗口让用户本人完成交互，通过后自动重试（0.18.0）
+                if (isChallenge(error)) mutable.update { it.copy(challengeUrl = page.url) }
                 return@launch
             }
             if (ids.isEmpty()) {
