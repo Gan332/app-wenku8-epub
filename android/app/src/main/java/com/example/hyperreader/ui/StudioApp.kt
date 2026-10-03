@@ -130,8 +130,9 @@ class MainActivity : ComponentActivity() {
      * 通过（RESULT_OK）后重试失败的抓取；直接关闭则清掉待验证标记。
      */
     private val challengeLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        // 通过（RESULT_OK）→ 重试失败请求；取消 → 只刷新验证状态读数
         if (result.resultCode == android.app.Activity.RESULT_OK) studioViewModel.onChallengeVerified()
-        else studioViewModel.dismissChallengeVerification()
+        else studioViewModel.refreshClearanceState()
     }
     private val exportConfigLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         if (uri != null) studioViewModel.exportConfigTo(uri)
