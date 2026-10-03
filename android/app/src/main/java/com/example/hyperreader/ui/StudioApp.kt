@@ -98,6 +98,7 @@ import com.example.hyperreader.model.ExportJob
 import com.example.hyperreader.model.JobStatus
 import com.example.hyperreader.model.SearchField
 import com.example.hyperreader.ui.ExportStep
+import com.example.hyperreader.ui.UiDimens
 import com.example.hyperreader.ui.StudioTab
 import com.example.hyperreader.ui.StudioUiState
 import com.example.hyperreader.ui.StudioViewModel
@@ -208,6 +209,8 @@ private fun StudioApp(
                     // 全屏覆盖页优先于 tab：探索详情 > 导出记录 > 导出向导 > 主导航
                     state.exploreDetailId != null -> "书籍详情"
                     state.showJobHistory -> "导出记录"
+                    state.exploreExpanded -> state.activeExplorePage?.title ?: "榜单"
+                    state.searchPageOpen -> "搜索"
                     state.exportStep == ExportStep.RESOLVING -> "解析目录"
                     state.exportStep == ExportStep.CHAPTERS -> "选择章节"
                     state.exportStep == ExportStep.PACKAGING -> "导出设置"
@@ -219,8 +222,8 @@ private fun StudioApp(
             )
         },
         bottomBar = {
-            // 全屏覆盖页（探索详情、导出记录）不显示底部导航，避免误触 tab 丢掉上下文
-            if (state.exploreDetailId == null && !state.showJobHistory) {
+            // 全屏覆盖页（探索详情、导出记录、榜单展开、搜索）不显示底部导航
+            if (state.exploreDetailId == null && !state.showJobHistory && !state.exploreExpanded && !state.searchPageOpen) {
                 NavigationBar {
                     NavigationBarItem(selected = state.tab == StudioTab.BOOKSHELF, onClick = { viewModel.setTab(StudioTab.BOOKSHELF) }, icon = MiuixIcons.Recent, label = "书架")
                     NavigationBarItem(selected = state.tab == StudioTab.EXPLORE, onClick = { viewModel.setTab(StudioTab.EXPLORE) }, icon = MiuixIcons.Search, label = "探索")
@@ -231,9 +234,30 @@ private fun StudioApp(
         snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).padding(horizontal = 18.dp)) {
-            // 探索详情优先接管整屏：与导出记录、向导、tab 内容互斥
-            if (state.exploreDetailId != null) {
-                ExploreDetailScreen(
+            // 全屏覆盖页统一转场（0.18.0）：探索详情 / 导出记录 / 榜单展开 / 搜索 / 导出向导 / tab 内容
+            // 五类全屏页互斥，用同一个 AnimatedContent 承载；时长由 Motion 按系统「移除动画」缩放。
+            val motionFast = Motion.duration(UiDimens.MOTION_FAST)
+            val motionBase = Motion.duration(UiDimens.MOTION_MEDIUM)
+            val motionSlow = Motion.duration(UiDimens.MOTION_SLOW)
+            val overlayKey = when {
+                state.exploreDetailId != null -> "detail"
+                state.showJobHistory -> "history"
+                state.exploreExpanded -> "expanded"
+                state.searchPageOpen -> "search"
+                state.exportStep != null -> "export"
+                else -> "tabs"
+            }
+            AnimatedContent(
+                targetState = overlayKey,
+                transitionSpec = {
+                    (fadeIn(tween(motionBase, easing = DecelerateEasing())) +
+                        slideInHorizontally(tween(motionSlow, easing = DecelerateEasing())) { it / 8 })
+                        .togetherWith(fadeOut(tween(motionFast, easing = DecelerateEasing())))
+                },
+                label = "overlayTransition",
+            ) { overlay ->
+                when (overlay) {
+                    "detail" -> ExploreDetailScreen(
                     seed = state.exploreDetailSeed,
                     detail = state.exploreDetail,
                     loading = state.exploreDetailLoading,
@@ -256,6 +280,19 @@ private fun StudioApp(
                             )
                         }
                     },
+                    // 目录里点某一章：直接以该章为起始章在线读（0.18.0）
+                    onReadChapter = { chapter ->
+                        val book = state.exploreDetail?.book
+                        context.startActivity(
+                            onlineReaderIntent(
+                                context = context,
+                                bookId = book?.id?.orEmpty().orEmpty().ifBlank { chapter.id.filter(Char::isDigit) },
+                                title = book?.title.orEmpty(),
+                                author = book?.author.orEmpty(),
+                                startChapterId = chapter.id,
+                            )
+                        )
+                    },
                     onSameAuthor = { state.exploreDetail?.book?.id?.let(viewModel::expandAuthor) },
                     onTagClick = { tag ->
                         viewModel.setSearchField(SearchField.TITLE)
@@ -264,29 +301,23 @@ private fun StudioApp(
                         viewModel.searchLocal()
                     },
                 )
-                return@Column
-            }
-            if (state.showJobHistory) {
-                JobHistoryScreen(state, viewModel)
-                return@Column
-            }
-            if (state.exportStep != null) {
-                ExportWizardScreen(state, viewModel)
-                return@Column
-            }
-            // 页面转场：tab 切换共用一套（横向滑入 + 淡入，MiuiX 缓动）
-        val pageKey = state.tab.name.lowercase()
-        AnimatedContent(
-            targetState = pageKey,
-            transitionSpec = {
-                val direction = if (targetState > initialState) 1 else -1
-                (fadeIn(tween(220, easing = DecelerateEasing())) +
-                    slideInHorizontally(tween(300, easing = DecelerateEasing())) { direction * it / 6 })
-                    .togetherWith(fadeOut(tween(140, easing = DecelerateEasing())))
-            },
-            label = "pageTransition",
-        ) { _ ->
-            when {
+                    "history" -> JobHistoryScreen(state, viewModel)
+                    "expanded" -> ExploreExpandedScreen(state, viewModel)
+                    "search" -> SearchScreen(state = state, viewModel = viewModel, onLogin = onLogin, onClose = viewModel::closeSearchPage)
+                    "export" -> ExportWizardScreen(state, viewModel)
+                    else -> {
+                        val pageKey = state.tab.name.lowercase()
+                        AnimatedContent(
+                            targetState = pageKey,
+                            transitionSpec = {
+                                val direction = if (targetState > initialState) 1 else -1
+                                (fadeIn(tween(motionBase, easing = DecelerateEasing())) +
+                                    slideInHorizontally(tween(motionSlow, easing = DecelerateEasing())) { direction * it / 6 })
+                                    .togetherWith(fadeOut(tween(motionFast, easing = DecelerateEasing())))
+                            },
+                            label = "pageTransition",
+                        ) { _ ->
+                            when {
                 state.tab == StudioTab.BOOKSHELF -> BookshelfScreen(
                     state = state,
                     viewModel = viewModel,
@@ -311,10 +342,16 @@ private fun StudioApp(
                     },
                     onOpenDetail = { entry -> viewModel.openShelfBookDetail(entry) },
                 )
-                state.tab == StudioTab.EXPLORE -> ExploreScreen(state, viewModel, onLogin) {
-                    viewModel.setTab(StudioTab.SETTINGS)
-                    viewModel.openSettingsSection(SettingsSection.CATALOG)
-                }
+                state.tab == StudioTab.EXPLORE -> ExploreScreen(
+                    state = state,
+                    viewModel = viewModel,
+                    onLogin = onLogin,
+                    onGoToCatalog = {
+                        viewModel.setTab(StudioTab.SETTINGS)
+                        viewModel.openSettingsSection(SettingsSection.CATALOG)
+                    },
+                    onOpenSearch = viewModel::openSearchPage,
+                )
                 state.tab == StudioTab.SETTINGS -> SettingsScreen(
                     viewModel = viewModel,
                     onImportEpub = onImportEpub,
@@ -322,8 +359,11 @@ private fun StudioApp(
                     onExportConfig = onExportConfig,
                     onImportConfig = onImportConfig,
                 )
+                            }
+                        }
+                    }
+                }
             }
-        }
 
             // 导出向导的面包屑：只在向导内部出现，不占主导航的位置
             if (state.exportStep != null) {
@@ -367,15 +407,15 @@ private fun ExportWizardScreen(state: StudioUiState, viewModel: StudioViewModel)
 private fun ResolvingScreen(state: StudioUiState, viewModel: StudioViewModel) {
     Column(
         Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(top = 18.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
+        verticalArrangement = Arrangement.spacedBy(UiDimens.spaceM),
     ) {
         TextButton(text = "‹ 关闭", onClick = viewModel::closeExport)
-        Text("正在读取目录…", fontSize = 24.sp, fontWeight = FontWeight.Bold)
+        Text("正在读取目录…", fontSize = UiDimens.title, fontWeight = FontWeight.Bold)
         state.detailError?.let { error ->
             Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(16.dp)) {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceM)) {
                     Text("目录读取失败", fontWeight = FontWeight.Bold)
-                    Text(error, fontSize = 14.sp, color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.72f))
+                    Text(error, fontSize = UiDimens.body, color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.72f))
                     Button(
                         onClick = viewModel::retryResolve,
                         enabled = !state.busy,
@@ -387,11 +427,11 @@ private fun ResolvingScreen(state: StudioUiState, viewModel: StudioViewModel) {
         if (state.detailError == null) {
             Row(
                 Modifier.fillMaxWidth().padding(vertical = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceM),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 CircularProgressIndicator(size = 22.dp)
-                Text("正在获取章节列表，请稍候。", fontSize = 14.sp, color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.75f))
+                Text("正在获取章节列表，请稍候。", fontSize = UiDimens.body, color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.75f))
             }
         }
     }
@@ -404,7 +444,7 @@ private fun ResolvingScreen(state: StudioUiState, viewModel: StudioViewModel) {
  */
 @Composable
 private fun JobHistoryScreen(state: StudioUiState, viewModel: StudioViewModel) {
-    Column(Modifier.fillMaxWidth().padding(top = 18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    Column(Modifier.fillMaxWidth().padding(top = 18.dp), verticalArrangement = Arrangement.spacedBy(UiDimens.spaceM)) {
         TextButton(text = "‹ 返回", onClick = { viewModel.setShowJobHistory(false) })
         HistoryScreen(state.jobs, viewModel)
     }
@@ -417,7 +457,7 @@ private fun ChaptersScreen(state: StudioUiState, viewModel: StudioViewModel) {
     val visible = remember(state.search, index) {
         index.chapters.filter { state.search.isBlank() || it.title.contains(state.search, true) || it.volume.contains(state.search, true) }
     }
-    Column(Modifier.fillMaxWidth().padding(top = 14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    Column(Modifier.fillMaxWidth().padding(top = 14.dp), verticalArrangement = Arrangement.spacedBy(UiDimens.spaceM)) {
         TextButton(text = "‹ 关闭向导", onClick = viewModel::closeExport)
         BookHeader(book.title, book.author, book.category, index.chapters.size, state.selectedIds.size)
         TextField(value = state.search, onValueChange = viewModel::setSearch, label = "搜索章节标题", useLabelAsPlaceholder = true, modifier = Modifier.fillMaxWidth())
@@ -426,8 +466,8 @@ private fun ChaptersScreen(state: StudioUiState, viewModel: StudioViewModel) {
             Spacer(Modifier.width(8.dp))
             TextButton(text = "清空", onClick = viewModel::clearSelection)
         }
-        Text("已选择 ${state.selectedIds.size} / ${index.chapters.size} 章", color = MiuixTheme.colorScheme.primary, fontSize = 13.sp)
-        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text("已选择 ${state.selectedIds.size} / ${index.chapters.size} 章", color = MiuixTheme.colorScheme.primary, fontSize = UiDimens.caption)
+        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXS)) {
             items(visible, key = { it.id }) { chapter -> ChapterRow(chapter, chapter.id in state.selectedIds) { viewModel.toggleChapter(chapter.id) } }
         }
         Button(onClick = viewModel::toExport, enabled = state.selectedIds.isNotEmpty(), modifier = Modifier.fillMaxWidth()) { Text("继续导出设置") }
@@ -440,20 +480,20 @@ private fun ExportScreen(state: StudioUiState, viewModel: StudioViewModel) {
     val selected = state.index?.chapters?.count { it.id in state.selectedIds } ?: 0
     Column(
         Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(top = 18.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
+        verticalArrangement = Arrangement.spacedBy(UiDimens.spaceM),
     ) {
         TextButton(text = "‹ 返回章节", onClick = viewModel::backToChapters)
         BookHeader(book.title, book.author, book.category, selected, selected)
         Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(16.dp)) {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceM)) {
                 Text("导出摘要", fontWeight = FontWeight.Bold)
-                Text("章节：$selected", fontSize = 15.sp)
-                Text("格式：EPUB 3 + NCX", fontSize = 15.sp)
-                Text("保存位置：Download/EPUB", fontSize = 15.sp)
+                Text("章节：$selected", fontSize = UiDimens.bodyStrong)
+                Text("格式：EPUB 3 + NCX", fontSize = UiDimens.bodyStrong)
+                Text("保存位置：Download/EPUB", fontSize = UiDimens.bodyStrong)
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text("包含书籍封面", fontWeight = FontWeight.Bold)
-                        Text("封面下载失败不会阻止正文导出", fontSize = 12.sp, color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.72f))
+                        Text("封面下载失败不会阻止正文导出", fontSize = UiDimens.captionSmall, color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.72f))
                     }
                     Switch(checked = state.includeCover, onCheckedChange = viewModel::setCover)
                 }
@@ -467,7 +507,7 @@ private fun ExportScreen(state: StudioUiState, viewModel: StudioViewModel) {
 private fun ProgressScreen(state: StudioUiState, viewModel: StudioViewModel) {
     val job = state.jobs.firstOrNull { it.id == state.activeJobId } ?: state.jobs.firstOrNull { it.status == JobStatus.running }
     if (job == null) {
-        Column(Modifier.fillMaxWidth().padding(top = 18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column(Modifier.fillMaxWidth().padding(top = 18.dp), verticalArrangement = Arrangement.spacedBy(UiDimens.spaceM)) {
             TextButton(text = "‹ 关闭向导", onClick = viewModel::closeExport)
             Text("任务状态已更新。", color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f))
             TextButton(text = "查看导出记录", onClick = { viewModel.closeExport(); viewModel.setShowJobHistory(true) })
@@ -483,42 +523,42 @@ private fun ProgressContent(job: ExportJob, viewModel: StudioViewModel) {
     val progress = job.progress.percent / 100f
     Column(
         Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(top = 18.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
+        verticalArrangement = Arrangement.spacedBy(UiDimens.spaceM),
     ) {
         Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(18.dp)) {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(job.book.title, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+            Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceM)) {
+                Text(job.book.title, fontSize = UiDimens.title, fontWeight = FontWeight.Bold)
                 Text(job.progress.message, color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.72f))
                 LinearProgressIndicator(progress = progress, modifier = Modifier.fillMaxWidth())
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(phaseLabel(job.progress.phase), fontSize = 13.sp, fontWeight = FontWeight.Bold, color = MiuixTheme.colorScheme.primary)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
+                    Text(phaseLabel(job.progress.phase), fontSize = UiDimens.caption, fontWeight = FontWeight.Bold, color = MiuixTheme.colorScheme.primary)
                     if (job.progress.etaSeconds >= 0) {
-                        Text("剩余约 ${formatEta(job.progress.etaSeconds)}", fontSize = 13.sp, color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                        Text("剩余约 ${formatEta(job.progress.etaSeconds)}", fontSize = UiDimens.caption, color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f))
                     }
                 }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text("${job.progress.percent}%", fontWeight = FontWeight.Bold, color = MiuixTheme.colorScheme.primary)
-                    Text("章节 ${job.progress.completed}/${job.progress.total}", fontSize = 13.sp)
+                    Text("章节 ${job.progress.completed}/${job.progress.total}", fontSize = UiDimens.caption)
                 }
                 Text(
                     if (job.progress.imageTotal > 0) "插图 ${job.progress.imageCompleted}/${job.progress.imageTotal} 张" else "插图 ${job.progress.imageCompleted} 张",
-                    fontSize = 13.sp,
+                    fontSize = UiDimens.caption,
                 )
                 if (job.progress.cacheHits > 0) {
-                    Text("缓存命中 ${job.progress.cacheHits} 项（0 请求）", fontSize = 13.sp, color = MiuixTheme.colorScheme.primary)
+                    Text("缓存命中 ${job.progress.cacheHits} 项（0 请求）", fontSize = UiDimens.caption, color = MiuixTheme.colorScheme.primary)
                 }
-                if (job.progress.currentTitle.isNotBlank()) Text("当前：${job.progress.currentTitle}", fontSize = 13.sp, maxLines = 2)
+                if (job.progress.currentTitle.isNotBlank()) Text("当前：${job.progress.currentTitle}", fontSize = UiDimens.caption, maxLines = 2)
             }
         }
         if (job.warnings.isNotEmpty()) TextButton(text = "查看 ${job.warnings.size} 条警告", onClick = { showWarnings = true }, modifier = Modifier.fillMaxWidth())
         when (job.status) {
             JobStatus.queued, JobStatus.running -> Button(onClick = { viewModel.cancel(job.id) }, modifier = Modifier.fillMaxWidth()) { Text("取消任务") }
             JobStatus.completed -> {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceM)) {
                     Button(onClick = { viewModel.save(job.id) }, modifier = Modifier.weight(1f)) { Icon(MiuixIcons.Download, "保存") }
                     Button(onClick = { viewModel.share(job.id) }, modifier = Modifier.weight(1f)) { Icon(MiuixIcons.Share, "分享") }
                 }
-                Text("已保存到 Download/EPUB，可随时再次保存。", color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.72f), fontSize = 13.sp)
+                Text("已保存到 Download/EPUB，可随时再次保存。", color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.72f), fontSize = UiDimens.caption)
             }
             JobStatus.failed -> MessageCard(job.error?.message ?: "任务失败")
             JobStatus.canceled -> MessageCard("任务已取消。")
@@ -526,9 +566,9 @@ private fun ProgressContent(job: ExportJob, viewModel: StudioViewModel) {
     }
     if (showWarnings) {
         OverlayDialog(show = true, title = "导出警告", summary = "以下项目被跳过，但 EPUB 仍会继续生成。", onDismissRequest = { showWarnings = false }) {
-            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                LazyColumn(Modifier.height(260.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    items(job.warnings) { warning -> Text("• $warning", fontSize = 14.sp) }
+            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
+                LazyColumn(Modifier.height(260.dp), verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
+                    items(job.warnings) { warning -> Text("• $warning", fontSize = UiDimens.body) }
                 }
                 Button(onClick = { showWarnings = false }, modifier = Modifier.fillMaxWidth()) { Text("知道了") }
             }
@@ -540,15 +580,15 @@ private fun ProgressContent(job: ExportJob, viewModel: StudioViewModel) {
 private fun HistoryScreen(jobs: List<ExportJob>, viewModel: StudioViewModel) {
     val context = LocalContext.current
     if (jobs.isEmpty()) { Text("还没有导出任务。", Modifier.padding(top = 20.dp), color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.72f)); return }
-    LazyColumn(Modifier.fillMaxWidth().padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    LazyColumn(Modifier.fillMaxWidth().padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(UiDimens.spaceM)) {
         items(jobs, key = { it.id }) { job ->
             Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(16.dp)) {
                 Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
                     Text(job.book.title, fontWeight = FontWeight.Bold, maxLines = 2)
-                    Text(statusText(job), color = MiuixTheme.colorScheme.primary, fontSize = 13.sp)
-                    Text("${job.chapterCount} 章 · ${job.progress.percent}% · ${job.createdAt.take(10)}", fontSize = 12.sp, color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.72f))
+                    Text(statusText(job), color = MiuixTheme.colorScheme.primary, fontSize = UiDimens.caption)
+                    Text("${job.chapterCount} 章 · ${job.progress.percent}% · ${job.createdAt.take(10)}", fontSize = UiDimens.captionSmall, color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.72f))
                     if (job.status == JobStatus.completed) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
                             TextButton(text = "保存", onClick = { viewModel.save(job.id) })
                             TextButton(text = "分享", onClick = { viewModel.share(job.id) })
                             job.output?.let { output ->
@@ -566,9 +606,9 @@ private fun HistoryScreen(jobs: List<ExportJob>, viewModel: StudioViewModel) {
 private fun BookHeader(title: String, author: String, category: String, total: Int, selected: Int) {
     Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(16.dp)) {
         Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            Text(category, color = MiuixTheme.colorScheme.primary, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-            Text(title, fontSize = 21.sp, fontWeight = FontWeight.Bold, maxLines = 2)
-            Text("$author · $total 章 · 已选 $selected", color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.72f), fontSize = 13.sp)
+            Text(category, color = MiuixTheme.colorScheme.primary, fontSize = UiDimens.captionSmall, fontWeight = FontWeight.Bold)
+            Text(title, fontSize = UiDimens.title, fontWeight = FontWeight.Bold, maxLines = 2)
+            Text("$author · $total 章 · 已选 $selected", color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.72f), fontSize = UiDimens.caption)
         }
     }
 }
@@ -583,8 +623,8 @@ private fun ChapterRow(chapter: Chapter, selected: Boolean, onToggle: () -> Unit
                 onClick = onToggle,
             )
             Column(Modifier.weight(1f).padding(vertical = 6.dp)) {
-                Text(chapter.title, maxLines = 2, fontSize = 15.sp)
-                Text(chapter.volume + if (chapter.isIllustration) " · 插图章节" else "", color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.72f), fontSize = 11.sp)
+                Text(chapter.title, maxLines = 2, fontSize = UiDimens.bodyStrong)
+                Text(chapter.volume + if (chapter.isIllustration) " · 插图章节" else "", color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.72f), fontSize = UiDimens.captionSmall)
             }
         }
     }
@@ -592,7 +632,7 @@ private fun ChapterRow(chapter: Chapter, selected: Boolean, onToggle: () -> Unit
 
 @Composable
 internal fun MessageCard(message: String) {
-    Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(14.dp)) { Text(message, color = MiuixTheme.colorScheme.error, fontSize = 14.sp) }
+    Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(14.dp)) { Text(message, color = MiuixTheme.colorScheme.error, fontSize = UiDimens.body) }
 }
 
 private fun statusText(job: ExportJob): String = when (job.status) {

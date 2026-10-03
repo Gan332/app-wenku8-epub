@@ -46,7 +46,6 @@ import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
-private val ROW_HEIGHT = 48.dp
 
 private data class SettingsEntry(
     val section: SettingsSection,
@@ -103,20 +102,20 @@ private fun SettingsOverview(state: StudioUiState, viewModel: StudioViewModel) {
     LazyColumn(
         modifier = Modifier.fillMaxWidth(),
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS),
     ) {
-        item { Text("设置", fontSize = 25.sp, fontWeight = FontWeight.Bold) }
+        item { Text("设置", fontSize = UiDimens.display, fontWeight = FontWeight.Bold) }
         items(SETTINGS_ENTRIES) { entry ->
             Card(
                 modifier = Modifier.fillMaxWidth().clickable { viewModel.openSettingsSection(entry.section) },
                 insideMargin = PaddingValues(14.dp),
             ) {
-                Row(Modifier.fillMaxWidth().heightIn(min = ROW_HEIGHT), verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
-                        Text(entry.title, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                        Text(entry.summary, fontSize = 12.sp, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .7f))
+                        Text(entry.title, fontWeight = FontWeight.Bold, fontSize = UiDimens.section)
+                        Text(entry.summary, fontSize = UiDimens.captionSmall, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .7f))
                     }
-                    Text("›", color = MiuixTheme.colorScheme.onSurface.copy(alpha = .5f), fontSize = 20.sp)
+                    Text("›", color = MiuixTheme.colorScheme.onSurface.copy(alpha = .5f), fontSize = UiDimens.title)
                 }
             }
             HorizontalDivider(Modifier.fillMaxWidth())
@@ -127,14 +126,14 @@ private fun SettingsOverview(state: StudioUiState, viewModel: StudioViewModel) {
                 initialValue = com.example.hyperreader.settings.EpubEngine.CLASSIC,
             )
             Card(modifier = Modifier.fillMaxWidth(), insideMargin = PaddingValues(14.dp)) {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("EPUB 导出引擎", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
+                    Text("EPUB 导出引擎", fontWeight = FontWeight.Bold, fontSize = UiDimens.section)
                     Text(
                         "只影响之后创建的导出任务；已导出的文件不受影响。",
-                        fontSize = 12.sp,
+                        fontSize = UiDimens.captionSmall,
                         color = MiuixTheme.colorScheme.onSurface.copy(alpha = .7f),
                     )
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
                         com.example.hyperreader.settings.EpubEngine.entries.forEach { option ->
                             TextButton(
                                 text = (if (option == engine) "✓ " else "") + option.label,
@@ -142,7 +141,7 @@ private fun SettingsOverview(state: StudioUiState, viewModel: StudioViewModel) {
                             )
                         }
                     }
-                    Text(engine.summary, fontSize = 12.sp, color = MiuixTheme.colorScheme.primary)
+                    Text(engine.summary, fontSize = UiDimens.captionSmall, color = MiuixTheme.colorScheme.primary)
                 }
             }
         }
@@ -152,12 +151,12 @@ private fun SettingsOverview(state: StudioUiState, viewModel: StudioViewModel) {
                 modifier = Modifier.fillMaxWidth().clickable { viewModel.setShowJobHistory(true) },
                 insideMargin = PaddingValues(14.dp),
             ) {
-                Row(Modifier.fillMaxWidth().heightIn(min = ROW_HEIGHT), verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
-                        Text("导出记录", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                        Text("历史导出任务，可保存或分享已生成的 EPUB。", fontSize = 12.sp, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .7f))
+                        Text("导出记录", fontWeight = FontWeight.Bold, fontSize = UiDimens.section)
+                        Text("历史导出任务，可保存或分享已生成的 EPUB。", fontSize = UiDimens.captionSmall, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .7f))
                     }
-                    Text("›", color = MiuixTheme.colorScheme.onSurface.copy(alpha = .5f), fontSize = 20.sp)
+                    Text("›", color = MiuixTheme.colorScheme.onSurface.copy(alpha = .5f), fontSize = UiDimens.title)
                 }
             }
         }
@@ -185,16 +184,16 @@ private fun RelaySettings(viewModel: StudioViewModel) {
         else -> "端点已保存，开关关闭中；开启后公开页走中继"
     }
     Card(modifier = Modifier.fillMaxWidth(), insideMargin = PaddingValues(14.dp)) {
-        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
             Row(
-                modifier = Modifier.fillMaxWidth().heightIn(min = ROW_HEIGHT),
+                modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(Modifier.weight(1f)) {
-                    Text("第三方中继（仅公开页）", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Text("第三方中继（仅公开页）", fontWeight = FontWeight.Bold, fontSize = UiDimens.section)
                     Text(
                         "书目索引、公开榜单与封面改走中继；登录与搜索始终直连，不发送任何 Cookie。",
-                        fontSize = 12.sp,
+                        fontSize = UiDimens.captionSmall,
                         color = MiuixTheme.colorScheme.onSurface.copy(alpha = .7f),
                     )
                 }
@@ -210,15 +209,15 @@ private fun RelaySettings(viewModel: StudioViewModel) {
                 useLabelAsPlaceholder = true,
                 modifier = Modifier.fillMaxWidth(),
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
                 TextButton(text = "保存端点", onClick = { viewModel.setRelayBase(editing) })
                 if (editing.isNotBlank()) TextButton(text = "清除", onClick = { editing = ""; viewModel.setRelayBase("") })
             }
-            Text(status, fontSize = 12.sp, color = MiuixTheme.colorScheme.primary)
+            Text(status, fontSize = UiDimens.captionSmall, color = MiuixTheme.colorScheme.primary)
             Text(
                 "上游声明：该中继服务由mewx.org 提供，与 wenku8 无关；仅供海外用户使用，" +
                     "可能滞后网站 24 小时以上；请勿在中国大陆使用。本项目与 MewX 无隶属关系，非官方支持。",
-                fontSize = 12.sp,
+                fontSize = UiDimens.captionSmall,
                 color = MiuixTheme.colorScheme.onSurface.copy(alpha = .7f),
             )
         }
@@ -231,7 +230,7 @@ private fun AppearanceSection(viewModel: StudioViewModel) {
     SettingsScaffold("主题与外观", viewModel::backSettings, listOf(
         { SectionTitle("配色模式") },
         {
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
                 AppThemeMode.entries.forEach { mode ->
                     TextButton(
                         text = when (mode) { AppThemeMode.SYSTEM -> "系统"; AppThemeMode.LIGHT -> "浅色"; AppThemeMode.DARK -> "深色"; AppThemeMode.MONET -> "动态色" },
@@ -242,10 +241,10 @@ private fun AppearanceSection(viewModel: StudioViewModel) {
         },
         {
             Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(14.dp)) {
-                Row(Modifier.fillMaxWidth().heightIn(min = ROW_HEIGHT), verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text("使用系统动态色", fontWeight = FontWeight.Bold)
-                        Text("关闭后使用固定 MiuiX 配色", fontSize = 12.sp, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f))
+                        Text("关闭后使用固定 MiuiX 配色", fontSize = UiDimens.captionSmall, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f))
                     }
                     Switch(checked = theme.useDynamicColor, onCheckedChange = viewModel::setDynamicColor)
                 }
@@ -253,7 +252,7 @@ private fun AppearanceSection(viewModel: StudioViewModel) {
         },
         { SectionTitle("强调色") },
         {
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceM)) {
                 listOf(0xFFA34B2F.toInt(), 0xFF2D6A4F.toInt(), 0xFF2563EB.toInt(), 0xFF7C3AED.toInt(), 0xFF111827.toInt()).forEach { color ->
                     Box(Modifier.size(34.dp).background(Color(color)).clickable { viewModel.setAccentColor(color) })
                 }
@@ -277,7 +276,7 @@ private fun ReaderSection(state: StudioUiState, viewModel: StudioViewModel, onIm
     SettingsScaffold("阅读器设置", viewModel::backSettings, listOf(
         { SectionTitle("背景") },
         {
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
                 items(ReaderBackground.entries.toList()) { background ->
                     TextButton(
                         text = when (background) {
@@ -305,7 +304,7 @@ private fun ReaderSection(state: StudioUiState, viewModel: StudioViewModel, onIm
         { Slider(settings.horizontalPaddingDp.toFloat(), { viewModel.setReaderPadding(it.toInt()) }, valueRange = 0f..48f, steps = 47) },
         { SectionTitle("翻页与显示") },
         {
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
                 TextButton(
                     text = if (settings.pageTurnMode == ReaderPageTurnMode.HORIZONTAL) "左右章节" else "上下滚动",
                     onClick = {
@@ -326,12 +325,12 @@ private fun ReaderSection(state: StudioUiState, viewModel: StudioViewModel, onIm
         {
             Text(
                 text = settings.fontUri?.let { "当前：${it.substringAfterLast('/')}" } ?: "当前：MiSans（默认）",
-                fontSize = 13.sp,
+                fontSize = UiDimens.caption,
                 color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f),
             )
         },
         {
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
                 TextButton(text = "导入字体", onClick = onImportFont, modifier = Modifier.weight(1f))
                 TextButton(text = "恢复默认", onClick = viewModel::resetReaderFont, modifier = Modifier.weight(1f))
             }
@@ -347,10 +346,10 @@ private fun CatalogSection(state: StudioUiState, viewModel: StudioViewModel, onI
     SettingsScaffold("书目缓存", viewModel::backSettings, listOf(
         {
             Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(14.dp)) {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("已缓存 ${state.catalogSize} 本", fontWeight = FontWeight.Bold, fontSize = 17.sp)
-                    Text(updated, fontSize = 13.sp, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f))
-                    Text("搜索与探索均基于本地索引，断网可用。", fontSize = 12.sp, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .6f))
+                Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXS)) {
+                    Text("已缓存 ${state.catalogSize} 本", fontWeight = FontWeight.Bold, fontSize = UiDimens.section)
+                    Text(updated, fontSize = UiDimens.caption, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f))
+                    Text("搜索与探索均基于本地索引，断网可用。", fontSize = UiDimens.captionSmall, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .6f))
                 }
             }
         },
@@ -358,24 +357,24 @@ private fun CatalogSection(state: StudioUiState, viewModel: StudioViewModel, onI
         {
             val progress = state.catalogProgress
             if (state.catalogLoading) {
-                Text("正在抓取 ${progress?.first ?: 0} / ${progress?.second ?: 0}", color = MiuixTheme.colorScheme.primary, fontSize = 14.sp)
+                Text("正在抓取 ${progress?.first ?: 0} / ${progress?.second ?: 0}", color = MiuixTheme.colorScheme.primary, fontSize = UiDimens.body)
             } else {
-                TextButton(text = "更新书目缓存", onClick = viewModel::updateCatalog, modifier = Modifier.fillMaxWidth().heightIn(min = ROW_HEIGHT))
+                TextButton(text = "更新书目缓存", onClick = viewModel::updateCatalog, modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin))
             }
         },
         {
-            TextButton(text = "清空本地书目", onClick = viewModel::clearCatalog, modifier = Modifier.fillMaxWidth().heightIn(min = ROW_HEIGHT))
+            TextButton(text = "清空本地书目", onClick = viewModel::clearCatalog, modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin))
         },
         { SectionTitle("数据来源") },
         {
             Text(
                 "仅访问 wenku8 对匿名访客公开的页面：书籍详情、同作者作品、年度精选与月度新书榜。抓取不携带登录 Cookie，并遵守 1 秒/请求限流与 429 退避。",
-                fontSize = 12.sp,
+                fontSize = UiDimens.captionSmall,
                 color = MiuixTheme.colorScheme.onSurface.copy(alpha = .7f),
             )
         },
         { SectionTitle("文件") },
-        { TextButton(text = "导入 EPUB 文件", onClick = onImportEpub, modifier = Modifier.fillMaxWidth().heightIn(min = ROW_HEIGHT)) },
+        { TextButton(text = "导入 EPUB 文件", onClick = onImportEpub, modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin)) },
     ))
 }
 
@@ -384,10 +383,10 @@ private fun AboutSection(viewModel: StudioViewModel) {
     SettingsScaffold("关于", viewModel::backSettings, listOf(
         {
             Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(14.dp)) {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("HyperReader", fontWeight = FontWeight.Bold, fontSize = 17.sp)
-                    Text("版本 0.7.0", fontSize = 13.sp, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f))
-                    Text("Kotlin + Jetpack Compose + MiuiX", fontSize = 13.sp, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f))
+                Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXS)) {
+                    Text("HyperReader", fontWeight = FontWeight.Bold, fontSize = UiDimens.section)
+                    Text("版本 0.7.0", fontSize = UiDimens.caption, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f))
+                    Text("Kotlin + Jetpack Compose + MiuiX", fontSize = UiDimens.caption, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f))
                 }
             }
         },
@@ -395,7 +394,7 @@ private fun AboutSection(viewModel: StudioViewModel) {
         {
             Text(
                 "search.php、articlelist.php、toplist.php、tags.php 由 wenku8 控制登录，应用不做任何规避。登录为可选补充手段，不是使用前提。\n\n仅支持标准无 DRM EPUB，不支持加密 EPUB。",
-                fontSize = 12.sp,
+                fontSize = UiDimens.captionSmall,
                 color = MiuixTheme.colorScheme.onSurface.copy(alpha = .7f),
             )
         },
@@ -403,7 +402,7 @@ private fun AboutSection(viewModel: StudioViewModel) {
         {
             Text(
                 "数据源与书架思路参考 dmzz-yyhyy/LightNovelReader；Wenku8 页面组织参考 MewX/light-novel-library_Wenku8_Android。",
-                fontSize = 12.sp,
+                fontSize = UiDimens.captionSmall,
                 color = MiuixTheme.colorScheme.onSurface.copy(alpha = .7f),
             )
         },
@@ -415,13 +414,13 @@ private fun SettingsScaffold(title: String, onBack: () -> Unit, blocks: List<@Co
     // 必须 fillMaxSize + LazyColumn 用 weight(1f)：
     // 只写 fillMaxWidth 时 Column 会把剩余高度给最后一个子项但不做滚动预算，
     // 内容一旦超出就被裁掉（真机上「字重以下全部不可达」）。
-    Column(Modifier.fillMaxSize().padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(Modifier.fillMaxSize().padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
         TextButton(text = "‹ 返回设置", onClick = onBack)
-        Text(title, fontSize = 23.sp, fontWeight = FontWeight.Bold)
+        Text(title, fontSize = UiDimens.title, fontWeight = FontWeight.Bold)
         LazyColumn(
             modifier = Modifier.fillMaxWidth().weight(1f),
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS),
         ) {
             items(blocks.size) { index -> blocks[index]() }
         }
@@ -430,14 +429,14 @@ private fun SettingsScaffold(title: String, onBack: () -> Unit, blocks: List<@Co
 
 @Composable
 private fun SectionTitle(text: String) {
-    Text(text, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+    Text(text, fontWeight = FontWeight.Bold, fontSize = UiDimens.section)
 }
 
 @Composable
 private fun ToggleRow(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
     Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(vertical = 2.dp)) {
-        Row(Modifier.fillMaxWidth().heightIn(min = ROW_HEIGHT).padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(label, modifier = Modifier.weight(1f), fontSize = 15.sp)
+        Row(Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin).padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(label, modifier = Modifier.weight(1f), fontSize = UiDimens.bodyStrong)
             Switch(checked = checked, onCheckedChange = onChange)
         }
     }
@@ -446,7 +445,7 @@ private fun ToggleRow(label: String, checked: Boolean, onChange: (Boolean) -> Un
 @Composable
 private fun ColorSwatchRow(onPicked: (Int) -> Unit) {
     val colors = listOf(0xFFF4EFE6.toInt(), 0xFFFFFFFF.toInt(), 0xFFE7F0DF.toInt(), 0xFF17191C.toInt(), 0xFFB3261E.toInt(), 0xFF2D6A4F.toInt())
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+    Row(horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS), modifier = Modifier.fillMaxWidth()) {
         colors.forEach { color ->
             Box(
                 Modifier.size(40.dp).background(Color(color)).clickable { onPicked(color) }

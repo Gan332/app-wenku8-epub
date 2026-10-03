@@ -32,19 +32,21 @@ import com.example.hyperreader.model.SearchBook
 import com.example.hyperreader.model.SearchField
 
 @Composable
-fun SearchScreen(state: StudioUiState, viewModel: StudioViewModel, onLogin: () -> Unit) {
-    Column(Modifier.fillMaxWidth().padding(top = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text("搜索轻小说", fontSize = 25.sp, fontWeight = FontWeight.Bold)
-        Text("登录 wenku8 后按书名或作者搜索。", color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f), fontSize = 13.sp)
+fun SearchScreen(state: StudioUiState, viewModel: StudioViewModel, onLogin: () -> Unit, onClose: (() -> Unit)? = null) {
+    Column(Modifier.fillMaxWidth().padding(top = 16.dp), verticalArrangement = Arrangement.spacedBy(UiDimens.spaceM)) {
+        // 0.18.0：搜索成为独立二级页，从探索页 TopBar 进入，故带返回
+        if (onClose != null) TextButton(text = "‹ 返回探索", onClick = onClose)
+        Text("搜索轻小说", fontSize = UiDimens.display, fontWeight = FontWeight.Bold)
+        Text("登录 wenku8 后按书名或作者搜索。", color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f), fontSize = UiDimens.caption)
         if (!state.loggedIn) {
             Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(14.dp)) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("搜索需要 wenku8 登录", fontSize = 14.sp)
+                    Text("搜索需要 wenku8 登录", fontSize = UiDimens.body)
                     TextButton(text = "登录", onClick = onLogin)
                 }
             }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
             TextButton(text = "按书名", onClick = { viewModel.setSearchField(SearchField.TITLE) })
             TextButton(text = "按作者", onClick = { viewModel.setSearchField(SearchField.AUTHOR) })
         }
@@ -67,10 +69,10 @@ fun SearchScreen(state: StudioUiState, viewModel: StudioViewModel, onLogin: () -
             content = {
                 if (state.searchHistory.isNotEmpty()) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("最近搜索", fontSize = 13.sp, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f))
+                        Text("最近搜索", fontSize = UiDimens.caption, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f))
                         TextButton(text = "清空", onClick = viewModel::clearSearchHistory)
                     }
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
                         state.searchHistory.take(5).forEach { keyword -> TextButton(text = keyword, onClick = { viewModel.setSearchQuery(keyword) }) }
                     }
                 }
@@ -82,7 +84,7 @@ fun SearchScreen(state: StudioUiState, viewModel: StudioViewModel, onLogin: () -
         state.searchMessage?.let { MessageCard(it) }
         if (state.searchResults.isEmpty() && state.searchBusy) {
             Row(
-                Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(vertical = 8.dp),
+                Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin).padding(vertical = 8.dp),
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -90,21 +92,21 @@ fun SearchScreen(state: StudioUiState, viewModel: StudioViewModel, onLogin: () -
             }
         } else if (state.searchResults.isEmpty() && !state.searchBusy) {
             val emptyMessage = if (state.searchPage > 0) "没有找到结果。" else "输入关键词开始搜索。"
-            Text(emptyMessage, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f), fontSize = 14.sp)
+            Text(emptyMessage, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f), fontSize = UiDimens.body)
         } else {
-            LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
                 items(state.searchResults, key = { it.id }) { result -> SearchResultCard(result, viewModel::openSearchBook, Modifier.animateItem()) }
                 item {
                     Column(
                         Modifier.fillMaxWidth().padding(vertical = 6.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS),
                     ) {
                         if (state.searchHasNextPage) {
                             Button(
                                 onClick = viewModel::loadMoreSearchResults,
                                 enabled = !state.searchLoadingMore && !state.searchBusy,
-                                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                                modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
                             ) {
                                 if (state.searchLoadingMore) {
                                     Text("加载中…")
@@ -117,7 +119,7 @@ fun SearchScreen(state: StudioUiState, viewModel: StudioViewModel, onLogin: () -
                             Text(
                                 "已加载第 ${state.searchPage} 页",
                                 color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f),
-                                fontSize = 13.sp,
+                                fontSize = UiDimens.caption,
                             )
                         }
                     }
@@ -131,16 +133,16 @@ fun SearchScreen(state: StudioUiState, viewModel: StudioViewModel, onLogin: () -
 private fun SearchResultCard(result: SearchBook, onOpen: (SearchBook) -> Unit, modifier: Modifier = Modifier) {
     Card(modifier.fillMaxWidth(), insideMargin = PaddingValues(14.dp)) {
         Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            Text(result.title, fontSize = 17.sp, fontWeight = FontWeight.Bold, maxLines = 2)
-            if (result.author.isNotBlank()) Text("作者：${result.author}", fontSize = 13.sp)
+            Text(result.title, fontSize = UiDimens.section, fontWeight = FontWeight.Bold, maxLines = 2)
+            if (result.author.isNotBlank()) Text("作者：${result.author}", fontSize = UiDimens.caption)
             val meta = buildList {
                 if (result.category.isNotBlank()) add(result.category)
                 if (result.status.isNotBlank()) add(result.status)
                 if (result.updatedAt.isNotBlank()) add("更新 ${result.updatedAt}")
                 if (result.wordCount != null) add("${result.wordCount} 字")
             }
-            Text(meta.joinToString(" · "), color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f), fontSize = 12.sp)
-            if (result.latestChapter.isNotBlank()) Text("最新：${result.latestChapter}", fontSize = 12.sp, maxLines = 1)
+            Text(meta.joinToString(" · "), color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f), fontSize = UiDimens.captionSmall)
+            if (result.latestChapter.isNotBlank()) Text("最新：${result.latestChapter}", fontSize = UiDimens.captionSmall, maxLines = 1)
             TextButton(text = "查看详情与目录", onClick = { onOpen(result) })
         }
     }

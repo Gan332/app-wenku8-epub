@@ -40,7 +40,7 @@ fun ActiveExportSection(
     ) {
         Text(
             "正在导出",
-            fontSize = 13.sp,
+            fontSize = UiDimens.caption,
             fontWeight = FontWeight.Bold,
             color = MiuixTheme.colorScheme.primary,
         )
@@ -71,13 +71,13 @@ fun ExportProgressRow(
                 Text(
                     job.book.title,
                     modifier = Modifier.weight(1f),
-                    fontSize = 15.sp,
+                    fontSize = UiDimens.bodyStrong,
                     fontWeight = FontWeight.Bold,
                     maxLines = 2,
                 )
                 Text(
                     "$percent%",
-                    fontSize = 13.sp,
+                    fontSize = UiDimens.caption,
                     fontWeight = FontWeight.Bold,
                     color = MiuixTheme.colorScheme.primary,
                 )
@@ -94,14 +94,14 @@ fun ExportProgressRow(
             ) {
                 Text(
                     phaseLabel(progress.phase),
-                    fontSize = 12.sp,
+                    fontSize = UiDimens.captionSmall,
                     fontWeight = FontWeight.Bold,
                     color = MiuixTheme.colorScheme.primary,
                 )
                 if (progress.etaSeconds >= 0) {
                     Text(
                         "剩余约 ${formatEta(progress.etaSeconds)}",
-                        fontSize = 12.sp,
+                        fontSize = UiDimens.captionSmall,
                         color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                     )
                 }
@@ -109,7 +109,7 @@ fun ExportProgressRow(
             if (progress.message.isNotBlank()) {
                 Text(
                     progress.message,
-                    fontSize = 12.sp,
+                    fontSize = UiDimens.captionSmall,
                     maxLines = 2,
                     color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.72f),
                 )
@@ -137,7 +137,7 @@ fun ExportProgressRow(
                             append(progress.cacheHits)
                         }
                     },
-                    fontSize = 12.sp,
+                    fontSize = UiDimens.captionSmall,
                     color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                 )
                 TextButton(text = "取消", onClick = { onCancel(job.id) })
@@ -145,7 +145,7 @@ fun ExportProgressRow(
             if (progress.currentTitle.isNotBlank()) {
                 Text(
                     "当前：${progress.currentTitle}",
-                    fontSize = 12.sp,
+                    fontSize = UiDimens.captionSmall,
                     maxLines = 1,
                     color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                 )

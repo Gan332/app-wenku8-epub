@@ -169,6 +169,12 @@ data class StudioUiState(
     val message: String? = null,
     val activeJobId: String? = null,
     val showJobHistory: Boolean = false,
+    /** 0.18.0：探索页的搜索移到这里（LNR 式 TopBar 搜索入口），false 表示不在搜索页。 */
+    val searchPageOpen: Boolean = false,
+    /** 0.18.0：全屏榜单展开页（对应 LNR 的 `ExpandedPage`）。 */
+    val exploreExpanded: Boolean = false,
+    /** 展开页对应的榜单；刷新时按它重新抓取。 */
+    val activeExplorePage: ExplorePage? = null,
     val jobs: List<ExportJob> = emptyList(),
     val searchQuery: String = "",
     val searchField: SearchField = SearchField.TITLE,
@@ -392,9 +398,25 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
      * 补全上限 [EXPLORE_AUTO_FETCH_LIMIT]：全局限流是 1 秒/请求，一次榜单全抓会让用户
      * 干等；超过上限的部分留到用户手动刷新或进入详情时再取。
      */
+    /** 0.18.0：进入/离开独立搜索页（探索页 TopBar 搜索入口）。 */
+    fun openSearchPage() = mutable.update { it.copy(searchPageOpen = true) }
+    fun closeSearchPage() = mutable.update { it.copy(searchPageOpen = false) }
+
+    /** 0.18.0：打开某榜单的全屏展开页并立即拉取；[refreshExplore] 按同一榜单重抓。 */
+    fun openExploreExpanded(page: ExplorePage) {
+        mutable.update { it.copy(exploreExpanded = true, activeExplorePage = page) }
+        loadExplore(page)
+    }
+
+    fun closeExploreExpanded() = mutable.update { it.copy(exploreExpanded = false) }
+
+    fun refreshExplore() {
+        state.value.activeExplorePage?.let { page -> loadExplore(page) }
+    }
+
     fun loadExplore(page: ExplorePage = explorePages.first()) {
         viewModelScope.launch {
-            mutable.update { it.copy(exploreBusy = true, exploreMessage = null) }
+            mutable.update { it.copy(exploreBusy = true, exploreMessage = null, activeExplorePage = page) }
             var cards: List<SearchBook> = emptyList()
             val ids = runCatching {
                 if (page.requiresAuth) {

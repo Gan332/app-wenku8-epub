@@ -1,171 +1,274 @@
 package com.example.hyperreader.ui
 
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.example.hyperreader.MessageCard
-import com.example.hyperreader.core.ExplorePage
+import com.example.hyperreader.core.ExploreBooksRow
 import com.example.hyperreader.model.SearchBook
-import com.example.hyperreader.model.SearchField
-import top.yukonga.miuix.kmp.basic.Button
+import com.example.hyperreader.ui.cover.CoverImage
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
-import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
-private sealed interface ExploreListItem {
-    val key: String
-    data class Header(val title: String) : ExploreListItem { override val key = "header-$title" }
-    data class Book(val book: SearchBook) : ExploreListItem { override val key = "book-${book.id}" }
-}
-
+/**
+ * 探索页（0.18.0 起按 LNR `ExploreHomeScreen` 的信息结构重排）。
+ *
+ * 结构：标题区（标题 + 搜索入口）→ 分区（本地书目 / 榜单 / 标签），
+ * 每个分区都是「标题行 + 内容」；榜单分区里每行是**横向滑动书卡**，
+ * 行尾「更多」进入全屏榜单展开页（`ExploreExpandedScreen`，对应 LNR 的 `ExpandedPage`）。
+ *
+ * 数据来源与合规边界不变：年度/月度榜单走匿名公开页，排行榜与官方标签走用户本人会话
+ * （AGENTS §4.2 / §4.5.2）。
+ */
 @Composable
-fun ExploreScreen(state: StudioUiState, viewModel: StudioViewModel, onLogin: () -> Unit, onGoToCatalog: () -> Unit) {
-    Column(Modifier.fillMaxSize().padding(top = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text("探索", fontSize = 25.sp, fontWeight = FontWeight.Bold)
-        Text("数据源：Wenku8 轻小说文库 · 年度/月度榜单无需登录，排行榜与标签需登录", color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f), fontSize = 13.sp)
-        Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(14.dp)) {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                val updated = state.catalogUpdatedAt.takeIf { it > 0 }
-                    ?.let { "上次更新 ${java.time.Instant.ofEpochMilli(it).atZone(java.time.ZoneId.systemDefault()).toLocalDate()}" }
-                    ?: "尚未更新"
-                Text("本地书目 ${state.catalogSize} 本 · $updated", fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                Text("搜索与浏览均基于本地缓存，断网也能用。", color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f), fontSize = 12.sp)
-                if (state.catalogLoading) {
-                    val progress = state.catalogProgress
-                    Text("正在抓取 ${progress?.first ?: 0} / ${progress?.second ?: 0}", fontSize = 12.sp, color = MiuixTheme.colorScheme.primary)
-                }
-                if (state.catalogSize == 0) {
-                    TextButton(text = "前往设置更新书目", onClick = onGoToCatalog, modifier = Modifier.fillMaxWidth())
-                }
+fun ExploreScreen(
+    state: StudioUiState,
+    viewModel: StudioViewModel,
+    onLogin: () -> Unit,
+    onGoToCatalog: () -> Unit,
+    onOpenSearch: () -> Unit,
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(horizontal = UiDimens.pagePadding, vertical = UiDimens.spaceL),
+        verticalArrangement = Arrangement.spacedBy(UiDimens.spaceM),
+    ) {
+        item(key = "header") {
+            Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXS)) {
+                Text("探索", fontSize = UiDimens.display, fontWeight = FontWeight.Bold)
+                Text(
+                    "Wenku8 轻小说文库 · 年度/月度榜单无需登录",
+                    fontSize = UiDimens.caption,
+                    color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f),
+                )
+                TextButton(text = "搜索书名 / 作者", onClick = onOpenSearch, modifier = Modifier.heightIn(min = UiDimens.touchMin))
             }
         }
+
+        item(key = "catalog") {
+            CatalogSectionCard(state = state, onGoToCatalog = onGoToCatalog)
+        }
+
         if (!state.loggedIn) {
-            Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(14.dp)) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("排行榜、站内搜索与官方标签需登录 wenku8（使用你自己的账号会话）", fontSize = 13.sp)
-                    TextButton(text = "登录", onClick = onLogin)
+            item(key = "login-hint") {
+                Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(UiDimens.cardInset)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(UiDimens.cardInset),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            "排行榜、站内搜索与官方标签需要登录",
+                            modifier = Modifier.weight(1f),
+                            fontSize = UiDimens.caption,
+                            color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f),
+                        )
+                        TextButton(text = "登录", onClick = onLogin, modifier = Modifier.heightIn(min = UiDimens.touchMin))
+                    }
                 }
             }
         }
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            items(viewModel.explorePages) { page ->
-                TextButton(text = page.title, onClick = { viewModel.loadExplore(page) })
-            }
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            TextButton(text = "按书名", onClick = { viewModel.setSearchField(SearchField.TITLE) })
-            TextButton(text = "按作者", onClick = { viewModel.setSearchField(SearchField.AUTHOR) })
-        }
-        TextField(
-            value = state.searchQuery,
-            onValueChange = viewModel::setSearchQuery,
-            label = if (state.searchField == SearchField.TITLE) "搜索书名" else "搜索作者",
-            useLabelAsPlaceholder = true,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Button(onClick = viewModel::searchLocal, enabled = state.searchQuery.isNotBlank(), modifier = Modifier.fillMaxWidth()) { Text("搜索本地书目") }
-        if (state.searchHistory.isNotEmpty()) {
-            Text("最近搜索", fontSize = 13.sp, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f))
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                items(state.searchHistory.take(8)) { keyword -> TextButton(text = keyword, onClick = { viewModel.setSearchQuery(keyword) }) }
-            }
-        }
-        // —— 标签浏览（0.14.0 起，0.14.x 接入官方 tags.php）——
-        // 未登录：标签全部来自本地书目索引（articleinfo.php 的「作品Tags」），零网络、断网可用；
-        // 已登录：官方标签列表来自 tags.php（登录墙内，用户本人会话），本地多出的标签跟在后面，
-        // 选中标签时先显示本地结果、再用 tags.php 结果补齐（见 AGENTS §4.5.2）。
-        if (state.exploreTags.isNotEmpty()) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("按标签浏览", fontSize = 13.sp, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f))
-                if (state.activeTag != null) {
-                    TextButton(text = "‹ 全部标签", onClick = viewModel::clearTag)
-                }
-            }
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                items(state.exploreTags) { tag ->
+
+        item(key = "page-switcher") {
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
+                items(viewModel.explorePages, key = { it.id }) { page ->
+                    val selected = page.id == state.activeExplorePage?.id
                     TextButton(
-                        text = if (tag == state.activeTag) "✓ $tag" else tag,
-                        onClick = { viewModel.selectTag(tag) },
+                        text = if (selected) "✓ ${page.title}" else page.title,
+                        onClick = { viewModel.loadExplore(page) },
                     )
                 }
             }
         }
-        state.exploreMessage?.let { MessageCard(it) }
-        state.searchMessage?.let { MessageCard(it) }
-        if (state.exploreBusy) Text("正在加载榜单…", color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f), fontSize = 13.sp)
-        if (!state.exploreBusy && state.exploreRows.isEmpty() && state.localResults.isEmpty() && state.catalogSize == 0) {
-            Text("本地书目为空，点击「更新书目缓存」抓取公开榜单。", color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f), fontSize = 13.sp)
-        }
-        if (state.localResults.isNotEmpty()) Text("本地搜索结果 ${state.localResults.size} 条", fontSize = 13.sp, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f))
-        val localItems = state.localResults.map { ExploreListItem.Book(it.toSearchBook()) }
-        // 标签结果排在最前：选中标签后用户最想看的就是它
-        val tagItems = buildList {
-            state.activeTag?.let { tag ->
-                add(ExploreListItem.Header("标签「$tag」· ${state.tagResults.size} 本"))
-                state.tagResults.forEach { add(ExploreListItem.Book(it)) }
-            }
-        }
-        val exploreItems = buildList {
-            state.exploreRows.forEach { row ->
-                add(ExploreListItem.Header(row.title))
-                row.books.forEach { add(ExploreListItem.Book(it)) }
-            }
-        }
-        // weight(1f) 让列表拿到剩余高度并自行滚动；否则内容被底部导航截断且无法滑动
-        LazyColumn(Modifier.fillMaxWidth().weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(tagItems, key = { "tag-${it.key}" }) { item ->
-                when (item) {
-                    is ExploreListItem.Header -> Text(item.title, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                    is ExploreListItem.Book -> ExploreBookCard(item.book, onOpen = { viewModel.openSearchBook(item.book) }, onAdd = { viewModel.addSearchToShelf(item.book) }, modifier = Modifier.animateItem())
+
+        if (state.exploreBusy && state.exploreRows.isEmpty()) {
+            item(key = "explore-loading") {
+                Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
+                    ShimmerLine(heightDp = 18)
+                    ShimmerLine(heightDp = 132)
+                    ShimmerLine(heightDp = 18)
                 }
             }
-            items(localItems, key = { "local-${it.key}" }) { item ->
-                (item as? ExploreListItem.Book)?.let { book ->
-                    ExploreBookCard(book.book, onOpen = { viewModel.openSearchBook(book.book) }, onAdd = { viewModel.addSearchToShelf(book.book) }, modifier = Modifier.animateItem())
-                }
+        }
+
+        items(state.exploreRows, key = { it.title }) { row ->
+            val page = row.expandedPageId?.let { id -> viewModel.explorePages.firstOrNull { it.id == id } }
+                ?: state.activeExplorePage
+            ExploreRowSection(
+                title = row.title,
+                books = row.books,
+                onOpenBook = { viewModel.openSearchBook(it) },
+                onMore = page?.let { target -> { viewModel.openExploreExpanded(target) } },
+            )
+        }
+
+        if (!state.exploreBusy && state.exploreRows.isEmpty() && state.catalogSize == 0) {
+            item(key = "empty") {
+                ExploreEmptyState(
+                    title = "还没有可浏览的内容",
+                    description = "更新本地书目缓存，或在设置里配置中继后再来。",
+                    actionText = "前往设置",
+                    onAction = onGoToCatalog,
+                )
             }
-            items(exploreItems, key = { "explore-${it.key}" }) { item ->
-                when (item) {
-                    is ExploreListItem.Header -> Text(item.title, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                    is ExploreListItem.Book -> ExploreBookCard(item.book, onOpen = { viewModel.openSearchBook(item.book) }, onAdd = { viewModel.addSearchToShelf(item.book) }, modifier = Modifier.animateItem())
+        }
+
+        // —— 标签浏览（0.14.x 起，官方标签需登录，未登录回落到本地索引）——
+        if (state.exploreTags.isNotEmpty()) {
+            item(key = "tags") {
+                TagSection(
+                    tags = state.exploreTags,
+                    activeTag = state.activeTag,
+                    onSelect = viewModel::selectTag,
+                    onClear = viewModel::clearTag,
+                )
+            }
+        }
+
+        state.exploreMessage?.let { message -> item(key = "explore-message") { MessageCard(message) } }
+    }
+}
+
+/** 本地书目分区：缓存规模、更新时间与入口。 */
+@Composable
+private fun CatalogSectionCard(state: StudioUiState, onGoToCatalog: () -> Unit) {
+    val updated = state.catalogUpdatedAt.takeIf { it > 0 }
+        ?.let { "上次更新 ${java.time.Instant.ofEpochMilli(it).atZone(java.time.ZoneId.systemDefault()).toLocalDate()}" }
+        ?: "尚未更新"
+    Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(UiDimens.cardInset)) {
+        Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXS)) {
+            SectionHeader("本地书目", trailing = { if (state.catalogSize == 0) TextButton(text = "更新缓存", onClick = onGoToCatalog) })
+            Text("共 ${state.catalogSize} 本 · $updated", fontSize = UiDimens.body, fontWeight = FontWeight.Bold)
+            Text("搜索与浏览基于本地缓存，断网也能用。", fontSize = UiDimens.captionSmall, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f))
+            state.catalogProgress?.let { (done, total) ->
+                Text("正在抓取 $done / $total", fontSize = UiDimens.captionSmall, color = MiuixTheme.colorScheme.primary)
+            }
+        }
+    }
+}
+
+/** 榜单分区：标题行（含「更多」）+ 横向书卡行。 */
+@Composable
+private fun ExploreRowSection(
+    title: String,
+    books: List<SearchBook>,
+    onOpenBook: (SearchBook) -> Unit,
+    onMore: (() -> Unit)?,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
+        // trailing 有明确的 `@Composable` 目标类型，所以这里用 if 而不是 let 包一层 lambda
+        SectionHeader(
+            title = title,
+            trailing = if (onMore != null) ({ TextButton(text = "更多", onClick = onMore) }) else null,
+        )
+        if (books.isEmpty()) {
+            Text("这一栏暂时没有内容。", fontSize = UiDimens.captionSmall, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f))
+        } else {
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
+                items(books, key = { it.id }) { book ->
+                    BookPosterCard(book = book, onClick = { onOpenBook(book) })
                 }
             }
         }
     }
 }
 
+/** 标签分区：横向标签行，选中态带勾。 */
 @Composable
-private fun ExploreBookCard(book: SearchBook, onOpen: () -> Unit, onAdd: () -> Unit, modifier: Modifier = Modifier) {
-    Card(modifier.fillMaxWidth(), insideMargin = PaddingValues(14.dp)) {
-        Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            Text(book.title, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 2)
-            if (book.author.isNotBlank()) Text("作者：${book.author}", fontSize = 13.sp)
-            val meta = buildList {
-                if (book.category.isNotBlank()) add(book.category)
-                if (book.status.isNotBlank()) add(book.status)
-                if (book.updatedAt.isNotBlank()) add("更新 ${book.updatedAt}")
-                if (book.wordCount != null) add("${book.wordCount} 字")
-            }
-            if (meta.isNotEmpty()) Text(meta.joinToString(" · "), color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f), fontSize = 12.sp)
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                TextButton(text = "查看详情与目录", onClick = onOpen)
-                TextButton(text = "加入书架", onClick = onAdd)
+private fun TagSection(tags: List<String>, activeTag: String?, onSelect: (String) -> Unit, onClear: () -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
+        SectionHeader("按标签浏览", trailing = if (activeTag != null) ({ TextButton(text = "清除", onClick = onClear) }) else null)
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
+            items(tags, key = { it }) { tag ->
+                TextButton(text = if (tag == activeTag) "✓ $tag" else tag, onClick = { onSelect(tag) })
             }
         }
     }
 }
+
+/** 分区标题行：左侧标题，右侧可选操作。 */
+@Composable
+private fun SectionHeader(title: String, trailing: (@Composable () -> Unit)? = null) {
+    Row(
+        modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(title, modifier = Modifier.weight(1f), fontSize = UiDimens.section, fontWeight = FontWeight.Bold)
+        trailing?.invoke()
+    }
+}
+
+/** 横向书卡：封面 + 书名 + 作者，点击进入详情。 */
+@Composable
+private fun BookPosterCard(book: SearchBook, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val interaction = remember { MutableInteractionSource() }
+    Column(
+        modifier = modifier
+            .width(POSTER_WIDTH)
+            .clickable(interactionSource = interaction, indication = null, onClick = onClick)
+            .pressableScale(interaction)
+            .padding(vertical = UiDimens.spaceXS),
+        verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXS),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(POSTER_RATIO)
+                .clip(RoundedCornerShape(8.dp)),
+        ) {
+            CoverImage(
+                url = book.coverUrl,
+                contentDescription = book.title,
+                modifier = Modifier.fillMaxWidth().aspectRatio(POSTER_RATIO),
+                targetWidthDp = POSTER_WIDTH.value.toInt(),
+            )
+        }
+        Text(book.title, fontSize = UiDimens.caption, maxLines = 2)
+        if (book.author.isNotBlank()) {
+            Text(book.author, fontSize = UiDimens.captionSmall, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .6f), maxLines = 1)
+        }
+    }
+}
+
+/** 离线/空态：图标位用标题替代，保持 MiuiX 风格且不引 Material 的 `EmptyPage`。 */
+@Composable
+private fun ExploreEmptyState(title: String, description: String, actionText: String, onAction: () -> Unit) {
+    Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(UiDimens.cardInset)) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(UiDimens.spaceL),
+            verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(title, fontSize = UiDimens.section, fontWeight = FontWeight.Bold)
+            Text(description, fontSize = UiDimens.caption, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f))
+            TextButton(text = actionText, onClick = onAction, modifier = Modifier.heightIn(min = UiDimens.touchMin))
+        }
+    }
+}
+
+private val POSTER_WIDTH = 132.dp
+
+/** 竖版封面比例 3:4。 */
+private const val POSTER_RATIO = 3f / 4f

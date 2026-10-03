@@ -95,12 +95,15 @@ class OnlineReaderActivity : ComponentActivity() {
                     val opener = OnlinePageSourceOpener(app.onlineReaderSource, app, hostBookId)
                     opener.prepare(index.catalog.chapters)
                     val stored = repository.currentProgress()
-                    val startChapterId = repository.resolveStartChapterId(index.catalog.chapters)
-                    // xy 页进度只与「已按起始章打开的页轴」配对；没有在线页进度时从章首开始。
-                    val initialPage = stored?.page ?: runCatching {
-                        repository.legacyProgress(hostBookId)?.chapterIndex ?: 0
-                    }.getOrDefault(0)
-                    opener.setStartChapterId(startChapterId)
+                    // 起始章与起始页一并决定：显式指定章时页码归零（页进度与页轴配对，AGENTS §4.8）
+                    val start = StartPosition.resolve(
+                        requestedChapterId = intent.getStringExtra(EXTRA_START_CHAPTER)?.takeIf { it.isNotBlank() },
+                        catalog = index.catalog.chapters,
+                        rememberedChapterId = repository.resolveStartChapterId(index.catalog.chapters),
+                        rememberedPage = stored?.page,
+                    )
+                    val initialPage = start.page
+                    opener.setStartChapterId(start.chapterId)
                     ReaderGraph.install(repository)
                     setContent {
                         AppMiuixTheme {
@@ -173,6 +176,8 @@ class OnlineReaderActivity : ComponentActivity() {
         const val EXTRA_TITLE = "online_title"
         const val EXTRA_AUTHOR = "online_author"
         const val EXTRA_BOOKSHELF_ID = "online_bookshelf_id"
+        /** 详情页目录里点某一章时指定的起始章 id（0.18.0）；空则按已存进度续读。 */
+        const val EXTRA_START_CHAPTER = "online_start_chapter"
     }
 }
 
@@ -183,8 +188,11 @@ fun onlineReaderIntent(
     title: String,
     author: String,
     bookshelfId: String = "wenku8:$bookId",
+    /** 指定起始章（详情页目录点击）；给定后从该章第一页开始，旧页进度不再适用。 */
+    startChapterId: String? = null,
 ): Intent = Intent(context, OnlineReaderActivity::class.java)
     .putExtra(OnlineReaderActivity.EXTRA_BOOK_ID, bookId)
     .putExtra(OnlineReaderActivity.EXTRA_TITLE, title)
     .putExtra(OnlineReaderActivity.EXTRA_AUTHOR, author)
     .putExtra(OnlineReaderActivity.EXTRA_BOOKSHELF_ID, bookshelfId)
+    .putExtra(OnlineReaderActivity.EXTRA_START_CHAPTER, startChapterId)

@@ -50,9 +50,9 @@ fun ConfigSection(
     ConfigScaffold("配置导入导出", onBack, listOf(
         {
             Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(14.dp)) {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("导出内容", fontWeight = FontWeight.Bold, fontSize = 17.sp)
-                    Text("仅主题与阅读器设置。", fontSize = 13.sp, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f))
+                Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXS)) {
+                    Text("导出内容", fontWeight = FontWeight.Bold, fontSize = UiDimens.section)
+                    Text("仅主题与阅读器设置。", fontSize = UiDimens.caption, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f))
                 }
             }
         },
@@ -61,7 +61,7 @@ fun ConfigSection(
             TextButton(
                 text = "导出配置文件",
                 onClick = { if (!state.busy) onExportRequest() },
-                modifier = Modifier.fillMaxWidth().heightIn(min = CONFIG_ROW_HEIGHT),
+                modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
             )
         },
         { ConfigSectionTitle("导入") },
@@ -69,12 +69,12 @@ fun ConfigSection(
             TextButton(
                 text = "从文件导入",
                 onClick = { if (!state.busy) onImportRequest() },
-                modifier = Modifier.fillMaxWidth().heightIn(min = CONFIG_ROW_HEIGHT),
+                modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
             )
         },
         {
             if (state.busy) {
-                Text("处理中…", fontSize = 13.sp, color = MiuixTheme.colorScheme.primary)
+                Text("处理中…", fontSize = UiDimens.caption, color = MiuixTheme.colorScheme.primary)
             }
         },
         {
@@ -82,7 +82,7 @@ fun ConfigSection(
             if (message != null) {
                 Text(
                     text = message,
-                    fontSize = 13.sp,
+                    fontSize = UiDimens.caption,
                     color = if (state.isError) MiuixTheme.colorScheme.error else MiuixTheme.colorScheme.primary,
                 )
             }
@@ -102,17 +102,16 @@ fun ConfigSection(
     ))
 }
 
-private val CONFIG_ROW_HEIGHT = 48.dp
 
 @Composable
 private fun ConfigScaffold(title: String, onBack: () -> Unit, blocks: List<@Composable () -> Unit>) {
-    Column(Modifier.fillMaxWidth().padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(Modifier.fillMaxWidth().padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
         TextButton(text = "‹ 返回设置", onClick = onBack)
-        Text(title, fontSize = 23.sp, fontWeight = FontWeight.Bold)
+        Text(title, fontSize = UiDimens.title, fontWeight = FontWeight.Bold)
         LazyColumn(
             modifier = Modifier.fillMaxWidth(),
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS),
         ) {
             items(blocks.size) { index -> blocks[index]() }
         }
@@ -121,14 +120,14 @@ private fun ConfigScaffold(title: String, onBack: () -> Unit, blocks: List<@Comp
 
 @Composable
 private fun ConfigSectionTitle(text: String) {
-    Text(text, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+    Text(text, fontWeight = FontWeight.Bold, fontSize = UiDimens.section)
 }
 
 @Composable
 private fun ConfigBullet(text: String) {
     Text(
         text = "· $text",
-        fontSize = 12.sp,
+        fontSize = UiDimens.captionSmall,
         color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f),
     )
 }

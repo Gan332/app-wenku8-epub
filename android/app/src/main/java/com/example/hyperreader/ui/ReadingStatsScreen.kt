@@ -26,7 +26,7 @@ import java.time.format.DateTimeFormatter
 @Composable
 fun ReadingStatsScreen(stats: ReadingStats, onClear: () -> Unit) {
     Column(Modifier.fillMaxWidth().padding(top = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text("阅读统计", fontSize = 25.sp, fontWeight = FontWeight.Bold)
+        Text("阅读统计", fontSize = UiDimens.display, fontWeight = FontWeight.Bold)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             StatCard("总时长", formatDuration(stats.totalSeconds), Modifier.weight(1f))
             StatCard("今日", formatDuration(stats.todaySeconds), Modifier.weight(1f))
@@ -45,17 +45,17 @@ fun ReadingStatsScreen(stats: ReadingStats, onClear: () -> Unit) {
                     val value = stats.dailySeconds[day.toString()] ?: 0L
                     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text(day.format(DateTimeFormatter.ofPattern("MM-dd")), fontSize = 12.sp)
-                            Text(formatDuration(value), fontSize = 12.sp, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f))
+                            Text(day.format(DateTimeFormatter.ofPattern("MM-dd")), fontSize = UiDimens.captionSmall)
+                            Text(formatDuration(value), fontSize = UiDimens.captionSmall, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f))
                         }
                         LinearProgressIndicator(progress = (value.toFloat() / max).coerceIn(0f, 1f), modifier = Modifier.fillMaxWidth().height(8.dp))
                     }
                 }
             }
         }
-        Text("按书籍统计", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        Text("按书籍统计", fontSize = UiDimens.section, fontWeight = FontWeight.Bold)
         if (stats.bookSeconds.isEmpty()) {
-            Text("还没有阅读记录。打开阅读器后会自动统计。", color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f), fontSize = 13.sp)
+            Text("还没有阅读记录。打开阅读器后会自动统计。", color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f), fontSize = UiDimens.caption)
         } else {
             val max = stats.bookSeconds.values.maxOrNull()?.coerceAtLeast(1L) ?: 1L
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -64,7 +64,7 @@ fun ReadingStatsScreen(stats: ReadingStats, onClear: () -> Unit) {
                     Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(14.dp)) {
                         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(title, fontWeight = FontWeight.Bold, maxLines = 1)
-                            Text(formatDuration(entry.value), color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f), fontSize = 12.sp)
+                            Text(formatDuration(entry.value), color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f), fontSize = UiDimens.captionSmall)
                             LinearProgressIndicator(progress = entry.value.toFloat() / max, modifier = Modifier.fillMaxWidth().height(8.dp))
                         }
                     }
@@ -79,8 +79,8 @@ fun ReadingStatsScreen(stats: ReadingStats, onClear: () -> Unit) {
 private fun StatCard(label: String, value: String, modifier: Modifier) {
     Card(modifier, insideMargin = PaddingValues(14.dp)) {
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(label, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f), fontSize = 12.sp)
-            Text(value, fontSize = 19.sp, fontWeight = FontWeight.Bold)
+            Text(label, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f), fontSize = UiDimens.captionSmall)
+            Text(value, fontSize = UiDimens.section, fontWeight = FontWeight.Bold)
         }
     }
 }

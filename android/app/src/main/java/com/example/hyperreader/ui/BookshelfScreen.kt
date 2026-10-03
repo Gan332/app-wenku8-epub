@@ -1,6 +1,7 @@
 package com.example.hyperreader.ui
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -69,10 +71,10 @@ fun BookshelfScreen(
     val readingProgress by viewModel.readingProgress.collectAsStateWithLifecycle(initialValue = emptyMap())
     // 数据变化时刷新「N 分钟前」的基准时刻，避免长开应用后相对时间停在启动瞬间
     val now = remember(state.bookshelf, readingProgress) { System.currentTimeMillis() }
-    Column(Modifier.fillMaxWidth().padding(top = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    Column(Modifier.fillMaxWidth().padding(top = 16.dp), verticalArrangement = Arrangement.spacedBy(UiDimens.spaceM)) {
         // 0.17.0：导出记录已独立成页（入口在设置 → 概览与通知栏路由），书架只留进行中的任务概览
-        Text("书架", fontSize = 25.sp, fontWeight = FontWeight.Bold)
-        Text("在线书籍和本地 EPUB 都可以在这里继续阅读。", color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f), fontSize = 13.sp)
+        Text("书架", fontSize = UiDimens.display, fontWeight = FontWeight.Bold)
+        Text("在线书籍和本地 EPUB 都可以在这里继续阅读。", color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f), fontSize = UiDimens.caption)
         Button(onClick = onImportEpub, modifier = Modifier.fillMaxWidth()) { Text("导入 EPUB") }
         ActiveExportSection(
             jobs = state.jobs,
@@ -82,20 +84,21 @@ fun BookshelfScreen(
         HorizontalDivider(Modifier.fillMaxWidth())
         if (state.bookshelf.isEmpty()) {
             Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(18.dp)) {
-                Text("书架还是空的。\n可以从“探索”加入 Wenku8 书籍，或导入本地 EPUB。", fontSize = 14.sp, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .8f))
+                Text("书架还是空的。\n可以从“探索”加入 Wenku8 书籍，或导入本地 EPUB。", fontSize = UiDimens.body, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .8f))
             }
         } else {
-            Text("共 ${state.bookshelf.size} 本", color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f), fontSize = 13.sp)
+            Text("共 ${state.bookshelf.size} 本", color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f), fontSize = UiDimens.caption)
             val listState = rememberLazyListState()
             Box(Modifier.fillMaxWidth()) {
-                LazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(state.bookshelf, key = { it.id }) { entry ->
+                LazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
+                    itemsIndexed(state.bookshelf, key = { _, entry -> entry.id }) { index, entry ->
                         Box {
                             BookshelfCard(
                                 entry,
                                 readingProgress[entry.bookId],
                                 now,
-                                modifier = Modifier.animateItem(),
+                                // 0.18.0：交错入场（按索引延迟，索引超过首屏上限后不再累加延迟）
+                                modifier = Modifier.animateItem().staggeredEnter(index),
                                 onMore = { menuEntryId = entry.id },
                             ) {
                                 // 卡片主体直接打开：本地书进阅读器并记阅读，远程书进详情页
@@ -145,8 +148,12 @@ private fun BookshelfCard(
     onMore: () -> Unit,
     onOpen: (BookshelfEntry) -> Unit,
 ) {
+    val interaction = remember { MutableInteractionSource() }
     Card(
-        modifier = modifier.fillMaxWidth().clickable { onOpen(entry) },
+        modifier = modifier
+            .fillMaxWidth()
+            .clickable(interactionSource = interaction, indication = null) { onOpen(entry) }
+            .pressableScale(interaction),
         insideMargin = PaddingValues(12.dp),
     ) {
         Row(verticalAlignment = Alignment.Top) {
@@ -158,19 +165,19 @@ private fun BookshelfCard(
             )
             Column(
                 modifier = Modifier.weight(1f).padding(start = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
+                verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXS),
             ) {
-                Text(entry.title, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 2)
-                Text(entry.author, fontSize = 13.sp, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f), maxLines = 1)
+                Text(entry.title, fontSize = UiDimens.section, fontWeight = FontWeight.Bold, maxLines = 2)
+                Text(entry.author, fontSize = UiDimens.caption, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f), maxLines = 1)
                 val meta = buildList {
                     add(if (entry.source == BookshelfSource.LOCAL_EPUB) "本地 EPUB" else "Wenku8")
                     entry.wordCount?.let { add("${formatWordCount(it)} 字") }
                     if (entry.chapterCount > 0) add("${entry.chapterCount} 章")
                 }
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(meta.joinToString(" · "), fontSize = 12.sp, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .6f), maxLines = 1)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
+                    Text(meta.joinToString(" · "), fontSize = UiDimens.captionSmall, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .6f), maxLines = 1)
                     if (entry.isPinned) {
-                        Badge(containerColor = MiuixTheme.colorScheme.primary) { Text("置顶", fontSize = 10.sp) }
+                        Badge(containerColor = MiuixTheme.colorScheme.primary) { Text("置顶", fontSize = UiDimens.badge) }
                     }
                 }
                 // 上次阅读时间 + 断点：未读过的书（lastReadAt=0）整行不显示
@@ -178,13 +185,13 @@ private fun BookshelfCard(
                     val resumeText = resume?.let { " · 读到 第${it.chapterIndex + 1}章 · 第${it.paragraphIndex + 1}段" }.orEmpty()
                     Text(
                         "上次阅读：${formatRelativeReadTime(now, entry.lastReadAt)}$resumeText",
-                        fontSize = 12.sp,
+                        fontSize = UiDimens.captionSmall,
                         color = MiuixTheme.colorScheme.primary.copy(alpha = .9f),
                         maxLines = 1,
                     )
                 }
             }
-            IconButton(onClick = onMore, modifier = Modifier.size(TOUCH_MIN.dp)) {
+            IconButton(onClick = onMore, modifier = Modifier.size(UiDimens.touchMin.dp)) {
                 Icon(MiuixIcons.More, contentDescription = "更多")
             }
         }
@@ -192,7 +199,6 @@ private fun BookshelfCard(
 }
 
 /** 触摸目标下限（与阅读器约定一致）。 */
-private const val TOUCH_MIN = 48
 
 /**
  * 书架条目「更多」操作菜单（Popup 锚定卡片右下，全部 MiuiX 组件）。
