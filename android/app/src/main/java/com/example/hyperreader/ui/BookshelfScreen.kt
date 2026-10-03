@@ -191,7 +191,7 @@ private fun BookshelfCard(
                     )
                 }
             }
-            IconButton(onClick = onMore, modifier = Modifier.size(UiDimens.touchMin.dp)) {
+            IconButton(onClick = onMore, modifier = Modifier.size(UiDimens.touchMin)) {
                 Icon(MiuixIcons.More, contentDescription = "更多")
             }
         }
