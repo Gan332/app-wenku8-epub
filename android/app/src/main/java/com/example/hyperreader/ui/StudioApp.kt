@@ -157,6 +157,7 @@ class MainActivity : ComponentActivity() {
                     onImportFont = { fontPicker.launch(arrayOf("font/ttf", "font/otf", "application/x-font-ttf", "application/octet-stream")) },
                     onExportConfig = { exportConfigLauncher.launch(com.example.hyperreader.ui.ConfigTransferFile.suggestedName()) },
                     onImportConfig = { importConfigLauncher.launch(com.example.hyperreader.ui.ConfigTransferFile.mimeTypes) },
+                    onOpenChallenge = { url -> challengeLauncher.launch(com.example.hyperreader.auth.CfChallengeActivity.intent(this, url)) },
                 )
             }
         }
@@ -193,6 +194,8 @@ private fun StudioApp(
     onImportFont: () -> Unit,
     onExportConfig: () -> Unit,
     onImportConfig: () -> Unit,
+    /** 打开 Cloudflare 验证窗口（由 Activity 侧的 launcher 实现）。 */
+    onOpenChallenge: (String) -> Unit,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
@@ -213,7 +216,7 @@ private fun StudioApp(
     // Cloudflare 拦截时自动弹验证窗口（用户亲手完成交互，通过后自动关闭并重试）
     LaunchedEffect(state.challengeUrl) {
         val url = state.challengeUrl ?: return@LaunchedEffect
-        challengeLauncher.launch(com.example.hyperreader.auth.CfChallengeActivity.intent(context, url))
+        onOpenChallenge(url)
     }
 
     LaunchedEffect(state.message) {

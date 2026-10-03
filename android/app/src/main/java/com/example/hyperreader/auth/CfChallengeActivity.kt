@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -95,7 +96,7 @@ private fun WebView.startVerification(url: String, onSatisfied: () -> Unit) {
     settings.domStorageEnabled = true
     settings.userAgentString = Wenku8NetProtocols.USER_AGENT
     CookieManager.getInstance().setAcceptCookie(true)
-    setAcceptThirdPartyCookies(this, true)
+    CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
     var finished = false
     webViewClient = object : WebViewClient() {
         override fun onPageFinished(view: WebView, pageUrl: String) {
@@ -124,7 +125,7 @@ private fun WebView.startVerification(url: String, onSatisfied: () -> Unit) {
 /** 验证窗口界面：MiuiX 顶部栏 + 提示 + 进度 + WebView + 关闭按钮。 */
 @Composable
 private fun CfChallengeScreen(onClose: () -> Unit, onWebViewReady: (WebView) -> Unit) {
-    Scaffold(topBar = { TopAppBar(title = { Text("完成 Cloudflare 验证") }) }) { padding ->
+    Scaffold(topBar = { TopAppBar(title = "完成 Cloudflare 验证") }) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
