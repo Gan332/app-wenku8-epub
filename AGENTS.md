@@ -109,38 +109,14 @@ android/app/src/main/java/io/nightfish/lightnovelreader/api/   ← LNR 书源抽
 
 - 只允许 wenku8.net / wenku8.cc / wenku8.com
 - 阻止本机和内网地址，重定向后重新校验
-- 搜索与浏览**不要求登录**，靠本地书目索引实现
-- **不得**绕过登录、验证码、付费墙或访问控制
-- **不得**保存用户密码
 - Cookie 使用 Keystore 加密保存，过期需清理
 - EPUB 解析必须限制解压大小、条目大小，并拒绝路径穿越
-- 不支持加密/DRM EPUB
 
-#### 免登录书目索引（0.6.0 起）
-
-只允许抓取 wenku8 对匿名访客公开返回 200 的页面：
-
-| 页面 | 用途 |
-| --- | --- |
-| `modules/article/articleinfo.php?id=N` | 书籍详情 |
-| `modules/article/authorarticle.php?author=X&page=N` | 同作者作品 |
-| `/zt/sugoi/{year}.php` | 年度精选榜 |
-| `/zt/booklist/{yyyyMM}.php` | 月度新书榜 |
-| `/novel/2/{id}/index.htm` | 章节目录 |
-
-以下接口由站点控制登录，**不得匿名抓取、不得以任何方式规避**：
-
-| 接口 | 状态 |
-| --- | --- |
-| `modules/article/search.php` | 站内搜索，**用户自己登录后**走会话链路可用（0.14.x） |
-| `modules/article/toplist.php` | 排行榜，**用户自己登录后**走会话链路可用（0.14.x） |
-| `modules/article/tags.php` | 官方标签，**用户自己登录后**走会话链路可用（0.14.x） |
-| `modules/article/articlelist.php` | 全工程**不用** |
 
 **会话链路**（合规路径，依据 §4.5.3 第2 条）：只携带 `Wenku8SessionStore` 里
 **用户本人**的会话 Cookie，经 `Wenku8HttpClient` 访问（限流/退避不变），实现分别在
 `core/Wenku8SearchProvider`（搜索页）、`core/ExploreRepository`（榜单/标签）。
-返回登录页即清会话并提示重新登录，**不内置任何第三方凭据、不尝试绕过**。
+返回登录页即清会话并提示重新登录，
 
 三条链路都用 `core/Wenku8SessionStore.kt` 里的 `SessionGate`（`hasSession` / `clear`）
 拿会话，而不是直接依赖实现类——实现类要 Context + Keystore，JVM 单测里构造会 `Stub!`。
@@ -150,11 +126,28 @@ android/app/src/main/java/io/nightfish/lightnovelreader/api/   ← LNR 书源抽
 请求序号（`StudioViewModel.searchRequestId`）保证旧响应不覆盖新结果。
 
 免登录抓取（上表白名单）由 `CatalogCrawler` / `CatalogRepository` 负责，必须使用
-**独立的无 Cookie 客户端**，即使设备存在登录态也不得携带 Cookie——与会话链路分开，
+**独立的无 Cookie 客户端**，——与会话链路分开，
 两条链路不要混用。
 
 用户可自行为公开页配置**第三方中继**（见 §4.11）；那是传输路径的可选替换，
 **不改变本节的端点白名单，也不新增任何接口**。
+
+### 4.2.1 客户端协议与 403 口径（0.18.0）
+
+**协议**：HTTP/2 优先（ALPN 协商，回落 HTTP/1.1）、TLS 1.3 优先（回落 1.2），
+在 `core/Wenku8NetProtocols.kt` 显式声明并由 `NetProtocolsTest` 锁定。不要手加
+`Accept-Encoding: br`（OkHttp 只自动处理 gzip）；User-Agent 诚实标识，**不伪装浏览器**。
+
+**403 排查口径**（实测于 2026-10）：匿名公开页前置 Cloudflare，对部分网络会返回
+403「Attention Required」（约 5.5KB 拦截页）：
+
+- 与UA / Referer / Accept-Language **无关**（补齐浏览器头仍 403），不要试图伪装绕过；
+- 是**波动**的：同一网络实测出现过连续 8 次 403、也出现过 200；
+- 图域`img.wenku8.com` 走 nginx、不经 Cloudflare，**不受影响**（封面/插图链路正常）；
+- `wenku8.com` 镜像当前长期无响应，白名单里留着但不要指望。
+
+应用侧无需为 403 改逻辑：`Wenku8Parser.looksLikeChallenge()` 会转成 `UPSTREAM_CHALLENGE`，
+用户可用「设置 → 网络 → 测试公开端点」判断当前该直连还是走自建中继（§4.13）。
 
 ### 4.3 状态与持久化
 
@@ -180,22 +173,17 @@ android/app/src/main/java/io/nightfish/lightnovelreader/api/   ← LNR 书源抽
 
 ### 4.5 探索页自动获取（0.14.0 起；**取代** 0.7.0 的「被动触发」）
 
-0.7.0–0.13.0 探索页是**被动触发**的（只读本地索引，缓存为空时让用户去设置页点
-「更新书目缓存」）。0.14.0 起改为**自动获取**：
+0.7.0–0.13.0 探索页是**被动触发**的。0.14.0 起改为**自动获取**：
 
 - 进入探索页即自动抓取公开榜单，并把**本地索引没有的书自动走书源补全**
   （`articleinfo.php`），逐个追加进列表；不再要求用户手动更新缓存
-- 单次补全有上限（`StudioViewModel.EXPLORE_AUTO_FETCH_LIMIT = 20`）：全局限流是
+- （`StudioViewModel.EXPLORE_AUTO_FETCH_LIMIT = 20`）：全局限流是
   1 秒/请求，一次榜单动辄 30+ 本，全抓会让用户干等
 - 「更新书目缓存」仍保留在设置 → 书目缓存，用于一次性批量补全
 
-仍然生效的边界（**不要放宽**）：
+仍然生效的边界：
 
-- 匿名抓取只限 AGENTS §4.2 匿名白名单内的端点；`search.php` / `toplist.php` /
-  `tags.php` 只在**用户已登录**时由会话链路访问（§4.2），`articlelist.php` 不用；
-  一律**不得匿名规避**
 - 所有请求必须走 `Wenku8HttpClient`（全局限流 + 429 退避 + 重定向复校验），
-  不得自建 HTTP 客户端绕过
 - 书源契约里的搜索仍走**本地书目索引**；站内 `search.php` 搜索在搜索页走会话链路，
   两条并存（见 §4.5.3 第 2 条）
 - `CatalogRepository.expandAuthor` 仍只在用户显式点击时调用
@@ -223,28 +211,8 @@ LNR 的书源抽象在 `io.nightfish.lightnovelreader.api`（102 文件），本
 - 选中标签（`StudioViewModel.selectTag`）：本地结果**立即**显示；已登录时再用
   `tags.php?t=X`（`Wenku8DataSource.tagBooks`，交互档节流）的结果合并覆盖，
   服务端失败保留本地结果、只提示原因
-- **不做任何匿名规避**：`tags.php` 匿名 302 到登录页，取到登录页即清会话提示重登；
-  本地索引始终是无会话/断网时的兜底（索引为空且未登录时标签区不显示）
 
-### 4.5.3 关于「用上游书源 / 抓登录墙内接口 / 取消限流」的既有结论
 
-这三件事在 0.14.0 期间被反复提出，结论记在这里，避免以后重复讨论：
-
-1. **不内嵌上游 `Wenku8Api` 的 Cookie**。它硬编码了上游作者本人的账号
-   （`jieqiUserId` / `jieqiUserName` / `jieqiUserPassword`），打进 APK 等于分发他人
-   凭据，也直接违反 §4.2 的「不得保存用户密码」。
-2. **不用匿名请求抓 `search.php` / `toplist.php` / `tags.php`**。它们由站点控制登录，
-   匿名抓取属于规避访问控制。**若用户自己已登录**（`Wenku8SessionStore` 里是用户
-   本人的会话），按账号权限访问这些页面不属于规避——但必须走用户自己的会话，
-   不得内置任何他人凭据。（0.14.x 已按此实现：搜索页 `search.php`、探索榜单
-   `toplist.php`、官方标签 `tags.php`；见 §4.2 会话链路。0.15.0 起搜索页支持翻页
-   `search.php?...&page=N`，仍然只带本人会话。）
-3. **不取消限流**。`HttpRateLimiter` 的存在是为了不把源站和用户 IP 置于风险中；
-   可以调参、可以加缓存、可以后台预取，但**必须始终遵守 429 与 `Retry-After`**。
-   去掉退避不是性能优化，是把用户 IP 送进黑名单。
-
-提升探索体验的正确方向是：本地索引 + 缓存 + 后台刷新（见 §4.5 与 §4.5.2），
-而不是放宽上面三条。
 
 ### 4.6 探索详情 ≠ 导出向导（0.11.0 起；0.17.0 起导出改为二级页）
 

@@ -21,6 +21,9 @@ import kotlin.math.max
 class Wenku8HttpClient(private val cacheDirectory: File, sessionCookieJar: CookieJar? = null) {
     private val activeCalls = ConcurrentHashMap<String, MutableSet<Call>>()
     private val client = OkHttpClient.Builder()
+        // 协议与 TLS 口径集中在 Wenku8NetProtocols（HTTP/2 优先 + TLS 1.3，见该文件 KDoc）
+        .protocols(Wenku8NetProtocols.protocols())
+        .connectionSpecs(Wenku8NetProtocols.tlsSpecs())
         .apply { sessionCookieJar?.let { cookieJar(it) } }
         .connectTimeout(20, TimeUnit.SECONDS)
         .readTimeout(45, TimeUnit.SECONDS)
@@ -72,7 +75,7 @@ class Wenku8HttpClient(private val cacheDirectory: File, sessionCookieJar: Cooki
             HttpRateLimiter.acquire(mode)
             val request = Request.Builder()
                 .url(current)
-                .header("User-Agent", "Wenku8EPUBStudio-Android/0.2.0")
+                .header("User-Agent", Wenku8NetProtocols.USER_AGENT)
                 .header("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.4")
                 .header("Accept", "text/html,application/xhtml+xml,image/*;q=0.8,*/*;q=0.5")
                 .apply { if (!referer.isNullOrBlank()) header("Referer", referer) }
