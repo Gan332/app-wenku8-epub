@@ -67,7 +67,7 @@ import kotlinx.coroutines.withContext
  */
 class Wenku8BookSource(
     private val http: Wenku8HttpClient,
-    private val session: Wenku8SessionStore,
+    private val session: SessionGate,
     /**
      * 本地书目索引查询（字段, 关键词）→ 命中书目。由宿主注入 `CatalogIndex`，
      * 避免书源反向依赖上层；缺省为空实现（搜索退化为无结果）。

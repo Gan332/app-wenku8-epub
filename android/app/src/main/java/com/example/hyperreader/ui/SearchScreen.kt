@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -13,6 +14,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -20,6 +22,7 @@ import androidx.compose.ui.unit.sp
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.SearchBar
+import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.TextField
@@ -77,11 +80,48 @@ fun SearchScreen(state: StudioUiState, viewModel: StudioViewModel, onLogin: () -
             Text(if (state.searchBusy) "搜索中…" else "搜索")
         }
         state.searchMessage?.let { MessageCard(it) }
-        if (state.searchResults.isEmpty() && !state.searchBusy) {
-            Text("输入关键词开始搜索。", color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f), fontSize = 14.sp)
+        if (state.searchResults.isEmpty() && state.searchBusy) {
+            Row(
+                Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(vertical = 8.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                CircularProgressIndicator(size = 24.dp)
+            }
+        } else if (state.searchResults.isEmpty() && !state.searchBusy) {
+            val emptyMessage = if (state.searchPage > 0) "没有找到结果。" else "输入关键词开始搜索。"
+            Text(emptyMessage, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f), fontSize = 14.sp)
         } else {
             LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(state.searchResults, key = { it.id }) { result -> SearchResultCard(result, viewModel::openSearchBook, Modifier.animateItem()) }
+                item {
+                    Column(
+                        Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        if (state.searchHasNextPage) {
+                            Button(
+                                onClick = viewModel::loadMoreSearchResults,
+                                enabled = !state.searchLoadingMore && !state.searchBusy,
+                                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                            ) {
+                                if (state.searchLoadingMore) {
+                                    Text("加载中…")
+                                } else {
+                                    Text("加载更多")
+                                }
+                            }
+                            if (state.searchLoadingMore) CircularProgressIndicator(size = 24.dp)
+                        } else if (state.searchPage > 0) {
+                            Text(
+                                "已加载第 ${state.searchPage} 页",
+                                color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f),
+                                fontSize = 13.sp,
+                            )
+                        }
+                    }
+                }
             }
         }
     }

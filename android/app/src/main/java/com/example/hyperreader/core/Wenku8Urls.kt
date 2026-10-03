@@ -32,10 +32,11 @@ object Wenku8Urls {
     /** wenku8 的轻小说分类号，绝大多数条目都在这里。 */
     const val DEFAULT_NOVEL_CATEGORY = "2"
 
-    fun search(keyword: String, field: SearchField): String {
+    fun search(keyword: String, field: SearchField, page: Int = 1): String {
+        require(page >= 1) { "搜索页码必须从 1 开始。" }
         val encoded = runCatching { URLEncoder.encode(keyword.trim(), Charset.forName("GBK")) }.getOrElse { URLEncoder.encode(keyword.trim(), Charsets.UTF_8) }
         val type = if (field == SearchField.AUTHOR) "author" else "articlename"
-        return "$SEARCH?searchtype=$type&searchkey=$encoded"
+        return "$SEARCH?searchtype=$type&searchkey=$encoded&page=$page"
     }
 
     fun toplist(sort: String = "lastupdate") = "$TOP_LIST?sort=$sort"

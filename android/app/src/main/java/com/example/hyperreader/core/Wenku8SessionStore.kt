@@ -9,7 +9,22 @@ import okhttp3.CookieJar
 import okhttp3.HttpUrl
 import org.json.JSONObject
 
-class Wenku8SessionStore(context: Context) {
+/**
+ * 会话门：会话链路（`search.php` / `toplist.php` / `tags.php`）需要的最小能力。
+ *
+ * 抽成接口是为了让 [Wenku8SearchProvider]、[Wenku8DataSource] 在单测里能注入假实现——
+ * [Wenku8SessionStore] 依赖 Context + Keystore + `EncryptedSharedPreferences`，
+ * JVM 单测（无 Android runtime）里构造它会直接抛 `Stub!`。
+ *
+ * 只表达「有没有用户自己的会话」与「会话失效时清掉」，**不含任何绕过登录的能力**。
+ */
+interface SessionGate {
+    fun hasSession(): Boolean
+    fun clear()
+}
+
+/** 用户**本人**的 wenku8 会话 Cookie（Keystore 加密存储），实现 [SessionGate]。 */
+class Wenku8SessionStore(context: Context) : SessionGate {
     private val preferences = EncryptedSharedPreferences.create(
         context,
         FILE_NAME,
@@ -18,7 +33,7 @@ class Wenku8SessionStore(context: Context) {
         EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
     )
 
-    fun hasSession(): Boolean = !allCookies()["jieqiUserInfo"].isNullOrBlank()
+    override fun hasSession(): Boolean = !allCookies()["jieqiUserInfo"].isNullOrBlank()
 
     fun allCookies(): Map<String, String> {
         val raw = preferences.getString(COOKIE_KEY, null) ?: return emptyMap()
@@ -44,7 +59,7 @@ class Wenku8SessionStore(context: Context) {
         saveWebViewCookies(CookieManager.getInstance().getCookie(Wenku8Urls.BASE))
     }
 
-    fun clear() {
+    override fun clear() {
         preferences.edit().remove(COOKIE_KEY).apply()
         CookieManager.getInstance().removeAllCookies(null)
         CookieManager.getInstance().flush()

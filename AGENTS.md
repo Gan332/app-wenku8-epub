@@ -13,7 +13,7 @@
 
 当前主要发版对象是 **Android 原生应用**。Android 版本不需要 Node.js 服务，WebView 仅用于 wenku8 登录。
 
-当前版本：`0.14.0`（versionCode 21，见 `android/app/build.gradle.kts`，以该文件为准）
+当前版本：`0.15.0`（versionCode 22，见 `android/app/build.gradle.kts`，以该文件为准）
 包名：`com.example.hyperreader`（由 `com.wenku8.epubstudio` 于 0.9.0 重命名，非原地改名，升级需数据迁移）
 
 仓库地址：`https://github.com/Gan332/app-wenku8-epub`
@@ -136,10 +136,17 @@ android/app/src/main/java/io/nightfish/lightnovelreader/api/   ← LNR 书源抽
 | `modules/article/tags.php` | 官方标签，**用户自己登录后**走会话链路可用（0.14.x） |
 | `modules/article/articlelist.php` | 全工程**不用** |
 
-**会话链路**（合规路径，依据 §4.5.3 第 2 条）：只携带 `Wenku8SessionStore` 里
+**会话链路**（合规路径，依据 §4.5.3 第2 条）：只携带 `Wenku8SessionStore` 里
 **用户本人**的会话 Cookie，经 `Wenku8HttpClient` 访问（限流/退避不变），实现分别在
-`core/Wenku8SearchProvider`（搜索页）与 `core/ExploreRepository`（榜单/标签）。
+`core/Wenku8SearchProvider`（搜索页）、`core/ExploreRepository`（榜单/标签）。
 返回登录页即清会话并提示重新登录，**不内置任何第三方凭据、不尝试绕过**。
+
+三条链路都用 `core/Wenku8SessionStore.kt` 里的 `SessionGate`（`hasSession` / `clear`）
+拿会话，而不是直接依赖实现类——实现类要 Context + Keystore，JVM 单测里构造会 `Stub!`。
+
+搜索页的分页口径（0.15.0 起）：请求带 `page=`（从 1 开始），**页码以请求参数为准**，
+`em#pagestats` 只用于推断总页数（认 `2/5`、`共5页`），否则退回「下一页」锚点；
+请求序号（`StudioViewModel.searchRequestId`）保证旧响应不覆盖新结果。
 
 免登录抓取（上表白名单）由 `CatalogCrawler` / `CatalogRepository` 负责，必须使用
 **独立的无 Cookie 客户端**，即使设备存在登录态也不得携带 Cookie——与会话链路分开，
@@ -220,7 +227,8 @@ LNR 的书源抽象在 `io.nightfish.lightnovelreader.api`（102 文件），本
    匿名抓取属于规避访问控制。**若用户自己已登录**（`Wenku8SessionStore` 里是用户
    本人的会话），按账号权限访问这些页面不属于规避——但必须走用户自己的会话，
    不得内置任何他人凭据。（0.14.x 已按此实现：搜索页 `search.php`、探索榜单
-   `toplist.php`、官方标签 `tags.php`；见 §4.2 会话链路。）
+   `toplist.php`、官方标签 `tags.php`；见 §4.2 会话链路。0.15.0 起搜索页支持翻页
+   `search.php?...&page=N`，仍然只带本人会话。）
 3. **不取消限流**。`HttpRateLimiter` 的存在是为了不把源站和用户 IP 置于风险中；
    可以调参、可以加缓存、可以后台预取，但**必须始终遵守 429 与 `Retry-After`**。
    去掉退避不是性能优化，是把用户 IP 送进黑名单。

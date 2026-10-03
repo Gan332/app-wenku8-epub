@@ -4,7 +4,7 @@ import com.example.hyperreader.model.SearchBook
 
 class Wenku8DataSource(
     private val http: Wenku8HttpClient,
-    private val sessionStore: Wenku8SessionStore,
+    private val sessionStore: SessionGate,
 ) : NovelDataSource {
     override val id = "wenku8"
     override val displayName = "Wenku8 轻小说文库"

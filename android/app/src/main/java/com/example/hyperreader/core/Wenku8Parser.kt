@@ -12,6 +12,19 @@ import org.jsoup.nodes.Element
 import org.jsoup.nodes.TextNode
 
 object Wenku8Parser {
+    /** `em#pagestats` 里的「当前页/总页数」形式，如 `2/5`、`2 / 5`。 */
+    private val PAGE_SLASH = Regex("(\\d+)\\s*/\\s*(\\d+)")
+
+    /** `em#pagestats` 里的「共N页」形式。 */
+    private val PAGE_TOTAL = Regex("(?:共|計|计)\\s*(\\d+)\\s*页?")
+
+    data class SearchPageData(
+        val books: List<SearchBook>,
+        val page: Int,
+        val pageCount: Int?,
+        val hasNextPage: Boolean,
+    )
+
     fun looksLikeChallenge(html: String): Boolean = Regex("<title[^>]*>\\s*(Just a moment|Attention Required)|Checking your browser|cf-chl-|__cf_chl", RegexOption.IGNORE_CASE).containsMatchIn(html.take(20_000))
 
     fun parseBook(html: String, bookUrl: String, requestedDirectoryUrl: String? = null): Book {
@@ -261,6 +274,47 @@ object Wenku8Parser {
             )
         }
         return results
+    }
+
+    /**
+     * 解析登录态站内搜索结果及 `em#pagestats` 中的分页状态。
+     *
+     * **页码以请求参数 [requestedPage] 为准**（`page=` 是服务端分页的真相），`em#pagestats`
+     * 的文案随站点主题变化、格式并不稳定，因此只用来推断**总页数**；拿不到总页数时退回
+     * 「下一页」锚点判断，两条路都拿不到才算末页。登录页在 [parseSearchResults] 就抛 `AUTH_REQUIRED`。
+     */
+    fun parseSearchPage(html: String, finalUrl: String, requestedPage: Int = 1): SearchPageData {
+        require(requestedPage >= 1) { "搜索页码必须从 1 开始。" }
+        val books = parseSearchResults(html, finalUrl)
+        val document = Jsoup.parse(html, finalUrl)
+        val pageCount = totalPages(document.selectFirst("em#pagestats")?.text().orEmpty())
+        val hasNextPage = pageCount?.let { requestedPage < it }
+            ?: document.select("a[href]").any { anchor ->
+                anchor.text().contains("下一页") ||
+                    Regex("[?&]page=${requestedPage + 1}(\\D|$)").containsMatchIn(anchor.attr("href"))
+            }
+        return SearchPageData(
+            books = books,
+            page = requestedPage,
+            pageCount = pageCount,
+            hasNextPage = hasNextPage,
+        )
+    }
+
+    /**
+     * 从 `em#pagestats` 文案里取**总页数**：`2/5`、`2 / 5`、`共5页` 都认。
+     *
+     * 斜杠形式要求「前面的当前页 ≤ 总页数」，否则视为文案不是分页状态（如单纯的年份数字），
+     * 返回 null 让调用方退回锚点判断。
+     */
+    private fun totalPages(stats: String): Int? {
+        if (stats.isBlank()) return null
+        PAGE_SLASH.find(stats)?.let { slash ->
+            val current = slash.groupValues[1].toIntOrNull()
+            val total = slash.groupValues[2].toIntOrNull()
+            if (current != null && total != null && current >= 1 && total >= current) return total
+        }
+        return PAGE_TOTAL.find(stats)?.groupValues?.get(1)?.toIntOrNull()?.takeIf { it >= 1 }
     }
 
     /**

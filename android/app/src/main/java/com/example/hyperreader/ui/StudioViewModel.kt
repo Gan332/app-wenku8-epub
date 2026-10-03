@@ -8,6 +8,7 @@ import com.example.hyperreader.core.CatalogEntry
 import com.example.hyperreader.core.CatalogSearchField
 import com.example.hyperreader.core.ExploreBooksRow
 import com.example.hyperreader.core.ExplorePage
+import com.example.hyperreader.core.Wenku8Exception
 import com.example.hyperreader.core.Wenku8HttpClient
 import com.example.hyperreader.core.Wenku8Parser
 import com.example.hyperreader.core.Wenku8Urls
@@ -28,6 +29,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import java.io.File
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.first
 import com.example.hyperreader.BuildConfig
@@ -53,6 +55,40 @@ internal fun CatalogEntry.toSearchBook(): SearchBook = SearchBook(
 enum class StudioTab { BOOKSHELF, EXPLORE, CREATE, SETTINGS }
 enum class CreateStep { SOURCE, DETAIL, CHAPTERS, EXPORT, PROGRESS }
 
+/** 站内搜索的跨页追加、去重及过期响应判定；与 Android 生命周期解耦以便单测。 */
+internal object SearchPager {
+    fun append(current: List<SearchBook>, incoming: List<SearchBook>): List<SearchBook> {
+        val seen = current.mapTo(mutableSetOf()) { it.id }
+        return current + incoming.filter { seen.add(it.id) }
+    }
+
+    fun isCurrent(requestId: Long, currentRequestId: Long): Boolean = requestId == currentRequestId
+
+    fun firstPage(state: StudioUiState, page: Wenku8Parser.SearchPageData, loggedIn: Boolean): StudioUiState =
+        state.copy(
+            searchBusy = false,
+            searchResults = page.books,
+            searchPage = page.page,
+            searchHasNextPage = page.hasNextPage,
+            searchLoadingMore = false,
+            searchMessage = null,
+            loggedIn = loggedIn,
+        )
+
+    fun morePage(state: StudioUiState, page: Wenku8Parser.SearchPageData, loggedIn: Boolean): StudioUiState {
+        // 拿到空页就收手：源站翻过头时不会给 `hasNextPage`，但空列表继续翻页只会空转
+        val hasNextPage = page.books.isNotEmpty() && page.hasNextPage
+        return state.copy(
+            searchResults = append(state.searchResults, page.books),
+            searchPage = maxOf(page.page, state.searchPage),
+            searchHasNextPage = hasNextPage,
+            searchLoadingMore = false,
+            searchMessage = null,
+            loggedIn = loggedIn,
+        )
+    }
+}
+
 /** 设置二级界面分区。 */
 enum class SettingsSection { OVERVIEW, APPEARANCE, READER, STATISTICS, CATALOG, CONFIG, ABOUT }
 
@@ -76,6 +112,9 @@ data class StudioUiState(
     val searchResults: List<SearchBook> = emptyList(),
     val searchHistory: List<String> = emptyList(),
     val searchBusy: Boolean = false,
+    val searchPage: Int = 0,
+    val searchHasNextPage: Boolean = false,
+    val searchLoadingMore: Boolean = false,
     val searchMessage: String? = null,
     val loggedIn: Boolean = false,
     val bookshelf: List<BookshelfEntry> = emptyList(),
@@ -125,6 +164,11 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     private val catalogRepository = app.catalogRepository
     /** 探索详情专用：只走公开 API，不经过解析管线。 */
     private val exploreDetailRepository = app.exploreDetailRepository
+    /**
+     * 搜索请求的单调序号：只有与当前值一致的那个响应能写状态，
+     * 用户中途改关键词/切字段/连点「加载更多」时，旧响应直接丢弃。
+     */
+    private var searchRequestId = 0L
     private val mutable = MutableStateFlow(StudioUiState())
     val state: StateFlow<StudioUiState> = mutable.asStateFlow()
     val appTheme = settingsRepository.appTheme
@@ -246,7 +290,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
                     cards = exploreRepository.load(page)
                     cards.map { it.id }
                 } else {
-                    val publicClient = com.example.hyperreader.core.Wenku8HttpClient(java.io.File(app.cacheDir, "wenku8-explore"))
+                    val publicClient = Wenku8HttpClient(File(app.cacheDir, "wenku8-explore"))
                     val resource = publicClient.fetchText(page.url, "explore-public", Wenku8Urls.BASE)
                     Wenku8Parser.parseBookLinks(resource.html, resource.finalUrl).map { it.id }
                 }
@@ -444,8 +488,26 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     fun setCover(value: Boolean) = mutable.update { it.copy(includeCover = value) }
     fun clearMessage() = mutable.update { it.copy(message = null) }
 
-    fun setSearchQuery(value: String) = mutable.update { it.copy(searchQuery = value, searchMessage = null) }
-    fun setSearchField(value: SearchField) = mutable.update { it.copy(searchField = value) }
+    fun setSearchQuery(value: String) = startNewSearch { it.copy(searchQuery = value) }
+    fun setSearchField(value: SearchField) = startNewSearch { it.copy(searchField = value) }
+
+    /**
+     * 换查询条件：作废在途请求（靠 [searchRequestId]）并清掉分页状态。
+     *
+     * 已加载的结果保留在屏幕上（不会闪空），下一次点「搜索」整体覆盖。
+     */
+    private inline fun startNewSearch(transform: (StudioUiState) -> StudioUiState) {
+        searchRequestId += 1
+        mutable.update {
+            transform(it).copy(
+                searchMessage = null,
+                searchBusy = false,
+                searchLoadingMore = false,
+                searchHasNextPage = false,
+                searchPage = 0,
+            )
+        }
+    }
     fun refreshSession() {
         val loggedIn = app.sessionStore.hasSession()
         mutable.update { it.copy(loggedIn = loggedIn) }
@@ -455,11 +517,65 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     fun searchBooks() {
         val current = state.value
         if (current.searchQuery.isBlank()) return
+        val requestId = ++searchRequestId
+        mutable.update {
+            it.copy(
+                searchBusy = true,
+                searchLoadingMore = false,
+                searchHasNextPage = false,
+                searchPage = 0,
+                searchMessage = null,
+            )
+        }
         viewModelScope.launch {
-            mutable.update { it.copy(searchBusy = true, searchMessage = null) }
-            runCatching { searchProvider.search(current.searchQuery, current.searchField) }
-                .onSuccess { results -> mutable.update { it.copy(searchBusy = false, searchResults = results, loggedIn = app.sessionStore.hasSession()) }; settingsRepository.recordSearch(current.searchQuery) }
-                .onFailure { error -> mutable.update { it.copy(searchBusy = false, searchMessage = error.message ?: "搜索失败。", loggedIn = app.sessionStore.hasSession()) } }
+            runCatching { searchProvider.search(current.searchQuery, current.searchField, 1) }
+                .onSuccess { page ->
+                    if (SearchPager.isCurrent(requestId, searchRequestId)) {
+                        mutable.update { SearchPager.firstPage(it, page, app.sessionStore.hasSession()) }
+                        settingsRepository.recordSearch(current.searchQuery)
+                    }
+                }
+                .onFailure { error ->
+                    if (SearchPager.isCurrent(requestId, searchRequestId)) {
+                        mutable.update { state ->
+                            state.copy(
+                                searchBusy = false,
+                                searchLoadingMore = false,
+                                searchMessage = error.message ?: "搜索失败。",
+                                loggedIn = app.sessionStore.hasSession(),
+                            )
+                        }
+                        if ((error as? Wenku8Exception)?.code == "AUTH_REQUIRED") refreshSession()
+                    }
+                }
+        }
+    }
+
+    fun loadMoreSearchResults() {
+        val current = state.value
+        if (current.searchQuery.isBlank() || current.searchBusy || current.searchLoadingMore || !current.searchHasNextPage) return
+        val requestId = ++searchRequestId
+        val nextPage = current.searchPage + 1
+        mutable.update { it.copy(searchLoadingMore = true, searchMessage = null) }
+        viewModelScope.launch {
+            runCatching { searchProvider.search(current.searchQuery, current.searchField, nextPage) }
+                .onSuccess { page ->
+                    if (SearchPager.isCurrent(requestId, searchRequestId)) {
+                        mutable.update { SearchPager.morePage(it, page, app.sessionStore.hasSession()) }
+                    }
+                }
+                .onFailure { error ->
+                    if (SearchPager.isCurrent(requestId, searchRequestId)) {
+                        mutable.update { state ->
+                            state.copy(
+                                searchLoadingMore = false,
+                                searchMessage = error.message ?: "加载更多失败。",
+                                loggedIn = app.sessionStore.hasSession(),
+                            )
+                        }
+                        if ((error as? Wenku8Exception)?.code == "AUTH_REQUIRED") refreshSession()
+                    }
+                }
         }
     }
     /**
