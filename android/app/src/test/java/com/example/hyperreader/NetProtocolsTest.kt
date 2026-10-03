@@ -4,6 +4,7 @@ import com.example.hyperreader.core.Wenku8NetProtocols
 import okhttp3.Protocol
 import okhttp3.TlsVersion
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -31,10 +32,10 @@ class NetProtocolsTest {
     }
 
     @Test
-    fun cipherSuitesComeFromModernTls() {
-        val spec = Wenku8NetProtocols.tlsSpecs().single()
-        // MODERN_TLS 的 cipher 集非空（不是空实现）
-        assertTrue(!spec.cipherSuites.isNullOrEmpty())
+    fun cipherSuitesAreLeftToTheModernTlsDefaults() {
+        // allEnabledCipherSuites() 的语义是“清空自定义列表、沿用 MODERN_TLS 默认全集”，
+        // 因此 cipherSuites 为 null 是预期结果——我们自己不裁剪 cipher 集。
+        assertNull(Wenku8NetProtocols.tlsSpecs().single().cipherSuites)
     }
 
     @Test
