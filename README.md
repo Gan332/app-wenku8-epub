@@ -185,6 +185,7 @@ npm run release:package
 - [`docs/USER_SOP.md`](docs/USER_SOP.md)：用户操作流程
 - [`docs/ENGINEERING_SOP.md`](docs/ENGINEERING_SOP.md)：Git、开发、测试和发布流程
 - [`docs/RELEASE_CHECKLIST.md`](docs/RELEASE_CHECKLIST.md)：发布验收清单
+- [`docs/RELEASE_NOTES_v0.17.0.md`](docs/RELEASE_NOTES_v0.17.0.md)：v0.17.0 阅读优先的信息架构重构
 - [`docs/RELEASE_NOTES_v0.16.0.md`](docs/RELEASE_NOTES_v0.16.0.md)：v0.16.0 第三方中继（仅公开页）
 - [`docs/RELEASE_NOTES_v0.15.0.md`](docs/RELEASE_NOTES_v0.15.0.md)：v0.15.0 站内搜索翻页
 - [`docs/RELEASE_NOTES_v0.13.0.md`](docs/RELEASE_NOTES_v0.13.0.md)：v0.13.0 阅读器换成 XY reader

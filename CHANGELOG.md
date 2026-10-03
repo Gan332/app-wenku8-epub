@@ -2,6 +2,29 @@
 
 本项目遵循语义化版本。
 
+## [0.17.0] - 2026-10-06
+
+### 变更（信息架构：阅读优先）
+
+- **底部导航去掉「创建」tab**，只保留 书架 / 探索 / 设置；导出不再占据一级入口。
+- **书架卡片点一下直接读**：本地书进 xy-reader，远程书进在线阅读器（自动跳最近章）并记录阅读；
+  详情与导出改到卡片「更多」菜单（「查看详情」「导出 EPUB」）。
+- **导出降级为二级页向导**：从书架卡片菜单发起，四步为 解析目录 → 选择章节 → 打包设置 → 进度；
+  解析失败可重试。目录解析成功默认全选章节。
+- **书架远程书的详情复用探索详情那条公开数据通路**（`ExploreDetailRepository`），
+  不再维护第二套详情 UI；探索详情的「在线阅读」主按钮与双引擎一键导出保持不变（§4.9）。
+- **导出记录独立成页**，入口在 设置 → 概览与通知栏路由；书架页只保留进行中任务概览。
+- 解析/导出相关的历史入口「粘贴网址创建」随「创建」tab 一并移除：导出现在从具体书籍发起。
+
+### 内部
+
+- `StudioTab.CREATE` 与 `CreateStep`（源站/详情/章节/导出/进度）删除，
+  改为 `ExportStep`（解析中/章节/打包/进度）+ `StudioUiState.exportStep`（null = 不在向导里）。
+- 新增纯函数 `ExportWizard`（begin / resolved / failed / close / openShelfDetail）承载状态迁移，
+  单测 `ExportWizardTest` 锁定「发起必清残留」「解析失败留在解析态」「详情不碰导出状态」三条不变量。
+- `BookDetailScreen.kt` 与 `SourceScreen` 删除；`parseSource` 更名 `resolveForExport`；
+  `openShelfRemote` 改为 `openShelfBookDetail`（走公开详情通路）。
+
 ## [0.16.0] - 2026-10-05
 
 ### 新增

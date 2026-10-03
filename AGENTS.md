@@ -13,7 +13,7 @@
 
 当前主要发版对象是 **Android 原生应用**。Android 版本不需要 Node.js 服务，WebView 仅用于 wenku8 登录。
 
-当前版本：`0.16.0`（versionCode 23，见 `android/app/build.gradle.kts`，以该文件为准）
+当前版本：`0.17.0`（versionCode 24，见 `android/app/build.gradle.kts`，以该文件为准）
 包名：`com.example.hyperreader`（由 `com.wenku8.epubstudio` 于 0.9.0 重命名，非原地改名，升级需数据迁移）
 
 仓库地址：`https://github.com/Gan332/app-wenku8-epub`
@@ -92,7 +92,7 @@ android/app/src/main/java/io/nightfish/lightnovelreader/api/   ← LNR 书源抽
 入口：Manifest 声明的启动 Activity 是 `.MainActivity`，但它**不是独立文件**，类定义在
 `ui/StudioApp.kt`（`proguard-rules.pro` 的 keep 规则也指向它）。找入口别搜 `MainActivity.kt`。
 
-页面：书架（含书籍操作二级界面）、探索、创建流程（源站/详情/章节/导出/进度）、设置（二级：主题与外观/阅读器设置/阅读统计/书目缓存/关于）。
+页面：**书架**（含书籍操作二级菜单）、**探索**（书籍详情全屏页）、**设置**（二级：主题与外观/阅读器设置/阅读统计/书目缓存/关于）。0.17.0 起**导出**不再是一级入口，而是书架卡片菜单里的次级动作，其向导是全屏覆盖层（`StudioUiState.exportStep != null`）。
 
 ## 4. 关键设计约束
 
@@ -239,26 +239,43 @@ LNR 的书源抽象在 `io.nightfish.lightnovelreader.api`（102 文件），本
 提升探索体验的正确方向是：本地索引 + 缓存 + 后台刷新（见 §4.5 与 §4.5.2），
 而不是放宽上面三条。
 
-### 4.6 探索详情 ≠ 创建导出（0.11.0 起）
+### 4.6 探索详情 ≠ 导出向导（0.11.0 起；0.17.0 起导出改为二级页）
 
 「看一眼书」和「导出这本书」是两条**互不相干**的链路，不要互相调用：
 
-| | 探索详情 | 创建导出 |
+| | 探索详情（含书架书详情） | 导出向导 |
 | --- | --- | --- |
-| 入口 | 探索页点书 → `StudioViewModel.openSearchBook` | 粘贴 URL / 书架在线阅读 |
-| 数据 | `ExploreDetailRepository`（`articleinfo.php` + 目录页） | `ExportJobManager.parseSource` |
-| 节奏 | `HttpRateLimiter.Mode.INTERACTIVE` | `Mode.BATCH`（默认） |
-| 状态 | `StudioUiState.exploreDetail*` | `CreateStep` / `book` / `index` |
+| 入口 | 探索页点书 / 书架卡片菜单「查看详情」 | 书架卡片菜单「导出 EPUB」 |
+| 数据 | `ExploreDetailRepository`（`articleinfo.php` + 目录页） | `ExportJobManager.parseSource` → `resolveForExport()` |
+| 节奏 | `Wenku8HttpClient.fetchTextInteractive()` | `Mode.BATCH`（默认） |
+| 状态 | `StudioUiState.exploreDetail*` | `StudioUiState.exportStep` + `book` / `index` / `selectedIds` |
 | 产物 | `ExploreBookDetail`（展示用） | `Book` + `BookIndex`（选章导出） |
 
 硬约束：
 
-- 探索详情**不得**调用 `parseSource()`，也**不得**改动 `CreateStep` 相关状态
+- 探索详情**不得**调用 `resolveForExport()`，也**不得**改动 `book` / `index` / `exportStep`
+- 导出向导**不得**在解析前假定有详情数据；解析成功即默认全选并进入选章节
 - 探索详情走 `Wenku8HttpClient.fetchTextInteractive()`，批量路径继续用 `fetchText()`
 - 详情页目录页失败可降级（`ExploreBookDetail.indexError` 非空、`chapters` 为空），
   不得因此整页报错
 - `HttpRateLimiter.Mode.INTERACTIVE` 只是「允许突刺」，**不降低批量节奏**：
   6 秒滑动窗口内最多 6 次，超限自动退回 1 秒/请求
+
+### 4.6.1 阅读优先（0.17.0 起）
+
+信息架构的第一原则：**读者打开应用是为了读，不是为了导出**。为此定下几条硬约束：
+
+1. 底部导航**只有三项**（书架 / 探索 / 设置）；任何导出入口都不得回到一级导航。
+   新增功能时不要为了“放得下”而给导出一个 tab。
+2. **点书即读**：书架卡片主体点击 = 打开阅读器（本地 EPUB → `XyReaderActivity`，
+   远程书 → `onlineReaderIntent`，并 `markShelfRead`）。详情与导出是卡片「更多」菜单里的条目。
+3. **详情只有一个实现**：书架书与探索书共用 `ExploreDetailScreen` + `ExploreDetailRepository`；
+   不允许再写第二套详情 UI（0.17.0 已删掉 `BookDetailScreen`）。
+4. **导出向导是覆盖层**：`StudioUiState.exportStep != null` 时全屏接管（`StudioUiState.exportStep`
+   为 null 表示不在向导里）；状态迁移集中在纯函数 `ExportWizard`，便于单测。
+5. **导出记录跟着导出走**：独立成页，入口在设置 → 概览与通知栏路由，不占书架页顶部。
+6. 解析逻辑（`ExportJobManager`）与阅读解耦：阅读走 `OnlineReaderActivity` 自己的目录预取与分页源，
+   不经过 `parseSource()` / `resolveForExport()`。
 
 ### 4.7 封面加载
 

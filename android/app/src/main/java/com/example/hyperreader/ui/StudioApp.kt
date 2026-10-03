@@ -54,6 +54,7 @@ import top.yukonga.miuix.kmp.basic.BreadcrumbBar
 import top.yukonga.miuix.kmp.basic.BreadcrumbItem
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Checkbox
+import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.LinearProgressIndicator
 import top.yukonga.miuix.kmp.basic.NavigationBar
@@ -67,7 +68,6 @@ import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.Add
 import top.yukonga.miuix.kmp.icon.extended.Download
 import top.yukonga.miuix.kmp.icon.extended.Recent
 import top.yukonga.miuix.kmp.icon.extended.Search
@@ -83,7 +83,6 @@ import com.example.hyperreader.auth.LoginActivity
 import com.example.hyperreader.reader.XyReaderActivity
 import com.example.hyperreader.reader.onlineReaderIntent
 import com.example.hyperreader.ui.AppMiuixTheme
-import com.example.hyperreader.ui.BookDetailScreen
 import com.example.hyperreader.ui.BookshelfScreen
 import com.example.hyperreader.ui.ExploreDetailScreen
 import com.example.hyperreader.ui.ExploreScreen
@@ -98,7 +97,7 @@ import com.example.hyperreader.model.Chapter
 import com.example.hyperreader.model.ExportJob
 import com.example.hyperreader.model.JobStatus
 import com.example.hyperreader.model.SearchField
-import com.example.hyperreader.ui.CreateStep
+import com.example.hyperreader.ui.ExportStep
 import com.example.hyperreader.ui.StudioTab
 import com.example.hyperreader.ui.StudioUiState
 import com.example.hyperreader.ui.StudioViewModel
@@ -206,27 +205,25 @@ private fun StudioApp(
         topBar = {
             TopAppBar(
                 title = when {
-                    // 探索详情接管整屏时优先显示它；这一支必须排在 tab 判断之前，
-                    // 否则从探索进入详情时 tab 仍是 EXPLORE，标题会一直显示「探索」。
+                    // 全屏覆盖页优先于 tab：探索详情 > 导出记录 > 导出向导 > 主导航
                     state.exploreDetailId != null -> "书籍详情"
+                    state.showJobHistory -> "导出记录"
+                    state.exportStep == ExportStep.RESOLVING -> "解析目录"
+                    state.exportStep == ExportStep.CHAPTERS -> "选择章节"
+                    state.exportStep == ExportStep.PACKAGING -> "导出设置"
+                    state.exportStep == ExportStep.PROGRESS -> "导出进度"
                     state.tab == StudioTab.BOOKSHELF -> "我的书架"
                     state.tab == StudioTab.EXPLORE -> "探索"
-                    state.tab == StudioTab.SETTINGS -> settingsTitle
-                    state.step == CreateStep.SOURCE -> "HyperReader"
-                    state.step == CreateStep.DETAIL -> "书籍详情"
-                    state.step == CreateStep.CHAPTERS -> "选择章节"
-                    state.step == CreateStep.EXPORT -> "导出设置"
-                    else -> "导出进度"
+                    else -> settingsTitle
                 },
             )
         },
         bottomBar = {
-            // 探索详情是全屏独立页面：不显示底部导航，避免误触 tab 丢掉当前详情
-            if (state.exploreDetailId == null) {
+            // 全屏覆盖页（探索详情、导出记录）不显示底部导航，避免误触 tab 丢掉上下文
+            if (state.exploreDetailId == null && !state.showJobHistory) {
                 NavigationBar {
                     NavigationBarItem(selected = state.tab == StudioTab.BOOKSHELF, onClick = { viewModel.setTab(StudioTab.BOOKSHELF) }, icon = MiuixIcons.Recent, label = "书架")
                     NavigationBarItem(selected = state.tab == StudioTab.EXPLORE, onClick = { viewModel.setTab(StudioTab.EXPLORE) }, icon = MiuixIcons.Search, label = "探索")
-                    NavigationBarItem(selected = state.tab == StudioTab.CREATE, onClick = { viewModel.setTab(StudioTab.CREATE) }, icon = MiuixIcons.Add, label = "创建")
                     NavigationBarItem(selected = state.tab == StudioTab.SETTINGS, onClick = { viewModel.setTab(StudioTab.SETTINGS) }, icon = MiuixIcons.Settings, label = "设置")
                 }
             }
@@ -234,7 +231,7 @@ private fun StudioApp(
         snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).padding(horizontal = 18.dp)) {
-            // 探索详情优先接管整屏：与 tab 内容、创建流程步骤互斥
+            // 探索详情优先接管整屏：与导出记录、向导、tab 内容互斥
             if (state.exploreDetailId != null) {
                 ExploreDetailScreen(
                     seed = state.exploreDetailSeed,
@@ -269,13 +266,16 @@ private fun StudioApp(
                 )
                 return@Column
             }
-            // 页面转场：tab 切换与创建流程步骤共用一套（横向滑入 + 淡入，MiuiX 缓动）
-        val pageKey = when {
-            state.tab == StudioTab.BOOKSHELF -> "bookshelf"
-            state.tab == StudioTab.EXPLORE -> "explore"
-            state.tab == StudioTab.SETTINGS -> "settings"
-            else -> "create:${state.step}"
-        }
+            if (state.showJobHistory) {
+                JobHistoryScreen(state, viewModel)
+                return@Column
+            }
+            if (state.exportStep != null) {
+                ExportWizardScreen(state, viewModel)
+                return@Column
+            }
+            // 页面转场：tab 切换共用一套（横向滑入 + 淡入，MiuiX 缓动）
+        val pageKey = state.tab.name.lowercase()
         AnimatedContent(
             targetState = pageKey,
             transitionSpec = {
@@ -287,11 +287,30 @@ private fun StudioApp(
             label = "pageTransition",
         ) { _ ->
             when {
-                state.tab == StudioTab.BOOKSHELF -> BookshelfScreen(state, viewModel, onImportEpub, onOpenLocal = { entry ->
-                    entry.localUri?.let { uri ->
-                        context.startActivity(XyReaderActivity.intent(context, uri, entry.bookId, entry.title))
-                    }
-                }, onOpenRemote = { entry -> viewModel.openShelfRemote(entry) })
+                state.tab == StudioTab.BOOKSHELF -> BookshelfScreen(
+                    state = state,
+                    viewModel = viewModel,
+                    onImportEpub = onImportEpub,
+                    onOpenLocal = { entry ->
+                        entry.localUri?.let { uri ->
+                            context.startActivity(XyReaderActivity.intent(context, uri, entry.bookId, entry.title))
+                        }
+                    },
+                    // 0.17.0：远程书点一下直接进阅读器，详情/导出改走卡片菜单
+                    onOpenRemote = { entry ->
+                        viewModel.markShelfRead(entry.id)
+                        context.startActivity(
+                            onlineReaderIntent(
+                                context = context,
+                                bookId = entry.bookId,
+                                title = entry.title,
+                                author = entry.author,
+                                bookshelfId = entry.id,
+                            ),
+                        )
+                    },
+                    onOpenDetail = { entry -> viewModel.openShelfBookDetail(entry) },
+                )
                 state.tab == StudioTab.EXPLORE -> ExploreScreen(state, viewModel, onLogin) {
                     viewModel.setTab(StudioTab.SETTINGS)
                     viewModel.openSettingsSection(SettingsSection.CATALOG)
@@ -303,39 +322,21 @@ private fun StudioApp(
                     onExportConfig = onExportConfig,
                     onImportConfig = onImportConfig,
                 )
-                state.step == CreateStep.SOURCE -> SourceScreen(state, viewModel)
-                state.step == CreateStep.DETAIL -> state.book?.let {
-                    BookDetailScreen(
-                        book = it,
-                        chapterCount = state.index?.chapters?.size ?: 0,
-                        viewModel = viewModel,
-                        loading = state.busy,
-                        loadError = state.detailError,
-                    ) { tag ->
-                        viewModel.setSearchField(SearchField.TITLE)
-                        viewModel.setSearchQuery(tag)
-                        viewModel.setTab(StudioTab.EXPLORE)
-                        viewModel.searchLocal()
-                    }
-                } ?: SourceScreen(state, viewModel)
-                state.step == CreateStep.CHAPTERS -> ChaptersScreen(state, viewModel)
-                state.step == CreateStep.EXPORT -> ExportScreen(state, viewModel)
-                state.step == CreateStep.PROGRESS -> ProgressScreen(state, viewModel)
             }
         }
 
-            if (state.tab == StudioTab.CREATE) {
+            // 导出向导的面包屑：只在向导内部出现，不占主导航的位置
+            if (state.exportStep != null) {
                 val steps = listOf(
-                    CreateStep.SOURCE to "源站",
-                    CreateStep.DETAIL to "详情",
-                    CreateStep.CHAPTERS to "章节",
-                    CreateStep.EXPORT to "导出",
-                    CreateStep.PROGRESS to "进度",
+                    ExportStep.RESOLVING to "目录",
+                    ExportStep.CHAPTERS to "章节",
+                    ExportStep.PACKAGING to "打包",
+                    ExportStep.PROGRESS to "进度",
                 )
                 BreadcrumbBar(
                     items = steps.map { BreadcrumbItem(path = it.first.name, text = it.second) },
                     onItemClick = { },
-                    highlightIndex = steps.indexOfFirst { it.first == state.step }.coerceAtLeast(0),
+                    highlightIndex = steps.indexOfFirst { it.first == state.exportStep }.coerceAtLeast(0),
                     enabled = false,
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
                 )
@@ -344,39 +345,68 @@ private fun StudioApp(
     }
 }
 
+/**
+ * 导出向导（0.17.0 起为二级页覆盖层，从书架卡片菜单或探索详情发起）。
+ *
+ * 四步：解析目录（[ExportStep.RESOLVING]）→ 选章节 → 打包设置 → 进度。
+ * 章节/打包/进度三屏沿用既有实现，这里只新增解析态并在关闭时回退到发起页面。
+ */
 @Composable
-private fun SourceScreen(state: StudioUiState, viewModel: StudioViewModel) {
+private fun ExportWizardScreen(state: StudioUiState, viewModel: StudioViewModel) {
+    when (state.exportStep) {
+        ExportStep.RESOLVING -> ResolvingScreen(state, viewModel)
+        ExportStep.CHAPTERS -> ChaptersScreen(state, viewModel)
+        ExportStep.PACKAGING -> ExportScreen(state, viewModel)
+        ExportStep.PROGRESS -> ProgressScreen(state, viewModel)
+        null -> Unit
+    }
+}
+
+/** 解析目录：带加载指示、失败原因与重试；任何时刻都能关闭向导回到书架。 */
+@Composable
+private fun ResolvingScreen(state: StudioUiState, viewModel: StudioViewModel) {
     Column(
         Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(top = 18.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        Text("把公开轻小说整理成可离线阅读的 EPUB。", fontSize = 24.sp, fontWeight = FontWeight.Bold)
-        Text("支持 wenku8 书籍页、目录页或纯书籍 ID。请求会遵守源站限流。", color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.72f), fontSize = 14.sp)
-        Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(16.dp)) {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                TextField(
-                    value = state.sourceUrl,
-                    onValueChange = viewModel::setSource,
-                    label = "wenku8 书籍或目录网址",
-                    useLabelAsPlaceholder = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Button(
-                    onClick = viewModel::parseSource,
-                    enabled = !state.busy,
-                    modifier = Modifier.fillMaxWidth(),
-                ) { Text(if (state.busy) "正在解析…" else "解析书籍") }
-                TextButton(text = "填入示例", onClick = { viewModel.setSource("https://www.wenku8.net/novel/2/2835/index.htm") }, modifier = Modifier.align(Alignment.End))
+        TextButton(text = "‹ 关闭", onClick = viewModel::closeExport)
+        Text("正在读取目录…", fontSize = 24.sp, fontWeight = FontWeight.Bold)
+        state.detailError?.let { error ->
+            Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(16.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("目录读取失败", fontWeight = FontWeight.Bold)
+                    Text(error, fontSize = 14.sp, color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.72f))
+                    Button(
+                        onClick = viewModel::retryResolve,
+                        enabled = !state.busy,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text(if (state.busy) "正在重试…" else "重试") }
+                }
             }
         }
-        Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(16.dp)) {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("导出内容", fontWeight = FontWeight.Bold)
-                Text("• 清理章节广告和无关脚本", fontSize = 14.sp)
-                Text("• 下载并本地化正文插图", fontSize = 14.sp)
-                Text("• 生成 EPUB 3 / NCX，支持离线阅读", fontSize = 14.sp)
+        if (state.detailError == null) {
+            Row(
+                Modifier.fillMaxWidth().padding(vertical = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                CircularProgressIndicator(size = 22.dp)
+                Text("正在获取章节列表，请稍候。", fontSize = 14.sp, color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.75f))
             }
         }
+    }
+}
+
+/**
+ * 导出记录（0.17.0 起独立成页，入口在设置 → 概览与通知栏路由）。
+ *
+ * 内容直接复用既有的 [HistoryScreen]（进度 / 取消 / 警告 / 保存 / 分享），这里只补返回按钮。
+ */
+@Composable
+private fun JobHistoryScreen(state: StudioUiState, viewModel: StudioViewModel) {
+    Column(Modifier.fillMaxWidth().padding(top = 18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        TextButton(text = "‹ 返回", onClick = { viewModel.setShowJobHistory(false) })
+        HistoryScreen(state.jobs, viewModel)
     }
 }
 
@@ -388,6 +418,7 @@ private fun ChaptersScreen(state: StudioUiState, viewModel: StudioViewModel) {
         index.chapters.filter { state.search.isBlank() || it.title.contains(state.search, true) || it.volume.contains(state.search, true) }
     }
     Column(Modifier.fillMaxWidth().padding(top = 14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        TextButton(text = "‹ 关闭向导", onClick = viewModel::closeExport)
         BookHeader(book.title, book.author, book.category, index.chapters.size, state.selectedIds.size)
         TextField(value = state.search, onValueChange = viewModel::setSearch, label = "搜索章节标题", useLabelAsPlaceholder = true, modifier = Modifier.fillMaxWidth())
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
@@ -435,7 +466,14 @@ private fun ExportScreen(state: StudioUiState, viewModel: StudioViewModel) {
 @Composable
 private fun ProgressScreen(state: StudioUiState, viewModel: StudioViewModel) {
     val job = state.jobs.firstOrNull { it.id == state.activeJobId } ?: state.jobs.firstOrNull { it.status == JobStatus.running }
-    if (job == null) { Text("任务状态已更新。", Modifier.padding(top = 20.dp)); return }
+    if (job == null) {
+        Column(Modifier.fillMaxWidth().padding(top = 18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            TextButton(text = "‹ 关闭向导", onClick = viewModel::closeExport)
+            Text("任务状态已更新。", color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f))
+            TextButton(text = "查看导出记录", onClick = { viewModel.closeExport(); viewModel.setShowJobHistory(true) })
+        }
+        return
+    }
     ProgressContent(job, viewModel)
 }
 

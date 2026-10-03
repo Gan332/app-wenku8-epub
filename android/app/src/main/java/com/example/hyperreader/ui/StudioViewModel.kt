@@ -54,8 +54,17 @@ internal fun CatalogEntry.toSearchBook(): SearchBook = SearchBook(
     sourceUrl = sourceUrl,
 )
 
-enum class StudioTab { BOOKSHELF, EXPLORE, CREATE, SETTINGS }
-enum class CreateStep { SOURCE, DETAIL, CHAPTERS, EXPORT, PROGRESS }
+/** 底部主导航（0.17.0 起只有三项，导出入口下沉到书籍菜单）。 */
+enum class StudioTab { BOOKSHELF, EXPLORE, SETTINGS }
+
+/**
+ * 导出向导的步骤。
+ *
+ * 0.17.0 起「创建」tab 被移除，导出降级为从书架卡片或探索详情发起的二级页向导：
+ * 先解析目录（[RESOLVING]，失败可重试），再选章节、选引擎打包、看进度。
+ * 目录解析成功后自动进入 [CHAPTERS]，不再有单独的「详情」步骤。
+ */
+enum class ExportStep { RESOLVING, CHAPTERS, PACKAGING, PROGRESS }
 
 /** 站内搜索的跨页追加、去重及过期响应判定；与 Android 生命周期解耦以便单测。 */
 internal object SearchPager {
@@ -91,12 +100,64 @@ internal object SearchPager {
     }
 }
 
+/**
+ * 导出向导的状态机（0.17.0）。
+ *
+ * 纯函数，不碰 Android 生命周期：把「发起 → 解析 → 选章节 → 打包 → 进度」
+ * 的状态迁移从 [StudioViewModel] 里拆出来，以便单测直接断言每一步的字段变化。
+ * 关键不变量：
+ * - 向导是**二级页覆盖层**（`exportStep != null`），不切 tab；
+ * - `begin` 必清book/index/selectedIds，避免上一轮残留章节被误打包；
+ * - 解析成功默认全选并进入 [ExportStep.CHAPTERS]；失败留在 [ExportStep.RESOLVING] 供重试。
+ */
+internal object ExportWizard {
+    fun begin(state: StudioUiState, sourceUrl: String): StudioUiState = state.copy(
+        tab = StudioTab.BOOKSHELF,
+        sourceUrl = sourceUrl,
+        exportStep = ExportStep.RESOLVING,
+        busy = false,
+        detailError = null,
+        book = null,
+        index = null,
+        selectedIds = emptySet(),
+        message = null,
+    )
+
+    fun resolved(state: StudioUiState, book: com.example.hyperreader.model.Book, index: com.example.hyperreader.model.BookIndex): StudioUiState =
+        state.copy(
+            busy = false,
+            detailError = null,
+            book = book,
+            index = index,
+            selectedIds = index.chapters.map { it.id }.toSet(),
+            exportStep = ExportStep.CHAPTERS,
+        )
+
+    fun failed(state: StudioUiState, message: String): StudioUiState =
+        state.copy(busy = false, exportStep = ExportStep.RESOLVING, detailError = message)
+
+    fun close(state: StudioUiState): StudioUiState = state.copy(exportStep = null, busy = false, detailError = null)
+
+    /**
+     * 书架远程书的详情：只改探索详情的四个字段。
+     *
+     * 刻意**不碰** `book` / `index` / `exportStep`——保持探索详情与导出向导两条链路隔离（AGENTS §4.6）。
+     */
+    fun openShelfDetail(state: StudioUiState, seed: com.example.hyperreader.core.ExploreBookSeed): StudioUiState = state.copy(
+        exploreDetailId = seed.id,
+        exploreDetail = null,
+        exploreDetailLoading = true,
+        exploreDetailError = null,
+        exploreDetailSeed = seed,
+    )
+}
+
 /** 设置二级界面分区。 */
 enum class SettingsSection { OVERVIEW, APPEARANCE, READER, STATISTICS, CATALOG, CONFIG, ABOUT }
 
 data class StudioUiState(
     val tab: StudioTab = StudioTab.BOOKSHELF,
-    val step: CreateStep = CreateStep.SOURCE,
+    val exportStep: ExportStep? = null,
     val sourceUrl: String = "https://www.wenku8.net/novel/2/2835/index.htm",
     val book: Book? = null,
     val index: BookIndex? = null,
@@ -145,7 +206,7 @@ data class StudioUiState(
      *
      * 与创建流程的 [book]/[index] **完全分开**：这条链路只走公开 API
      * （[com.example.hyperreader.core.ExploreDetailRepository]），不经过解析管线，
-     * 因此打开探索详情不会触碰 `CreateStep`、也不会改动创建流程里的半成品状态。
+     * 因此打开探索详情不会触碰 `book` / `index`，也不会改动导出向导里的半成品状态。
      */
     val exploreDetailId: String? = null,
     val exploreDetail: com.example.hyperreader.core.ExploreBookDetail? = null,
@@ -247,7 +308,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
             manager.jobs.collect { jobs ->
                 mutable.update { current ->
                     val active = current.activeJobId?.let { id -> jobs.values.firstOrNull { it.id == id } }
-                    current.copy(jobs = jobs.values.sortedByDescending { it.createdAt }, step = if (active != null && current.step == CreateStep.PROGRESS) CreateStep.PROGRESS else current.step)
+                    current.copy(jobs = jobs.values.sortedByDescending { it.createdAt }, exportStep = if (active != null && current.exportStep == ExportStep.PROGRESS) ExportStep.PROGRESS else current.exportStep)
                 }
             }
         }
@@ -529,13 +590,35 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     fun removeFromShelf(id: String) { viewModelScope.launch { bookshelfRepository.remove(id) } }
     fun setPinned(id: String, pinned: Boolean) { viewModelScope.launch { bookshelfRepository.setPinned(id, pinned) } }
     fun markShelfRead(id: String) { viewModelScope.launch { bookshelfRepository.recordRead(id) } }
-    fun openShelfRemote(entry: BookshelfEntry) {
-        mutable.update { it.copy(sourceUrl = entry.sourceUrl, tab = StudioTab.CREATE, step = CreateStep.SOURCE, book = null, index = null) }
-        parseSource()
+    /**
+     * 从书架卡片发起导出向导：先解析目录，成功后直接进入选章节。
+     * 失败时停在 [ExportStep.RESOLVING] 并给出可重试的错误文案。
+     */
+    fun startExportFromShelf(entry: BookshelfEntry) {
+        mutable.update { ExportWizard.begin(it, entry.sourceUrl) }
+        resolveForExport()
+    }
+
+    /** 关闭向导，回到发起前的 tab（向导只是全屏覆盖层，底栏始终可见）。 */
+    fun closeExport() = mutable.update { ExportWizard.close(it) }
+
+    /**
+     * 书架远程书的「详情」：复用探索详情那条公开数据通路（`ExploreDetailRepository`），
+     * 不重新引入创建流程的解析管线，也不碰 [StudioUiState.book]。
+     */
+    fun openShelfBookDetail(entry: BookshelfEntry) {
+        val seed = com.example.hyperreader.core.ExploreBookSeed(
+            id = entry.bookId,
+            title = entry.title,
+            author = entry.author,
+            coverUrl = entry.coverUrl,
+            sourceUrl = entry.sourceUrl,
+        )
+        mutable.update { ExportWizard.openShelfDetail(it, seed) }
+        loadExploreDetail(entry.bookId, seed)
     }
     fun clearReadingStats() { viewModelScope.launch { readingStatsRepository.clear() } }
 
-    fun setSource(value: String) = mutable.update { it.copy(sourceUrl = value, message = null) }
     fun setSearch(value: String) = mutable.update { it.copy(search = value) }
     fun setCover(value: Boolean) = mutable.update { it.copy(includeCover = value) }
     fun clearMessage() = mutable.update { it.copy(message = null) }
@@ -633,10 +716,10 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     /**
      * 探索页点书：打开**独立的书籍详情页**。
      *
-     * 刻意**不走** `parseSource()` / `CreateStep`：那条链路属于「创建导出」流程，
-     * 会做导出前置校验并吃满 1 秒/请求 的批量节流，点一下要等很久。
+     * 刻意**不走** `resolveForExport()` / 导出向导：那条链路会做导出前置校验并吃满 1 秒/请求 的批量节流，
+     * 点一下要等很久。
      * 这里改由 [exploreDetailRepository] 直接调公开 API（`articleinfo.php` + 目录页），
-     * 交互档节流 + 内存缓存，且不改动创建流程的任何状态。
+     * 交互档节流 + 内存缓存，且不改动导出向导的任何状态。
      */
     fun openSearchBook(book: SearchBook) {
         val seed = com.example.hyperreader.core.ExploreBookSeed(
@@ -731,40 +814,34 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     fun resetReaderFont() { viewModelScope.launch { settingsRepository.setReaderFontUri(null) } }
     fun applyImportedFont(path: String) { viewModelScope.launch { settingsRepository.setReaderFontUri(path) } }
 
-    fun parseSource() {
+    /**
+     * 导出向导的目录解析（[ExportStep.RESOLVING] → [ExportStep.CHAPTERS]）。
+     *
+     * 来源固定为发起导出的那本书的 `sourceUrl`（由 [startExportFromShelf] 写入）；
+     * 解析成功默认全选并进入章节页，失败则留在解析态供重试。
+     */
+    fun resolveForExport() {
         val value = state.value.sourceUrl.trim()
-        if (value.isEmpty()) { mutable.update { it.copy(message = "请输入书籍或目录网址。") }; return }
+        if (value.isEmpty()) { mutable.update { it.copy(busy = false, detailError = "缺少书籍来源网址。") }; return }
         viewModelScope.launch {
-            mutable.update { it.copy(busy = true, message = null, detailError = null) }
+            mutable.update { it.copy(busy = true, detailError = null) }
             runCatching { manager.parseSource(value) }
-                .onSuccess { (book, index) ->
-                    mutable.update { it.copy(busy = false, detailError = null, book = book, index = index, selectedIds = index.chapters.map { chapter -> chapter.id }.toSet(), step = CreateStep.DETAIL) }
-                }
-                .onFailure { error ->
-                    // 详情页已经用预览数据渲染出来了，失败时就地提示，不要退回解析页
-                    mutable.update { it.copy(busy = false, detailError = error.message ?: "解析失败。") }
-                }
+                .onSuccess { (book, index) -> mutable.update { ExportWizard.resolved(it, book, index) } }
+                .onFailure { error -> mutable.update { ExportWizard.failed(it, error.message ?: "目录解析失败。") } }
         }
     }
 
-    /** 详情页目录加载失败后的重试。 */
-    fun retryLoadIndex() {
-        if (state.value.sourceUrl.isNotBlank()) parseSource()
-    }
+    /** 解析失败后的重试（同一本书、同一目录）。 */
+    fun retryResolve() = resolveForExport()
 
     fun selectAll() = mutable.update { current -> current.copy(selectedIds = current.index?.chapters?.map { it.id }?.toSet() ?: emptySet()) }
-    fun toChapters() {
-        if (state.value.index?.chapters.isNullOrEmpty()) { mutable.update { it.copy(message = "未找到目录章节。") }; return }
-        mutable.update { it.copy(step = CreateStep.CHAPTERS, message = null) }
-    }
     fun clearSelection() = mutable.update { it.copy(selectedIds = emptySet()) }
     fun toggleChapter(id: String) = mutable.update { current -> current.copy(selectedIds = if (id in current.selectedIds) current.selectedIds - id else current.selectedIds + id) }
-    fun backToSource() = mutable.update { it.copy(step = CreateStep.SOURCE, message = null) }
     fun toExport() {
         if (state.value.selectedIds.isEmpty()) { mutable.update { it.copy(message = "请至少选择一个章节。") }; return }
-        mutable.update { it.copy(step = CreateStep.EXPORT, message = null) }
+        mutable.update { it.copy(exportStep = ExportStep.PACKAGING, message = null) }
     }
-    fun backToChapters() = mutable.update { it.copy(step = CreateStep.CHAPTERS, message = null) }
+    fun backToChapters() = mutable.update { it.copy(exportStep = ExportStep.CHAPTERS, message = null) }
 
     fun startExport() {
         val current = state.value
@@ -773,7 +850,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch {
             mutable.update { it.copy(busy = true, message = null) }
             runCatching { manager.create(book, chapters, current.includeCover) }
-                .onSuccess { job -> mutable.update { it.copy(busy = false, activeJobId = job.id, step = CreateStep.PROGRESS, tab = StudioTab.CREATE) } }
+                .onSuccess { job -> mutable.update { it.copy(busy = false, activeJobId = job.id, exportStep = ExportStep.PROGRESS) } }
                 .onFailure { error -> mutable.update { it.copy(busy = false, message = error.message ?: "无法创建任务。") } }
         }
     }
@@ -805,8 +882,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
                         it.copy(
                             busy = false,
                             activeJobId = job.id,
-                            step = CreateStep.PROGRESS,
-                            tab = StudioTab.CREATE,
+                            exportStep = ExportStep.PROGRESS,
                             exploreDetailId = null,
                         )
                     }
@@ -860,7 +936,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         when (val target = NotificationRoute.resolve(route, jobId, state.value.jobs)) {
             null -> Unit
             is RouteTarget.Progress -> mutable.update {
-                it.copy(tab = StudioTab.CREATE, step = CreateStep.PROGRESS, activeJobId = target.jobId, showJobHistory = false)
+                it.copy(exportStep = ExportStep.PROGRESS, activeJobId = target.jobId, showJobHistory = false)
             }
             RouteTarget.History -> mutable.update { it.copy(tab = StudioTab.BOOKSHELF, showJobHistory = true) }
             RouteTarget.Bookshelf -> mutable.update { it.copy(tab = StudioTab.BOOKSHELF) }

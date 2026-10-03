@@ -146,6 +146,21 @@ private fun SettingsOverview(state: StudioUiState, viewModel: StudioViewModel) {
                 }
             }
         }
+        // —— 导出记录（0.17.0）：导出降级为二级页，任务历史跟着导出走，不再占据书架页顶部 ——
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth().clickable { viewModel.setShowJobHistory(true) },
+                insideMargin = PaddingValues(14.dp),
+            ) {
+                Row(Modifier.fillMaxWidth().heightIn(min = ROW_HEIGHT), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("导出记录", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        Text("历史导出任务，可保存或分享已生成的 EPUB。", fontSize = 12.sp, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .7f))
+                    }
+                    Text("›", color = MiuixTheme.colorScheme.onSurface.copy(alpha = .5f), fontSize = 20.sp)
+                }
+            }
+        }
         // —— 第三方中继（0.16.0）：只影响免登录公开页，会话链路始终直连 ——
         item { RelaySettings(viewModel) }
     }

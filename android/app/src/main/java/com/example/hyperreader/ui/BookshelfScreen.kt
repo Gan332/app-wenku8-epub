@@ -59,8 +59,9 @@ fun BookshelfScreen(
     onImportEpub: () -> Unit,
     onOpenLocal: (BookshelfEntry) -> Unit,
     onOpenRemote: (BookshelfEntry) -> Unit,
+    /** 远程书的详情：复用探索详情那条公开数据通路（0.17.0 起菜单项「查看详情」）。 */
+    onOpenDetail: (BookshelfEntry) -> Unit,
 ) {
-    val showHistory = state.showJobHistory
     // 「更多」弹出菜单的锚定条目 id（null = 关闭）。
     // 交互：点卡片主体直接打开书，行尾 More 弹操作菜单（替换旧的全屏操作弹窗）。
     var menuEntryId by remember { mutableStateOf<String?>(null) }
@@ -69,28 +70,7 @@ fun BookshelfScreen(
     // 数据变化时刷新「N 分钟前」的基准时刻，避免长开应用后相对时间停在启动瞬间
     val now = remember(state.bookshelf, readingProgress) { System.currentTimeMillis() }
     Column(Modifier.fillMaxWidth().padding(top = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-            TextButton(text = if (showHistory) "返回书架" else "导出记录", onClick = { viewModel.setShowJobHistory(!showHistory) })
-        }
-        if (showHistory) {
-            Text("导出记录", fontSize = 25.sp, fontWeight = FontWeight.Bold)
-            if (state.jobs.isEmpty()) Text("还没有导出任务。", color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f), fontSize = 14.sp)
-            else LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(state.jobs, key = { it.id }) { job ->
-                    Card(Modifier.fillMaxWidth().animateItem(), insideMargin = PaddingValues(14.dp)) {
-                        Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                            Text(job.book.title, fontWeight = FontWeight.Bold, maxLines = 2)
-                            Text("${job.chapterCount} 章 · ${job.progress.percent}% · ${job.createdAt.take(10)}", color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f), fontSize = 12.sp)
-                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                TextButton(text = "保存", onClick = { viewModel.save(job.id) })
-                                TextButton(text = "分享", onClick = { viewModel.share(job.id) })
-                            }
-                        }
-                    }
-                }
-            }
-            return
-        }
+        // 0.17.0：导出记录已独立成页（入口在设置 → 概览与通知栏路由），书架只留进行中的任务概览
         Text("书架", fontSize = 25.sp, fontWeight = FontWeight.Bold)
         Text("在线书籍和本地 EPUB 都可以在这里继续阅读。", color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f), fontSize = 13.sp)
         Button(onClick = onImportEpub, modifier = Modifier.fillMaxWidth()) { Text("导入 EPUB") }
@@ -139,6 +119,7 @@ fun BookshelfScreen(
                                         viewModel = viewModel,
                                         onOpenLocal = { onOpenLocal(it); menuEntryId = null },
                                         onOpenRemote = { onOpenRemote(it); menuEntryId = null },
+                                        onOpenDetail = { onOpenDetail(it); menuEntryId = null },
                                         onDismiss = { menuEntryId = null },
                                     )
                                 }
@@ -223,6 +204,7 @@ private fun BookEntryMenu(
     viewModel: StudioViewModel,
     onOpenLocal: (BookshelfEntry) -> Unit,
     onOpenRemote: (BookshelfEntry) -> Unit,
+    onOpenDetail: (BookshelfEntry) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -235,9 +217,9 @@ private fun BookEntryMenu(
             if (entry.localUri != null) {
                 BasicComponent(title = "打开阅读", onClick = { act { viewModel.markShelfRead(entry.id); onOpenLocal(entry) } })
             } else {
-                BasicComponent(title = "查看详情", onClick = { act { onOpenRemote(entry) } })
+                BasicComponent(title = "查看详情", onClick = { act { onOpenDetail(entry) } })
                 BasicComponent(
-                    title = "在线阅读",
+                    title = "开始阅读",
                     onClick = {
                         act {
                             context.startActivity(
@@ -253,6 +235,8 @@ private fun BookEntryMenu(
                         }
                     },
                 )
+                // 0.17.0：导出从「创建 tab」下沉为书籍菜单里的次级动作
+                BasicComponent(title = "导出 EPUB", onClick = { act { viewModel.startExportFromShelf(entry) } })
                 BasicComponent(title = "同作者作品", onClick = { act { viewModel.expandAuthor(entry.bookId) } })
             }
             BasicComponent(
