@@ -879,10 +879,10 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
          * 全抓会让用户干等 30 秒以上；超出的部分留给手动刷新或进入详情时再取。
          */
         const val EXPLORE_AUTO_FETCH_LIMIT = 20
-    }
 
-    /** 中继端点非法时的统一提示（要求 https 域名，禁止 IP 与 wenku8 自身域名）。 */
-    private const val RELAY_BASE_INVALID = "中继端点无效：需形如 https://relay.example.com，不能用 IP 或 wenku8 自身域名。"
+        /** 中继端点非法时的统一提示（要求 https 域名，禁止 IP 与 wenku8 自身域名）。 */
+        private const val RELAY_BASE_INVALID = "中继端点无效：需形如 https://relay.example.com，不能用 IP 或 wenku8 自身域名。"
+    }
 
     fun save(id: String) {
         runCatching { manager.save(id) }
