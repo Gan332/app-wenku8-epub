@@ -108,7 +108,14 @@ class Wenku8HttpClient(private val cacheDirectory: File, sessionCookieJar: Cooki
                 )
             }
             if (!response.isSuccessful) {
+                // Cloudflare 拦截页的判定：403 + 挑战页特征 → 归类为 UPSTREAM_CHALLENGE，
+                // 这样**所有**链路（探索、缓存、导出、在线阅读）都能触发验证窗口，
+                // 而不是只在解析器里针对 parseBook 生效。
+                val bodyPreview = runCatching { response.peekBody(CF_PEEK_LIMIT).string() }.getOrDefault("")
                 response.close()
+                if (status == 403 && Wenku8Parser.looksLikeChallenge(bodyPreview)) {
+                    throw Wenku8Exception("被 Cloudflare 拦截：$current", "UPSTREAM_CHALLENGE")
+                }
                 throw Wenku8Exception("源站返回 HTTP $status。", "UPSTREAM_HTTP_ERROR")
             }
             val body = response.body ?: throw Wenku8Exception("源站响应为空。", "EMPTY_RESPONSE")
@@ -184,5 +191,7 @@ class Wenku8HttpClient(private val cacheDirectory: File, sessionCookieJar: Cooki
         private val REDIRECT_CODES = setOf(301, 302, 303, 307, 308)
         private const val MAX_REDIRECTS = 5
         private const val MAX_RETRIES = 3
+        /** 403 时读取响应体前N 字节用于识别 Cloudflare 挑战页（够识别标题即可）。 */
+        private const val CF_PEEK_LIMIT = 2048L
     }
 }

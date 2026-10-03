@@ -376,6 +376,32 @@ private fun NetworkSection(state: StudioUiState, viewModel: StudioViewModel) {
                         onClick = viewModel::testRelay,
                         modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
                     )
+                    TextButton(
+                        text = "深度诊断公开端点（5 端点 × 2 客户端）",
+                        onClick = viewModel::diagnosePublicEndpoints,
+                        modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
+                    )
+                    if (state.endpointProbes.isNotEmpty()) {
+                        Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXS)) {
+                            state.endpointProbes.forEach { probe ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.rowMin),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Text(
+                                        "${probe.label}·${probe.clientKind}",
+                                        modifier = Modifier.weight(1f),
+                                        fontSize = UiDimens.caption,
+                                    )
+                                    Text(
+                                        probe.status,
+                                        fontSize = UiDimens.captionSmall,
+                                        color = if (probe.status.startsWith("OK")) MiuixTheme.colorScheme.primary else MiuixTheme.colorScheme.error,
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
             }
         },

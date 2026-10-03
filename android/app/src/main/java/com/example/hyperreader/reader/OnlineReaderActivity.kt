@@ -44,6 +44,13 @@ class OnlineReaderActivity : ComponentActivity() {
     private var bookTitle: String = ""
     private var bookshelfId: String = ""
 
+    /** Cloudflare 验证窗口（0.18.0）：通过后重试目录加载，取消则关闭阅读器。 */
+    private val challengeLauncher = registerForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        if (result.resultCode == RESULT_OK) loadIndexAndOpen() else finish()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         hostBookId = intent.getStringExtra(EXTRA_BOOK_ID).orEmpty().filter(Char::isDigit)
@@ -56,11 +63,19 @@ class OnlineReaderActivity : ComponentActivity() {
             return
         }
         lifecycleScope.launch {
-            runCatching {
-                (application as Wenku8Application).bookshelfRepository.recordRead(bookshelfId)
-            }
+            (application as Wenku8Application).bookshelfRepository.recordRead(bookshelfId)
         }
 
+        loadIndexAndOpen()
+    }
+
+    /**
+     * 拉目录并打开阅读器（0.18.0：验证通过后需可重入）。
+     *
+     * Cloudflare 拦截（`UPSTREAM_CHALLENGE`）时不直接报错，而是弹验证窗口让用户完成官方交互，
+     * 通过后自动重试——目录页是公开页，验证一次即可恢复。
+     */
+    private fun loadIndexAndOpen() {
         lifecycleScope.launch {
             val app = application as Wenku8Application
             val result = withContext(Dispatchers.IO) {
@@ -128,7 +143,17 @@ class OnlineReaderActivity : ComponentActivity() {
                     }
                 }
                 is OnlineReaderResult.NeedsLogin -> showOpenError(result.message)
-                is OnlineReaderResult.Failed -> showOpenError(result.message)
+                is OnlineReaderResult.Failed ->
+                    if (result.code == "UPSTREAM_CHALLENGE") {
+                        challengeLauncher.launch(
+                            com.example.hyperreader.auth.CfChallengeActivity.intent(
+                                this,
+                                com.example.hyperreader.core.Wenku8Urls.index(hostBookId, null),
+                            ),
+                        )
+                    } else {
+                        showOpenError(result.message)
+                    }
             }
         }
     }

@@ -152,6 +152,13 @@ internal object ExportWizard {
     )
 }
 
+/**
+ * 公开端点诊断结果（0.18.0）。
+ *
+ * @param status 简短结论：`OK 200·1.2s·25KB` / `HTTP 403` / 异常信息
+ */
+data class EndpointProbe(val label: String, val clientKind: String, val url: String, val status: String)
+
 /** 设置二级界面分区。0.18.0：新增 ACCOUNT（账号）与 NETWORK（网络/中继）两类。 */
 enum class SettingsSection { OVERVIEW, ACCOUNT, APPEARANCE, READER, NETWORK, STATISTICS, CATALOG, CONFIG, ABOUT }
 
@@ -177,6 +184,8 @@ data class StudioUiState(
     val activeExplorePage: ExplorePage? = null,
     /** 0.18.0：待完成的 Cloudflare 验证地址；非空时 UI 自动弹验证窗口。 */
     val challengeUrl: String? = null,
+    /** 0.18.0：公开端点诊断矩阵（设置 → 网络 → 深度诊断）。 */
+    val endpointProbes: List<EndpointProbe> = emptyList(),
     val jobs: List<ExportJob> = emptyList(),
     val searchQuery: String = "",
     val searchField: SearchField = SearchField.TITLE,
@@ -240,6 +249,9 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
      * 用户中途改关键词/切字段/连点「加载更多」时，旧响应直接丢弃。
      */
     private var searchRequestId = 0L
+
+    /** 用户已关闭/完成过一次验证：本次会话不再自动弹窗（设置里可手动再开）。 */
+    private var challengeDismissed = false
     private val mutable = MutableStateFlow(StudioUiState())
     val state: StateFlow<StudioUiState> = mutable.asStateFlow()
     val appTheme = settingsRepository.appTheme
@@ -349,6 +361,8 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
                         catalogLoading = catalog.loading,
                         catalogProgress = catalog.progress,
                         exploreMessage = catalog.message ?: it.exploreMessage,
+                        // 刷新书目被 CF 拦截：弹验证窗口（用年榜URL 作为验证目标）
+                        challengeUrl = if (catalog.challengeSuspended && !challengeDismissed) Wenku8Urls.sugoi(java.time.Year.now().value) else it.challengeUrl,
                     )
                 }
             }
@@ -407,13 +421,19 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
      * [onChallengeVerified] 在窗口关闭且通过后重试失败的请求。
      */
     fun openChallengeVerification(url: String) {
+        challengeDismissed = false
         mutable.update { it.copy(challengeUrl = url) }
     }
 
-    fun dismissChallengeVerification() = mutable.update { it.copy(challengeUrl = null) }
+    fun dismissChallengeVerification() {
+        // 本次会话不再自动弹（否则关闭后 catalog 状态一变又会弹，形成循环）
+        challengeDismissed = true
+        mutable.update { it.copy(challengeUrl = null) }
+    }
 
     fun onChallengeVerified() {
         val current = state.value
+        challengeDismissed = true
         mutable.update { it.copy(challengeUrl = null, message = "验证完成，正在重试…") }
         current.activeExplorePage?.let { page -> loadExplore(page) }
         current.exploreDetailId?.let { id -> loadExploreDetail(id, current.exploreDetailSeed) }
@@ -422,6 +442,59 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     /** 判断错误是否为 Cloudflare 拦截页（解析层已把挑战页转成该错误码）。 */
     private fun isChallenge(error: Throwable): Boolean =
         (error as? Wenku8Exception)?.code == "UPSTREAM_CHALLENGE"
+
+    /**
+     * 0.18.0：**深度诊断**——对每个匿名公开端点，分别用「会话客户端」与「公开客户端
+     * （只带 cf_clearance）」各请求一次，输出矩阵。
+     *
+     * 用途：定位 403 是端点级、客户端级还是链路级差异（用户实测「测试端点通、探索/在线阅读不通」
+     * 正是靠这个区分）。请求严格走全局限流（1 秒/请求），因此约 10 次需要十几秒。
+     */
+    fun diagnosePublicEndpoints() {
+        viewModelScope.launch {
+            val endpoints = listOf(
+                "书籍详情" to Wenku8Urls.articleInfo("2365"),
+                "章节目录" to Wenku8Urls.index("2365"),
+                "年度榜单" to Wenku8Urls.sugoi(java.time.Year.now().value),
+                "月度新书" to Wenku8Urls.booklist(java.time.Year.now().toString().replace("-", "")),
+                "同作者作品" to Wenku8Urls.authorArticle("伏濑"),
+            )
+            mutable.update { it.copy(endpointProbes = emptyList(), message = "正在诊断公开端点…") }
+            val publicClient = Wenku8HttpClient(File(app.cacheDir, "wenku8-diagnose"), app.sessionStore.clearanceCookieJar())
+            val sessionClient = manager.httpClient()
+            val results = buildList {
+                endpoints.forEach { (label, url) ->
+                    add(probe(label, "公开客户端", url, publicClient))
+                    add(probe(label, "会话客户端", url, sessionClient))
+                }
+            }
+            val blocked = results.count { it.status.contains("403") }
+            mutable.update {
+                it.copy(
+                    endpointProbes = results,
+                    message = if (blocked == 0) "全部公开端点可用。" else "$blocked / ${results.size} 次探测被拦截（403）。",
+                )
+            }
+        }
+    }
+
+    /** 单次探测：只记录状态摘要，不抛异常。 */
+    private suspend fun probe(label: String, clientKind: String, url: String, client: Wenku8HttpClient): EndpointProbe {
+        val started = System.currentTimeMillis()
+        val status = runCatching {
+            val resource = client.fetchText(url, "diagnose", Wenku8Urls.BASE)
+            "OK 200·${(System.currentTimeMillis() - started) / 1000}s·${resource.html.length / 1024}KB"
+        }.getOrElse { error ->
+            val message = error.message ?: "失败"
+            when {
+                (error as? Wenku8Exception)?.code == "UPSTREAM_CHALLENGE" -> "Cloudflare 拦截（挑战页）"
+                message.contains("403") -> "HTTP 403"
+                message.contains("429") -> "HTTP 429（被限速）"
+                else -> message.take(40)
+            }
+        }
+        return EndpointProbe(label = label, clientKind = clientKind, url = url, status = status)
+    }
 
     /** 0.18.0：进入/离开独立搜索页（探索页 TopBar 搜索入口）。 */
     fun openSearchPage() = mutable.update { it.copy(searchPageOpen = true) }

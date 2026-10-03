@@ -18,6 +18,8 @@ data class CatalogState(
     val loading: Boolean = false,
     val message: String? = null,
     val progress: Pair<Int, Int>? = null,
+    /** 0.18.0：上次失败是否为 Cloudflare 拦截（UI 据此弹验证窗口）。 */
+    val challengeSuspended: Boolean = false,
 )
 
 /**
@@ -86,7 +88,13 @@ class CatalogRepository(private val context: Context) {
                     index = CatalogIndex(entries.values)
                     mutable.value = CatalogState(stats = crawler.stats(entries, cursor))
                 }.onFailure { error ->
-                    mutable.value = mutable.value.copy(loading = false, message = error.message ?: "更新失败。", progress = null)
+                    val challenged = (error as? Wenku8Exception)?.code == "UPSTREAM_CHALLENGE"
+                    mutable.value = mutable.value.copy(
+                        loading = false,
+                        message = if (challenged) "被 Cloudflare 拦截，完成人机验证后请重新更新。" else (error.message ?: "更新失败。"),
+                        progress = null,
+                        challengeSuspended = challenged,
+                    )
                 }
             }
         }
