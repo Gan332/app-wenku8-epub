@@ -65,7 +65,9 @@ object Wenku8Endpoint {
     /** 恢复默认入口（App 启动时调用，避免上一次会话的轮换结果影响本次）。 */
     fun resetHosts() {
         hostIndex = 0
+        // 初始入口也算已试过一次，避免它被当成“新鲜的”再轮回去
         triedHosts.clear()
+        triedHosts.add(0)
     }
 
     @Volatile
