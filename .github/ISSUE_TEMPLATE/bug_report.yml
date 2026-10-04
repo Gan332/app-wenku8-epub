@@ -1,0 +1,112 @@
+name: 缺陷报告
+description: 报告一个可复现的问题（抓不到数据、崩溃、导出失败、显示异常等）
+title: "[Bug] "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢反馈。填写前请注意两点：
+
+        1. **不要在这个表单里粘贴 Cookie、密码或任何登录凭据**，包括 `PHPSESSID`、`jieqiUserInfo`、`cf_clearance`。
+        2. 如果现象是**公开页提示 403 /「要求浏览器验证」**，那多半不是 bug：源站 Cloudflare
+           对部分网络的前置拦截是**波动**的，且与 UA / Referer 无关。请先重试一次，
+           或在「设置 → 网络」打开浏览器验证 / 配置自建中继再反馈。
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: 问题概述
+      description: 一句话说清楚发生了什么。
+      placeholder: 书架页点击本地 EPUB 封面后闪退
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      description: 从打开 App 开始，逐步描述。
+      placeholder: |
+        1. 书架页点击某本本地书
+        2. 等待封面加载
+        3. 返回桌面再重新进入 App
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望结果
+      description: 你认为正确的行为是什么。
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: 实际结果
+      description: 实际发生了什么，包含报错原文。
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: 涉及功能
+      multiple: true
+      options:
+        - 登录 / 会话
+        - 探索（榜单 / 标签）
+        - 搜索
+        - 书架
+        - 导出 EPUB
+        - 在线阅读
+        - 本地 EPUB 阅读
+        - 阅读器设置
+        - 第三方中继 / 浏览器验证
+        - 封面与插图
+        - 阅读统计
+        - Web 版（Node.js）
+        - 其它 / 不确定
+    validations:
+      required: true
+
+  - type: dropdown
+    id: version
+    attributes:
+      label: 版本
+      options:
+        - "0.19.0-alpha01（main 分支）"
+        - "0.18.x"
+        - "0.17.x 或更早"
+        - "Web 版（npm start 运行的版本）"
+        - 不确定
+    validations:
+      required: true
+
+  - type: input
+    id: env
+    attributes:
+      label: 运行环境
+      description: Android 请填系统版本与机型；Web 版请填 Windows 版本与 Node.js 版本。
+      placeholder: Android 15 / 小米 HyperOS 2 / 或 Windows 11 + Node 22
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志或截图
+      description: 可选。**提交前请自行删除其中的 Cookie 与账号信息。**
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: 提交前确认
+      options:
+        - label: 我没有在此粘贴任何 Cookie、密码或登录凭据
+          required: true
+        - label: 我已确认这不是「公开页 403 / 要求浏览器验证」导致的源站拦截
+          required: false

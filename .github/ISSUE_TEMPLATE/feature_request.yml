@@ -1,0 +1,53 @@
+name: 功能请求
+description: 提议一个新功能或对现有功能的改进
+title: "[Feature] "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        建议先看一眼 [`AGENTS.md`](../blob/main/AGENTS.md) 的「4.6.1 阅读优先」与「10. 禁止事项」——
+        本项目有明确的信息架构原则（底部导航只有书架/探索/设置三项）和安全红线，
+        部分想法会与它们冲突，事先对齐可以少走弯路。
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: 想解决什么问题
+      description: 从场景出发，而不是从功能名出发。「我希望在 X 场景下能……」比「加一个 X」更有用。
+      placeholder: 我在通勤时想快速找到上周没读完的那本书，但每次都要先进入书架再翻列表
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 你期望的交互
+      description: 具体一点：这个入口放在哪里、点了之后发生什么。
+    validations:
+      required: true
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: 涉及平台
+      multiple: true
+      options:
+        - Android 应用
+        - Web 版（Node.js）
+        - 两者都要
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 你考虑过的替代方案
+      description: 可选。你试过什么现有功能来绕过这个需求？为什么不够。
+
+  - type: textarea
+    id: refs
+    attributes:
+      label: 参考链接或截图
+      description: 可选。其它 App 的同类设计、文档链接等。

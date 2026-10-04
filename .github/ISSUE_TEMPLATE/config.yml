@@ -1,0 +1,13 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 报告安全漏洞（不要用公开 Issue）
+    url: https://github.com/Gan332/app-wenku8-epub/security/advisories/new
+    about: |
+      安全问题请通过私密漏洞报告提交，细节不会公开可见。
+      什么算安全问题、什么不算（例如源站 Cloudflare 403），见仓库根目录的 SECURITY.md。
+  - name: 使用前请先读 AGENTS.md
+    url: https://github.com/Gan332/app-wenku8-epub/blob/main/AGENTS.md
+    about: |
+      工程约定、信息架构原则与安全红线都写在这里。
+      尤其是「4.6.1 阅读优先」——本项目坚持「读者打开应用是为了读，不是为了导出」，
+      与该原则冲突的功能请求会先被引导讨论。
