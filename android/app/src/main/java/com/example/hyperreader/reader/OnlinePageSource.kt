@@ -16,7 +16,7 @@ import com.xyreader.core.PageSource
  * 在线阅读的页面源：**按章抓取 → 用与本地 EPUB 完全同一套 `StaticLayout` 分页 → 位图页**。
  *
  * 这样在线阅读与本地阅读共用 xy-reader 的阅读界面、手势、目录、书签与排版设置，
- * 不再维护第二套渲染（旧的 `ReaderScreenCore`）。
+ * 不再维护第二套渲染（旧的 `ReaderScreenCore` 渲染层已于 0.19.0-alpha02 移除）。
  *
  * == 为什么可以「增长」 ==
  * xy-reader 的 [PageSource] 原本约定 `pageCount` 打开后恒定；在线阅读逐章抓取，

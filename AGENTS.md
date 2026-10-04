@@ -13,7 +13,7 @@
 
 当前主要发版对象是 **Android 原生应用**。Android 版本不需要 Node.js 服务，WebView 仅用于 wenku8 登录。
 
-当前版本：`0.19.0-alpha01`（versionCode 26，见 `android/app/build.gradle.kts`，以该文件为准）
+当前版本：`0.19.0-alpha02`（versionCode 27，见 `android/app/build.gradle.kts`，以该文件为准）
 发布节奏：0.18.x 为**预发布**（prerelease，标签带 `-alphaNN`），功能收敛后再转正式版。
 包名：`com.example.hyperreader`（由 `com.wenku8.epubstudio` 于 0.9.0 重命名，非原地改名，升级需数据迁移）
 
@@ -320,8 +320,10 @@ OnlinePageSource 按章抓取后，用与本地 EPUB 完全同一套 StaticLayou
 在线页进度保存在 xy_reader_online_progress_<bookId>，必须同时保存页轴起始章与当前章，
 恢复时先按起始章重建页轴再应用页码；旧 ReadingProgress 只用于第一次迁移时选择起始章，
 不做页↔章换算。在线正文插图经 CoverRepository.loadBytes 下载，仍走共享 Wenku8HttpClient
-限流链路。旧 reader/ReaderScreen.kt（ReaderScreenCore）与 ReaderActions 仍保留给历史代码
-和单测兼容，但在线入口不再调用它们。
+限流链路。旧 reader/ReaderScreen.kt（ReaderScreenCore）、ReaderActions 接口与
+ReaderImage/RemoteImage/FlatBlocks 已无调用点，于 0.19.0-alpha02 整体移除；
+同文件里的 ReaderUiState 与 controlsShown/resolveBack/withPanel 三个纯函数**保留**
+（CoreSmokeTest 直接测试，是阅读交互回归基线），现落在 reader/ReaderUiState.kt。
 
 MiuiX 化对照（上游全是 material3，本项目禁止 material，有守卫单测）：
 `Text/Icon/IconButton/Button/Slider/Switch/Surface/Card/RadioButton/CircularProgressIndicator`

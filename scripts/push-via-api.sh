@@ -50,16 +50,46 @@ LOCAL_SHA="$(git rev-parse HEAD)"
 echo "    local HEAD = $LOCAL_SHA"
 echo "    diff base  = $LOCAL_BASE"
 
-git diff --name-only --ignore-cr-at-eol --diff-filter=d "$LOCAL_BASE" "$LOCAL_SHA" > "$TMP/files"
+# --no-renames 是**必须**的：默认的重命名检测会把「A.kt 改名成 B.kt」表示成一条 R 记录，
+# 于是 A.kt 既不在 --diff-filter=d（新增/修改）里、也不在 --diff-filter=D（删除）里，
+# 远端就会把旧文件一起留下 —— 若新旧文件里有同名符号（如本次 ReaderActions.kt →
+# ReaderUiState.kt 都定义 ReaderUiState），远端会因重复定义直接编译失败。
+# 关掉重命名检测后，改名等价于「删旧 + 增新」，两个列表各自完整。
+git diff --no-renames --name-only --ignore-cr-at-eol --diff-filter=d "$LOCAL_BASE" "$LOCAL_SHA" > "$TMP/files"
 echo "==> 本次改动文件"
 sed 's/^/    /' "$TMP/files"
 
 # 删除的文件：tree 里以 sha=null 显式摘除。少了这一步，远端会留下本地已删的文件
 # （--diff-filter=d 只给新增/修改，删除必须单独取）。
-git diff --name-only --ignore-cr-at-eol --diff-filter=D "$LOCAL_BASE" "$LOCAL_SHA" > "$TMP/deleted"
+git diff --no-renames --name-only --ignore-cr-at-eol --diff-filter=D "$LOCAL_BASE" "$LOCAL_SHA" > "$TMP/deleted"
 if [ -s "$TMP/deleted" ]; then
   echo "==> 本次删除文件"
   sed 's/^/    - /' "$TMP/deleted"
+fi
+
+# 同一个路径不得同时出现在「新增/修改」与「删除」里：那样它会先被写成 blob、
+# 再被 sha=null 摘掉，结果静默丢文件。真出现说明上面的 diff 口径又出了问题。
+# 注意：本机 Git Bash 不支持进程替换 <(...)，交集一律走临时文件。
+if [ -s "$TMP/files" ] && [ -s "$TMP/deleted" ]; then
+  LC_ALL=C sort -u "$TMP/files" > "$TMP/files.sorted"
+  LC_ALL=C sort -u "$TMP/deleted" > "$TMP/deleted.sorted"
+  comm -12 "$TMP/files.sorted" "$TMP/deleted.sorted" > "$TMP/overlap"
+  if [ -s "$TMP/overlap" ]; then
+    echo "!! 同一路径同时在改动与删除列表中，拒绝推送：" >&2
+    sed 's/^/   /' "$TMP/overlap" >&2
+    exit 1
+  fi
+fi
+
+# 反向校验：删除列表里的路径在本地必须**确实不存在**，否则会把还在用的文件从远端摘掉。
+if [ -s "$TMP/deleted" ]; then
+  while IFS= read -r f; do
+    [ -z "$f" ] && continue
+    if [ -e "$f" ]; then
+      echo "!! 待删除路径在本地仍然存在，拒绝推送：$f" >&2
+      exit 1
+    fi
+  done < "$TMP/deleted"
 fi
 
 if [ ! -s "$TMP/files" ] && [ ! -s "$TMP/deleted" ]; then

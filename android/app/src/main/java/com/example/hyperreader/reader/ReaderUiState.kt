@@ -1,10 +1,18 @@
 package com.example.hyperreader.reader
 
-import com.example.hyperreader.settings.ReaderPageTurnMode
-import com.example.hyperreader.settings.ReaderBackground
 import com.example.hyperreader.settings.ReaderSettings
 
- data class ReaderUiState(
+/**
+ * 阅读交互状态。
+ *
+ * 历史上这里还放着旧渲染层（`ReaderScreenCore`）的 `ReaderActions` 回调接口；
+ * 0.13.0 起本地阅读交给 xy-reader，0.14.0 起在线阅读也接入同一阅读器，
+ * 旧渲染层与 `ReaderActions` 已无任何调用点，于 0.19.0-alpha02 整体移除。
+ *
+ * 保留本类型与下面三个扩展函数的原因：它们锁定的行为（菜单栏判据、返回键决策、
+ * 面板互斥）由 `CoreSmokeTest` 直接测试，是阅读交互的回归基线，且与渲染实现解耦。
+ */
+data class ReaderUiState(
     val loading: Boolean = true,
     val book: ReaderBook? = null,
     val chapterIndex: Int = 0,
@@ -58,6 +66,8 @@ fun ReaderUiState.resolveBack(): BackAction = when {
  *
  * 调用点本来就是二选一（按钮打开其中一个、dismiss 关闭其中一个），
  * 因此这里把另一个显式关掉：语义等价，渲染不再打架。
+ *
+ * 注意：xy-reader 的阅读设置面板同样用 `OverlayBottomSheet`，沿用同一互斥约定。
  */
 fun ReaderUiState.withPanel(showSettings: Boolean? = null, showToc: Boolean? = null): ReaderUiState = when {
     showSettings == true -> copy(showSettings = true, showToc = false, controlsVisible = true)
@@ -65,38 +75,4 @@ fun ReaderUiState.withPanel(showSettings: Boolean? = null, showToc: Boolean? = n
     showSettings == false -> copy(showSettings = false)
     showToc == false -> copy(showToc = false)
     else -> this
-}
-
-/**
- * 阅读界面用到的**纯 UI 回调**。
- *
- * 在线阅读（`OnlineReaderViewModel`）与本地 EPUB（`com.xyreader.reader.ReaderViewModel`）
- * 各自持有状态，但共用同一份渲染界面（`ReaderScreenCore`），因此把界面所需的回调抽成这个
- * 接口，渲染层只依赖接口而不是具体 ViewModel。
- *
- * 刻意**不包含** `load(uri, id)`（专属装配）与 `startSession()` / `stopSession()`
- * （AndroidViewModel 生命周期职责），也不包含任何网络或缓存逻辑。
- */
-interface ReaderActions {
-    fun selectChapter(index: Int)
-    fun nextChapter()
-    fun previousChapter()
-    fun setParagraph(index: Int)
-    fun toggleControls()
-    fun setImmersive(value: Boolean)
-    fun showSettings(show: Boolean)
-    fun showToc(show: Boolean)
-    fun closeOverlays()
-    fun updateFontSize(value: Float)
-    fun updateFontWeight(value: Int)
-    fun updateLineHeight(value: Float)
-    fun updateSpacing(value: Int)
-    fun updatePadding(value: Int)
-    fun updateBackground(value: ReaderBackground)
-    fun updateBackgroundColor(value: Int)
-    fun updateTextColor(value: Int)
-    fun updatePageMode(value: ReaderPageTurnMode)
-    fun updateKeepScreenOn(value: Boolean)
-    fun updateImmersive(value: Boolean)
-    fun updateFontUri(value: String?)
 }

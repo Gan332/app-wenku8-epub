@@ -4,6 +4,11 @@
 
 ## [Unreleased]
 
+## [0.19.0-alpha02] - 2026-10-04（预发布）
+
+本版为**预发布（prerelease）**：在 alpha01 的基础上补三个阅读侧改进，并清理掉整套
+已废弃的旧阅读渲染层。**无数据迁移、无配置变更**，从 alpha01 直接覆盖安装即可。
+
 ### 变更
 
 - **阅读器页内搜索**：底部工具栏新增搜索入口（仅文字小说，与「复制文字」同一条件）。
@@ -18,6 +23,17 @@
 
 ### 内部
 
+- **移除旧阅读渲染层（净删约 1,090 行）**：`reader/ReaderScreen.kt`（`ReaderScreenCore`，
+  由 0.13.0 起被 xy-reader 取代、0.14.0 起在线阅读也改走 xy-reader）、`reader/FlatBlocks.kt`、
+  `reader/ReaderImage.kt`、`reader/RemoteImage.kt` 与 `ReaderActions` 接口已无任何调用点，
+  整体删除；这些文件里只剩注释提到 `ReaderScreenCore`。**在线/本地阅读行为不变**——
+  两条链路都走 `com/xyreader`，与本次删除无关。
+- `ReaderUiState` 与 `controlsShown` / `resolveBack` / `withPanel` 三个纯函数**保留**
+  （`CoreSmokeTest` 直接测试，是阅读交互回归基线），文件更名为 `reader/ReaderUiState.kt`；
+  随之删除只测已删符号的 6 个失效用例（摊平映射、段落下标、对比度纠偏）。
+- 注意：被删的 `readableTextOn` 曾为「自定义背景色」做对比度纠偏（黑底不留黑字）。
+  xy-reader 只有 4 种固定背景且字色是静态映射，**没有**该纠偏逻辑；
+  旧的自定义背景色设置属于旧渲染层，不影响现行阅读器。
 - `ReaderSearch.kt`：`contextSnippet` / `searchResultPages` 为纯函数，`ReaderSearchTest`（12 例）
   锁定摘要截取、忽略大小写、空查询、负半径退化、null 页跳过等边界。
 - `ReaderViewModel.searchBook` 逐页调 `PageSource.pageText`（每页各自进出 `renderMutex`），
@@ -26,6 +42,9 @@
   无记录退化为 1 周、自定义上界、未来日期）。
 - `ReaderDimens` 新增 `sheetItemCorner` / `searchResultMaxHeight`，阅读器界面无裸 `dp`/`sp`
   （由 `DesignTokenTest.readerUiHasNoHardcodedSizes` 锁定）。
+- 文档修正：`README.md` 的本地构建依赖由「Platform 36 / Build Tools 36.1.0」改为
+  「Platform 37 / Build Tools 37.0.0」，与 `compileSdk = 37` 及 `android/README.md` 对齐。
+
 
 ## [0.19.0-alpha01] - 2026-10-04（预发布）
 

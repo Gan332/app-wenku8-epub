@@ -110,7 +110,7 @@ android/             原生 Kotlin 业务层、MiuiX Compose UI、搜索、阅�
 - 阅读进度按页记忆并同步书架「上次阅读」
 - 导出 EPUB 保存到 `Download/EPUB`、系统分享和历史任务重新阅读
 
-本地需要 JDK 21、Android SDK Platform 36 和 Build Tools 36.1.0：
+本地需要 JDK 21、Android SDK Platform 37 和 Build Tools 37.0.0：
 
 ```powershell
 cd android

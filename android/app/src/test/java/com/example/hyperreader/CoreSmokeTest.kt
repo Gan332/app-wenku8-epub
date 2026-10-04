@@ -13,17 +13,9 @@ import com.example.hyperreader.core.toBook
 import com.example.hyperreader.http.HttpRateLimiter
 import com.example.hyperreader.model.ReadingStats
 import com.example.hyperreader.reader.BackAction
-import com.example.hyperreader.reader.ReaderBlock
-import com.example.hyperreader.reader.ReaderBook
-import com.example.hyperreader.reader.ReaderChapter
 import com.example.hyperreader.reader.ReaderUiState
 import com.example.hyperreader.reader.controlsShown
-import com.example.hyperreader.reader.flattenBook
-import com.example.hyperreader.reader.paragraphItemIndex
-import com.example.hyperreader.reader.readableTextOn
-import com.example.hyperreader.reader.relativeLuminance
 import com.example.hyperreader.reader.resolveBack
-import com.example.hyperreader.reader.resumeTargetIndex
 import com.example.hyperreader.reader.withPanel
 import com.example.hyperreader.service.missingImageWarnings
 import com.example.hyperreader.settings.ReadingProgress
@@ -32,7 +24,6 @@ import com.example.hyperreader.ui.formatRelativeReadTime
 import com.example.hyperreader.model.DownloadedImage
 import com.example.hyperreader.ui.SettingsSection
 import com.example.hyperreader.ui.formatWordCount
-import androidx.compose.ui.graphics.Color
 import kotlinx.serialization.json.Json
 import com.example.hyperreader.epub.EpubBuilder
 import com.example.hyperreader.reader.EpubReaderRepository
@@ -220,57 +211,6 @@ class CoreSmokeTest {
     }
 
     @Test
-    fun flattenedBookKeepsChapterAndParagraphMapping() {
-        // 跨章节摊平是「无缝滚动」的基础：章节归属与段落下标必须仍然正确
-        val book = ReaderBook(
-            id = "b",
-            title = "书",
-            chapters = listOf(
-                ReaderChapter(
-                    id = "c1",
-                    title = "第一章",
-                    href = "h1",
-                    blocks = listOf(
-                        ReaderBlock.Heading(1, "第一章"),
-                        ReaderBlock.Paragraph("甲"),
-                        ReaderBlock.Paragraph("乙"),
-                    ),
-                ),
-                ReaderChapter(
-                    id = "c2",
-                    title = "第二章",
-                    href = "h2",
-                    blocks = listOf(
-                        ReaderBlock.Paragraph("丙"),
-                        ReaderBlock.Image("i.png", "插图"),
-                    ),
-                ),
-            ),
-        )
-        val flat = flattenBook(book)
-        assertEquals(5, flat.size)
-        // 第一章：标题 + 两个段落
-        assertEquals(0, flat[0].chapterIndex)
-        assertTrue(flat[0].isChapterStart)
-        assertEquals(-1, flat[0].paragraphIndex)
-        assertEquals(0, flat[1].paragraphIndex)
-        assertEquals(1, flat[2].paragraphIndex)
-        assertEquals(0, flat[2].chapterIndex)
-        assertFalse(flat[2].isChapterStart)
-        // 第二章从摊平列表的第 3 项开始，段落下标在章内重新计数
-        assertEquals(1, flat[3].chapterIndex)
-        assertTrue(flat[3].isChapterStart)
-        assertEquals(0, flat[3].paragraphIndex)
-        // 非段落块没有段落下标
-        assertEquals(-1, flat[4].paragraphIndex)
-        assertEquals(1, flat[4].chapterIndex)
-        assertFalse(flat[4].isChapterStart)
-        // 键必须唯一且稳定，否则 LazyColumn 重组会错位
-        assertEquals(flat.size, flat.map { it.key }.toSet().size)
-        assertEquals(flat.map { it.key }, flattenBook(book).map { it.key })
-    }
-
-    @Test
     fun controlsShownFollowsControlsAndPanels() {
         // 默认沉浸态：菜单栏必须隐藏
         assertFalse(ReaderUiState().controlsShown())
@@ -340,67 +280,6 @@ class CoreSmokeTest {
         val switched = ReaderUiState(showToc = true, controlsVisible = true).withPanel(showSettings = true)
         assertEquals(BackAction.CLOSE_SETTINGS, switched.resolveBack())
         assertEquals(BackAction.CLOSE_TOC, ReaderUiState(showToc = true, controlsVisible = true).resolveBack())
-    }
-
-    @Test
-    fun resumeTargetPositionsChapterAndParagraph() {
-        val book = ReaderBook(
-            id = "b",
-            title = "书",
-            chapters = listOf(
-                ReaderChapter(
-                    id = "c1",
-                    title = "第一章",
-                    href = "h1",
-                    blocks = listOf(
-                        ReaderBlock.Heading(1, "第一章"),
-                        ReaderBlock.Paragraph("甲"),
-                        ReaderBlock.Paragraph("乙"),
-                    ),
-                ),
-                ReaderChapter(
-                    id = "c2",
-                    title = "第二章",
-                    href = "h2",
-                    blocks = listOf(
-                        ReaderBlock.Paragraph("丙"),
-                        ReaderBlock.Paragraph("丁"),
-                    ),
-                ),
-            ),
-        )
-        val flat = flattenBook(book)
-        // 摊平下标：0=标题, 1=甲(p0), 2=乙(p1), 3=丙(p0), 4=丁(p1)
-        assertEquals(0, resumeTargetIndex(flat, 0, 0))
-        // paragraphIndex 是 0 基：1 = 乙 → 摊平下标 2
-        assertEquals(2, resumeTargetIndex(flat, 0, 1))
-        assertEquals(3, resumeTargetIndex(flat, 1, 0))
-        assertEquals(4, resumeTargetIndex(flat, 1, 1))
-        // 段落超范围 → 回章首
-        assertEquals(3, resumeTargetIndex(flat, 1, 9))
-        // 章不存在 → null（不动）
-        assertEquals(null, resumeTargetIndex(flat, 9, 0))
-    }
-
-    @Test
-    fun paragraphItemIndexMapsParagraphsToBlocks() {
-        val chapter = ReaderChapter(
-            id = "c1",
-            title = "章",
-            href = "h",
-            blocks = listOf(
-                ReaderBlock.Heading(1, "标题"),
-                ReaderBlock.Paragraph("甲"),
-                ReaderBlock.Paragraph("乙"),
-                ReaderBlock.Image("i.jpg", "插图"),
-                ReaderBlock.Paragraph("丙"),
-            ),
-        )
-        assertEquals(0, paragraphItemIndex(chapter, 0))
-        assertEquals(2, paragraphItemIndex(chapter, 1))
-        assertEquals(4, paragraphItemIndex(chapter, 2))
-        assertEquals(0, paragraphItemIndex(chapter, 3))
-        assertEquals(0, paragraphItemIndex(chapter, -1))
     }
 
     @Test
@@ -499,31 +378,6 @@ class CoreSmokeTest {
             "界面必须全部使用 MiuiX，发现 material 引用：\n" + offenders.joinToString("\n"),
             offenders.isEmpty(),
         )
-    }
-
-    @Test
-    fun darkBackgroundNeverKeepsDarkText() {
-        // CUSTOM 背景配默认深色文字色（0xFF272522）曾经直接黑底黑字
-        val darkBackground = Color(0xFF17191C)
-        val defaultText = Color(0xFF272522)
-        assertTrue("黑底必须被纠正为可读文字色", relativeLuminance(readableTextOn(darkBackground, defaultText)) > 0.5)
-        // 纯黑（OLED）同理
-        assertTrue(relativeLuminance(readableTextOn(Color.Black, defaultText)) > 0.5)
-    }
-
-    @Test
-    fun lightBackgroundKeepsDarkTextWhenContrastIsSufficient() {
-        val paper = Color(0xFFF4EFE6)
-        val darkText = Color(0xFF272522)
-        assertEquals(darkText, readableTextOn(paper, darkText))
-        assertEquals(darkText, readableTextOn(Color.White, darkText))
-    }
-
-    @Test
-    fun darkBackgroundKeepsWhiteText() {
-        val white = Color.White
-        assertEquals(white, readableTextOn(Color.Black, white))
-        assertEquals(white, readableTextOn(Color(0xFF17191C), white))
     }
 
     @Test
