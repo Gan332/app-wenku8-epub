@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -29,8 +30,10 @@ import com.example.hyperreader.core.ExploreBooksRow
 import com.example.hyperreader.model.SearchBook
 import com.example.hyperreader.ui.cover.CoverImage
 import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.PullToRefresh
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
+import top.yukonga.miuix.kmp.basic.TabRow
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 /**
@@ -51,11 +54,22 @@ fun ExploreScreen(
     onGoToCatalog: () -> Unit,
     onOpenSearch: () -> Unit,
 ) {
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = UiDimens.pagePadding, vertical = UiDimens.spaceL),
-        verticalArrangement = Arrangement.spacedBy(UiDimens.spaceM),
+    val listState = rememberLazyListState()
+    // 换页时回到顶部：否则从「今日更新」切到「新书一览」还停在上一个榜单的滚动位置。
+    val activePageId = state.activeExplorePage?.id
+    androidx.compose.runtime.LaunchedEffect(activePageId) { listState.scrollToItem(0) }
+    // 下拉刷新：对应 LNR ExplorePage 的 PullToRefreshBox。MiuiX 0.9.4 自带 PullToRefresh，
+    // 之前 ExploreExpandedScreen 注释说「没有等价组件」是误判。
+    PullToRefresh(
+        isRefreshing = state.exploreBusy,
+        onRefresh = { state.activeExplorePage?.let(viewModel::loadExplore) },
     ) {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            state = listState,
+            contentPadding = PaddingValues(horizontal = UiDimens.pagePadding, vertical = UiDimens.spaceL),
+            verticalArrangement = Arrangement.spacedBy(UiDimens.spaceM),
+        ) {
         item(key = "header") {
             Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXS)) {
                 Text("探索", fontSize = UiDimens.display, fontWeight = FontWeight.Bold)
@@ -91,16 +105,16 @@ fun ExploreScreen(
             }
         }
 
+        // 榜单切换用 TabRow（对应 LNR 的 PrimaryTabRow），12 个榜单挤在横向 Chip 行里不好点。
         item(key = "page-switcher") {
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
-                items(viewModel.explorePages, key = { it.id }) { page ->
-                    val selected = page.id == state.activeExplorePage?.id
-                    TextButton(
-                        text = if (selected) "✓ ${page.title}" else page.title,
-                        onClick = { viewModel.loadExplore(page) },
-                    )
-                }
-            }
+            val pages = viewModel.explorePages
+            val selectedIndex = pages.indexOfFirst { it.id == activePageId }.coerceAtLeast(0)
+            TabRow(
+                tabs = pages.map { it.title },
+                selectedTabIndex = selectedIndex,
+                onTabSelected = { pages.getOrNull(it)?.let(viewModel::loadExplore) },
+                modifier = Modifier.fillMaxWidth(),
+            )
         }
 
         if (state.exploreBusy && state.exploreRows.isEmpty()) {
@@ -148,6 +162,7 @@ fun ExploreScreen(
         }
 
         state.exploreMessage?.let { message -> item(key = "explore-message") { MessageCard(message) } }
+        }
     }
 }
 
