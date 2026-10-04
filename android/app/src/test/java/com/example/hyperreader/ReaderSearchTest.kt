@@ -16,7 +16,8 @@ class ReaderSearchTest {
     fun snippetMarksMatchWithSeparator() {
         val text = "前面的文字，然后是目标词，最后收尾。"
         val snippet = contextSnippet(text, "目标词", radius = 3)
-        assertEquals("前文字，$SNIPPET_MARK目标词$SNIPPET_MARK，最后", snippet)
+        // radius=3 时命中前只留 3 个字（「，然后是」的前 3 字）→「…然后是‖目标词‖，最后…」
+        assertEquals("…然后是" + SNIPPET_MARK + "目标词" + SNIPPET_MARK + "，最后…", snippet)
     }
 
     @Test
@@ -30,13 +31,14 @@ class ReaderSearchTest {
     fun snippetHasNoEllipsisWhenMatchFillsShortPage() {
         // 全文就等于命中：前后都没有可截的内容，不该出现悬空的「…」。
         val snippet = contextSnippet("目标词", "目标词")
-        assertEquals("$SNIPPET_MARK目标词$SNIPPET_MARK", snippet)
+        assertEquals(SNIPPET_MARK + "目标词" + SNIPPET_MARK, snippet)
     }
 
     @Test
     fun snippetIgnoresCase() {
         val snippet = contextSnippet("Hello World", "hello")
-        assertEquals("Hello $SNIPPET_MARKhello$SNIPPET_MARK World", snippet)
+        // 匹配到的是原文里的 “Hello”（不因大小写而改写命中段），故只标记命中本身
+        assertEquals(SNIPPET_MARK + "Hello" + SNIPPET_MARK + " World", snippet)
     }
 
     @Test
@@ -53,7 +55,8 @@ class ReaderSearchTest {
     fun snippetHandlesNegativeRadiusWithoutCrashing() {
         // 负半径在去负保护下退化成只显示命中段，不能因 coerceIn 反向边界而抛异常。
         val snippet = contextSnippet("前缀目标词后缀", "目标词", radius = -5)
-        assertEquals("$SNIPPET_MARK目标词$SNIPPET_MARK", snippet)
+        // 半径 0 时前后无内容可截，但前后仍有未覆盖文字，故两侧都带省略号
+        assertEquals("…" + SNIPPET_MARK + "目标词" + SNIPPET_MARK + "…", snippet)
     }
 
     @Test
@@ -94,4 +97,3 @@ class ReaderSearchTest {
         assertEquals("摘要", hit.snippet)
     }
 }
-
