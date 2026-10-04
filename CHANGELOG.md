@@ -6,6 +6,12 @@
 
 ### 变更
 
+- **书架分组**：参考 LNR `BookshelfHomeContent`，书架切成可折叠的「置顶 / 全部」两段，
+  分组头吸顶（stickyHeader）带图标与展开箭头；卡片封面放大到 LNR 的 94×144、作者用强调色。
+  点卡片即读、更多菜单等交互不变（AGENTS §4.6.1）。
+- **探索页**：榜单切换从横向 Chip 行换成可滚动 `TabRow`；新增下拉刷新
+  （用 MiuiX 自带的 `PullToRefresh`——此前 `ExploreExpandedScreen` 注释称 0.9.4 无等价组件是误判）；
+  切换榜单时列表自动回到顶部。
 - **阅读统计热力图**（参考 LNR `HeatMapCalendar`）：「最近 7 天」进度条换成 GitHub 式年度网格，
   列 = 周、行 = 周内七天，五档色阶，色阶阈值按非零阅读时长的 25%/50%/75% 分位动态计算，
   图例标注最高档阈值；点选某天显示当天时长。网格横向滚动、默认停在最近一周。
@@ -14,6 +20,8 @@
 
 - `ui/ReadingHeatmap.kt`：阈值分档、网格切分与点击命中测试抽为纯函数，
   由 `ReadingHeatmapTest`（24 例）锁定。
+- `ui/BookshelfGroups.kt`：`groupBookshelf` 为纯函数，`BookshelfGroupsTest`（7 例）锁定
+  「每本只出现一次、组内不重排、空组不产出」；折叠状态留在 Composable 内，不进 ViewModel。
 - `scripts/push-via-api.sh`：算「本次改动文件」时补上 `--ignore-cr-at-eol`。此前本机
   `core.autocrlf=true` 且 `.gitattributes` 未给 `*.kt`/`*.xml` 指定 eol，纯行尾差异会被
   算成改动，既拖慢推送（多出上百次 blob 调用），也会把远端 LF 文件回冲成 CRLF。
