@@ -36,7 +36,7 @@ fun ActiveExportSection(
     if (active.isEmpty()) return
     Column(
         modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXS),
     ) {
         Text(
             "正在导出",
@@ -63,7 +63,7 @@ fun ExportProgressRow(
         modifier = Modifier.fillMaxWidth().clickable { onOpen(job.id) },
         insideMargin = PaddingValues(UiDimens.cardInset),
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXS)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -89,7 +89,7 @@ fun ExportProgressRow(
             // 阶段 + 预计剩余：阶段是结构化状态，比 message 更稳（message 含具体章节名）
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceXS),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(

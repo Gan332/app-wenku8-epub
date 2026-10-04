@@ -21,6 +21,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.xyreader.core.ReaderDimens
 import com.xyreader.core.ReaderPrefs
 import java.util.Locale
 import kotlin.math.roundToInt
@@ -33,7 +34,7 @@ fun NovelSpacingControls(
     compact: Boolean = false,
 ) {
     val controls: @Composable () -> Unit = {
-        Column(verticalArrangement = Arrangement.spacedBy(if (compact) 4.dp else 8.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(if (compact) ReaderDimens.spaceXXS else ReaderDimens.spaceXS)) {
             SpacingSliderRow(
                 title = "行间距",
                 value = prefs.novelLineSpacingMultiplier,
@@ -92,22 +93,22 @@ fun NovelSpacingControls(
             fontWeight = FontWeight.SemiBold,
             color = MiuixTheme.colorScheme.primary,
         )
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(ReaderDimens.spaceXXS))
         controls()
     } else {
         Surface(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(24.dp),
+            shape = RoundedCornerShape(ReaderDimens.panelCorner),
             color = MiuixTheme.colorScheme.surfaceContainer,
         ) {
-            Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
+            Column(Modifier.padding(horizontal = ReaderDimens.pagePadding, vertical = ReaderDimens.spaceM)) {
                 Text(
                     "小说排版",
                     style = MiuixTheme.textStyles.title4,
                     fontWeight = FontWeight.SemiBold,
                     color = MiuixTheme.colorScheme.onSurface,
                 )
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(ReaderDimens.spaceXXS))
                 controls()
             }
         }

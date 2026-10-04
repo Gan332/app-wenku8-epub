@@ -110,7 +110,7 @@ private fun ConfigScaffold(title: String, onBack: () -> Unit, blocks: List<@Comp
         Text(title, fontSize = UiDimens.title, fontWeight = FontWeight.Bold)
         LazyColumn(
             modifier = Modifier.fillMaxWidth(),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+            contentPadding = PaddingValues(horizontal = UiDimens.pagePadding, vertical = UiDimens.spaceXXS),
             verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS),
         ) {
             items(blocks.size) { index -> blocks[index]() }

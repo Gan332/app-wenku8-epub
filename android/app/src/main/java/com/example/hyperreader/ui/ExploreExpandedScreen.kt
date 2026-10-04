@@ -65,7 +65,7 @@ fun ExploreExpandedScreen(state: StudioUiState, viewModel: StudioViewModel, modi
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS),
             ) {
-                CircularProgressIndicator(size = 22.dp)
+                CircularProgressIndicator(size = UiDimens.indicator)
                 Text("正在加载…", fontSize = UiDimens.caption, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f))
             }
 
@@ -102,7 +102,7 @@ private fun ExpandedBookCell(book: SearchBook, onClick: () -> Unit) {
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(3f / 4f)
-                .clip(RoundedCornerShape(8.dp)),
+                .clip(RoundedCornerShape(UiDimens.cardCorner)),
         ) {
             CoverImage(
                 url = book.coverUrl,

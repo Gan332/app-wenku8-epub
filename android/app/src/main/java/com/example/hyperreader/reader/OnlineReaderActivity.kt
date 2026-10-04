@@ -168,11 +168,11 @@ class OnlineReaderActivity : ComponentActivity() {
                 ) {
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS),
                     ) {
                         Text(
                             text = message,
-                            modifier = Modifier.padding(24.dp),
+                            modifier = Modifier.padding(UiDimens.spaceXL),
                             color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                             style = MiuixTheme.textStyles.body1,
                         )
@@ -186,7 +186,7 @@ class OnlineReaderActivity : ComponentActivity() {
                                         ),
                                     )
                                 },
-                                modifier = Modifier.heightIn(min = 48.dp),
+                                modifier = Modifier.heightIn(min = UiDimens.touchMin),
                             ) { Text("打开验证页（浏览器）") }
                         }
                     }

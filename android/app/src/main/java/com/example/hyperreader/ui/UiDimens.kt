@@ -44,6 +44,16 @@ object UiDimens {
     /** 详情页封面宽度。 */
     val coverWidth: Dp = 160.dp
 
+    // —— 跨页复用的装饰值 ——
+    // 封面圆角此前在书架、探索列表、探索大图三处各写一遍 8dp；
+    // 加载指示器此前有 16 / 22 / 24dp 三种尺寸，同一屏里粗细不一。
+    val cardCorner: Dp = 8.dp
+
+    val indicator: Dp = 24.dp
+
+    /** 取色圆点（强调色、背景色板）。 */
+    val swatch: Dp = 36.dp
+
     // —— 字号七档 ——
     /** 页面大标题。 */
     val display = 25.sp

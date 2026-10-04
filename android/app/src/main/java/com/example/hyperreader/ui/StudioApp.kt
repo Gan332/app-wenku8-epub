@@ -402,7 +402,7 @@ private fun StudioApp(
                     onItemClick = { },
                     highlightIndex = steps.indexOfFirst { it.first == state.exportStep }.coerceAtLeast(0),
                     enabled = false,
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = UiDimens.pagePadding, vertical = UiDimens.spaceXS),
                 )
             }
         }
@@ -450,11 +450,11 @@ private fun ResolvingScreen(state: StudioUiState, viewModel: StudioViewModel) {
         }
         if (state.detailError == null) {
             Row(
-                Modifier.fillMaxWidth().padding(vertical = 12.dp),
+                Modifier.fillMaxWidth().padding(vertical = UiDimens.spaceS),
                 horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceM),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                CircularProgressIndicator(size = 22.dp)
+                CircularProgressIndicator(size = UiDimens.indicator)
                 Text("正在获取章节列表，请稍候。", fontSize = UiDimens.body, color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.75f))
             }
         }
@@ -487,7 +487,7 @@ private fun ChaptersScreen(state: StudioUiState, viewModel: StudioViewModel) {
         TextField(value = state.search, onValueChange = viewModel::setSearch, label = "搜索章节标题", useLabelAsPlaceholder = true, modifier = Modifier.fillMaxWidth())
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
             TextButton(text = "全选", onClick = viewModel::selectAll)
-            Spacer(Modifier.width(8.dp))
+            Spacer(Modifier.width(UiDimens.spaceXS))
             TextButton(text = "清空", onClick = viewModel::clearSelection)
         }
         Text("已选择 ${state.selectedIds.size} / ${index.chapters.size} 章", color = MiuixTheme.colorScheme.primary, fontSize = UiDimens.caption)
@@ -603,11 +603,11 @@ private fun ProgressContent(job: ExportJob, viewModel: StudioViewModel) {
 @Composable
 private fun HistoryScreen(jobs: List<ExportJob>, viewModel: StudioViewModel) {
     val context = LocalContext.current
-    if (jobs.isEmpty()) { Text("还没有导出任务。", Modifier.padding(top = 20.dp), color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.72f)); return }
+    if (jobs.isEmpty()) { Text("还没有导出任务。", Modifier.padding(top = UiDimens.spaceXL), color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.72f)); return }
     LazyColumn(Modifier.fillMaxWidth().padding(top = UiDimens.spaceL), verticalArrangement = Arrangement.spacedBy(UiDimens.spaceM)) {
         items(jobs, key = { it.id }) { job ->
             Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(UiDimens.cardInset)) {
-                Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXS)) {
                     Text(job.book.title, fontWeight = FontWeight.Bold, maxLines = 2)
                     Text(statusText(job), color = MiuixTheme.colorScheme.primary, fontSize = UiDimens.caption)
                     Text("${job.chapterCount} 章 · ${job.progress.percent}% · ${job.createdAt.take(10)}", fontSize = UiDimens.captionSmall, color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.72f))
@@ -629,7 +629,7 @@ private fun HistoryScreen(jobs: List<ExportJob>, viewModel: StudioViewModel) {
 @Composable
 private fun BookHeader(title: String, author: String, category: String, total: Int, selected: Int) {
     Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(UiDimens.cardInset)) {
-        Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXS)) {
             Text(category, color = MiuixTheme.colorScheme.primary, fontSize = UiDimens.captionSmall, fontWeight = FontWeight.Bold)
             Text(title, fontSize = UiDimens.title, fontWeight = FontWeight.Bold, maxLines = 2)
             Text("$author · $total 章 · 已选 $selected", color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.72f), fontSize = UiDimens.caption)
@@ -639,14 +639,14 @@ private fun BookHeader(title: String, author: String, category: String, total: I
 
 @Composable
 private fun ChapterRow(chapter: Chapter, selected: Boolean, onToggle: () -> Unit) {
-    Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(horizontal = 12.dp, vertical = 4.dp), onClick = onToggle) {
+    Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(horizontal = UiDimens.spaceS, vertical = UiDimens.spaceXXS), onClick = onToggle) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             // MiuiX 0.9.4 起 Checkbox 改用 Material 风格的 ToggleableState + onClick
             Checkbox(
                 state = if (selected) ToggleableState.On else ToggleableState.Off,
                 onClick = onToggle,
             )
-            Column(Modifier.weight(1f).padding(vertical = 6.dp)) {
+            Column(Modifier.weight(1f).padding(vertical = UiDimens.spaceXS)) {
                 Text(chapter.title, maxLines = 2, fontSize = UiDimens.bodyStrong)
                 Text(chapter.volume + if (chapter.isIllustration) " · 插图章节" else "", color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.72f), fontSize = UiDimens.captionSmall)
             }

@@ -110,6 +110,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.hyperreader.R
 import com.xyreader.archive.NovelStyle
 import com.xyreader.core.BookEntity
+import com.xyreader.core.ReaderDimens
 import com.xyreader.core.BookmarkEntity
 import com.xyreader.core.PageSource
 import com.xyreader.core.Chapter
@@ -145,7 +146,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 
 /** 工具栏浮层统一样式：半透明深底 + 20dp 圆角 */
 private val BarBackground = Color(0xCC101318)
-private val BarCorner = RoundedCornerShape(20.dp)
+private val BarCorner = RoundedCornerShape(ReaderDimens.panelCorner)
 private const val BAR_ANIM_MS = 250
 
 /** 页内双击放大的目标倍数 */
@@ -306,7 +307,7 @@ fun ReaderScreen(
             ReaderPhase.Error -> Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(32.dp),
+                    .padding(ReaderDimens.spaceXL),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
             ) {
@@ -316,7 +317,7 @@ fun ReaderScreen(
                     style = MiuixTheme.textStyles.body1,
                     textAlign = TextAlign.Center,
                 )
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(ReaderDimens.spaceM))
                 TextButton(
                     text = "返回",
                     onClick = onBack,
@@ -441,7 +442,7 @@ fun ReaderScreen(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(WindowInsets.navigationBars.asPaddingValues())
-                .padding(bottom = 88.dp),
+                .padding(bottom = ReaderDimens.snackbarBottomInset),
         )
     }
     }
@@ -718,10 +719,10 @@ private fun ReaderPagerArea(
             Row(
                 modifier = Modifier
                     .padding(WindowInsets.statusBars.asPaddingValues())
-                    .padding(start = 12.dp, end = 12.dp, top = 8.dp)
+                    .padding(start = ReaderDimens.spaceS, end = ReaderDimens.spaceS, top = ReaderDimens.spaceXS)
                     .fillMaxWidth()
                     .background(BarBackground, BarCorner)
-                    .padding(horizontal = 4.dp, vertical = 2.dp),
+                    .padding(horizontal = ReaderDimens.spaceXXS, vertical = ReaderDimens.spaceXXS),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 IconButton(onClick = onBack) {
@@ -800,10 +801,10 @@ private fun ReaderPagerArea(
             Column(
                 modifier = Modifier
                     .padding(WindowInsets.navigationBars.asPaddingValues())
-                    .padding(start = 12.dp, end = 12.dp, bottom = 8.dp)
+                    .padding(start = ReaderDimens.spaceS, end = ReaderDimens.spaceS, bottom = ReaderDimens.spaceXS)
                     .fillMaxWidth()
                     .background(BarBackground, BarCorner)
-                    .padding(horizontal = 16.dp, vertical = 6.dp),
+                    .padding(horizontal = ReaderDimens.spaceXS, vertical = ReaderDimens.spaceXXS),
             ) {
                 // —— 第一行：页码滑条 / 亮度滑条 二选一（点亮度按钮切换），控制卡片高度 ——
                 if (barMode == "brightness") {
@@ -812,7 +813,7 @@ private fun ReaderPagerArea(
                             imageVector = ImageVector.vectorResource(R.drawable.lightbulb_24px),
                             contentDescription = "亮度",
                             tint = Color.White,
-                            modifier = Modifier.size(20.dp),
+                            modifier = Modifier.size(ReaderDimens.iconMd),
                         )
                         var brightnessDragging by remember { mutableStateOf(false) }
                         // 跟随系统（null）时滑条显示近似值 50%
@@ -832,7 +833,7 @@ private fun ReaderPagerArea(
                             onValueChangeFinished = { brightnessDragging = false },
                             valueRange = 0.01f..1f,
                             modifier = Modifier
-                                .padding(horizontal = 8.dp)
+                                .padding(horizontal = ReaderDimens.spaceXS)
                                 .weight(1f),
                             colors = SliderDefaults.sliderColors(
                                 thumbColor = MiuixTheme.colorScheme.primary,
@@ -874,7 +875,7 @@ private fun ReaderPagerArea(
                             },
                             valueRange = 0f..last.toFloat().coerceAtLeast(0f),
                             modifier = Modifier
-                                .padding(start = 10.dp)
+                                .padding(start = ReaderDimens.spaceS)
                                 .weight(1f),
                             colors = SliderDefaults.sliderColors(
                                 thumbColor = MiuixTheme.colorScheme.primary,
@@ -946,8 +947,8 @@ private fun ReaderPagerArea(
                 onClick = { lockGesture() },
                 modifier = Modifier
                     .align(Alignment.CenterEnd)
-                    .padding(end = 6.dp)
-                    .size(36.dp),
+                    .padding(end = ReaderDimens.spaceXS)
+                    .size(ReaderDimens.touchMin),
                 shape = CircleShape,
                 color = MiuixTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.55f),
             ) {
@@ -956,7 +957,7 @@ private fun ReaderPagerArea(
                         imageVector = MiuixIcons.Unlock,
                         contentDescription = "锁定手势（防误触）",
                         tint = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.75f),
-                        modifier = Modifier.size(18.dp),
+                        modifier = Modifier.size(ReaderDimens.iconSm),
                     )
                 }
             }
@@ -978,8 +979,8 @@ private fun ReaderPagerArea(
                     toolbarVisible = true
                 },
                 modifier = Modifier
-                    .padding(end = 6.dp)
-                    .size(40.dp),
+                    .padding(end = ReaderDimens.spaceXS)
+                    .size(ReaderDimens.touchMin),
                 shape = CircleShape,
                 color = MiuixTheme.colorScheme.surfaceContainerHigh,
             ) {
@@ -1057,11 +1058,11 @@ private fun PageTextCopyDialog(viewModel: ReaderViewModel, page: Int, onDismiss:
         loading = false
     }
     Dialog(onDismissRequest = onDismiss) {
-        Surface(shape = RoundedCornerShape(20.dp), color = MiuixTheme.colorScheme.surface) {
+        Surface(shape = RoundedCornerShape(ReaderDimens.panelCorner), color = MiuixTheme.colorScheme.surface) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(20.dp),
+                    .padding(ReaderDimens.pagePadding),
             ) {
                 Text(
                     text = "复制文字 · 第 ${page + 1} 页",
@@ -1069,11 +1070,11 @@ private fun PageTextCopyDialog(viewModel: ReaderViewModel, page: Int, onDismiss:
                     fontWeight = FontWeight.SemiBold,
                     color = MiuixTheme.colorScheme.onSurface,
                 )
-                Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(ReaderDimens.spaceS))
                 val content = text
                 when {
                     loading -> Box(
-                        modifier = Modifier.fillMaxWidth().height(120.dp),
+                        modifier = Modifier.fillMaxWidth().height(ReaderDimens.copyBodyMinHeight),
                         contentAlignment = Alignment.Center,
                     ) {
                         CircularProgressIndicator()
@@ -1087,14 +1088,14 @@ private fun PageTextCopyDialog(viewModel: ReaderViewModel, page: Int, onDismiss:
                         Text(
                             text = content,
                             modifier = Modifier
-                                .heightIn(max = 360.dp)
+                                .heightIn(max = ReaderDimens.copyBodyMaxHeight)
                                 .verticalScroll(rememberScrollState()),
                             style = MiuixTheme.textStyles.body2,
                             color = MiuixTheme.colorScheme.onSurface,
                         )
                     }
                 }
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(ReaderDimens.spaceXS))
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                     TextButton(text = "关闭", onClick = onDismiss)
                     if (!loading && !content.isNullOrBlank()) {
@@ -1149,7 +1150,7 @@ private enum class ReaderSheetTab(val label: String) {
 }
 
 /** 弹层分页区高度：容纳最高的字体组；组内偶尔超高时由组内容自滚 */
-private val SheetPagerHeight = 340.dp
+private val SheetPagerHeight = ReaderDimens.sheetPagerHeight
 
 /**
  * 设置面板内容（拆出独立于弹层的容器以便 UI 测试直挂）：
@@ -1171,8 +1172,8 @@ internal fun ReaderSettingsSheetContent(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                .padding(horizontal = ReaderDimens.pagePadding),
+            horizontalArrangement = Arrangement.spacedBy(ReaderDimens.spaceS),
         ) {
             ReaderSheetTab.entries.forEachIndexed { index, tab ->
                 CapsuleTab(
@@ -1182,7 +1183,7 @@ internal fun ReaderSettingsSheetContent(
                 )
             }
         }
-        Spacer(Modifier.height(14.dp))
+        Spacer(Modifier.height(ReaderDimens.spaceM))
         HorizontalPager(
             state = pagerState,
             modifier = Modifier
@@ -1197,23 +1198,23 @@ internal fun ReaderSettingsSheetContent(
                 }
             }
         }
-        Spacer(Modifier.height(6.dp))
+        Spacer(Modifier.height(ReaderDimens.spaceXS))
         if (onOpenReaderConfig != null) {
             // MiuiX 化的入口：上游在此只放一句「去设置页」的提示，这里直接做成按钮
             TextButton(
                 text = "更多设置（屏幕方向 / 点击翻页 / 字体导入）",
                 onClick = onOpenReaderConfig,
-                modifier = Modifier.padding(horizontal = 12.dp),
+                modifier = Modifier.padding(horizontal = ReaderDimens.spaceS),
             )
         } else {
             Text(
                 text = "更多设置：设置-阅读配置管理",
-                modifier = Modifier.padding(horizontal = 20.dp),
+                modifier = Modifier.padding(horizontal = ReaderDimens.pagePadding),
                 style = MiuixTheme.textStyles.footnote1,
                 color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
             )
         }
-        Spacer(Modifier.height(10.dp))
+        Spacer(Modifier.height(ReaderDimens.spaceS))
     }
 }
 
@@ -1224,11 +1225,11 @@ private fun SheetGroupPage(content: @Composable () -> Unit) {
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
+            .padding(horizontal = ReaderDimens.pagePadding),
+        verticalArrangement = Arrangement.spacedBy(ReaderDimens.spaceM),
     ) {
         content()
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(ReaderDimens.spaceS))
     }
 }
 
@@ -1238,7 +1239,7 @@ private fun SheetGroupPage(content: @Composable () -> Unit) {
 
 @Composable
 private fun SheetModeGroup(prefs: ReaderPrefs, onUpdate: ((ReaderPrefs) -> ReaderPrefs) -> Unit) {
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    Row(horizontalArrangement = Arrangement.spacedBy(ReaderDimens.spaceXS)) {
         PageMode.entries.forEach { mode ->
             FilterChip(
                 selected = prefs.pageMode == mode,
@@ -1261,16 +1262,16 @@ private fun SheetDisplayGroup(prefs: ReaderPrefs, onUpdate: ((ReaderPrefs) -> Re
         fontWeight = FontWeight.SemiBold,
         color = MiuixTheme.colorScheme.primary,
     )
-    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+    Row(horizontalArrangement = Arrangement.spacedBy(ReaderDimens.spaceS)) {
         ReadBackground.entries.forEach { bg ->
             val selected = prefs.readBackground == bg
             Surface(
                 onClick = { onUpdate { it.copy(readBackground = bg) } },
-                modifier = Modifier.size(36.dp),
+                modifier = Modifier.size(ReaderDimens.swatch),
                 shape = CircleShape,
                 color = bg.toComposeColor(),
                 border = BorderStroke(
-                    width = if (selected) 2.dp else 1.dp,
+                    width = if (selected) ReaderDimens.borderSelected else ReaderDimens.hairline,
                     color = if (selected) {
                         MiuixTheme.colorScheme.primary
                     } else {
@@ -1286,7 +1287,7 @@ private fun SheetDisplayGroup(prefs: ReaderPrefs, onUpdate: ((ReaderPrefs) -> Re
         fontWeight = FontWeight.SemiBold,
         color = MiuixTheme.colorScheme.primary,
     )
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    Row(horizontalArrangement = Arrangement.spacedBy(ReaderDimens.spaceXS)) {
         ImageScale.entries.forEach { scale ->
             FilterChip(
                 selected = prefs.imageScale == scale,
@@ -1316,8 +1317,8 @@ private fun SheetDisplayGroup(prefs: ReaderPrefs, onUpdate: ((ReaderPrefs) -> Re
 @Composable
 private fun SheetFontGroup(prefs: ReaderPrefs, onUpdate: ((ReaderPrefs) -> ReaderPrefs) -> Unit) {
     FlowRow(
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+        horizontalArrangement = Arrangement.spacedBy(ReaderDimens.spaceXS),
+        verticalArrangement = Arrangement.spacedBy(ReaderDimens.spaceXXS),
     ) {
         prefs.novelCustomFont?.let { name ->
             FilterChip(
@@ -1336,7 +1337,7 @@ private fun SheetFontGroup(prefs: ReaderPrefs, onUpdate: ((ReaderPrefs) -> Reade
             )
         }
     }
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    Row(horizontalArrangement = Arrangement.spacedBy(ReaderDimens.spaceXS)) {
         NovelFontWeight.entries.forEach { weight ->
             FilterChip(
                 selected = prefs.novelFontWeight == weight,
@@ -1435,7 +1436,7 @@ private fun DirectoryDialog(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(start = 4.dp, end = 20.dp),
+                        .padding(start = ReaderDimens.spaceXXS, end = ReaderDimens.pagePadding),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     IconButton(onClick = onDismiss) {
@@ -1455,8 +1456,8 @@ private fun DirectoryDialog(
                 }
                 // —— tab 切换：选中深底白字胶囊，未选描边 ——
                 Row(
-                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.padding(horizontal = ReaderDimens.pagePadding, vertical = ReaderDimens.spaceXS),
+                    horizontalArrangement = Arrangement.spacedBy(ReaderDimens.spaceXS),
                 ) {
                     TabChip(text = "目录", selected = tab == 0, onClick = { onTabChange(0) })
                     TabChip(text = "书签", selected = tab == 1, onClick = { onTabChange(1) })
@@ -1488,7 +1489,7 @@ private fun ChapterList(
     if (chapters.isEmpty()) {
         Text(
             text = "本书没有章节结构",
-            modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 16.dp),
+            modifier = Modifier.padding(start = ReaderDimens.pagePadding, end = ReaderDimens.pagePadding, top = ReaderDimens.spaceM),
             style = MiuixTheme.textStyles.footnote1,
             color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
         )
@@ -1509,7 +1510,7 @@ private fun ChapterList(
                         },
                     )
                     .clickable { onJumpTo(chapter.startPage) }
-                    .padding(start = 20.dp, end = 20.dp, top = 10.dp, bottom = 10.dp),
+                    .padding(start = ReaderDimens.pagePadding, end = ReaderDimens.pagePadding, top = ReaderDimens.spaceS, bottom = ReaderDimens.spaceS),
             ) {
                 Text(
                     text = chapter.title,
@@ -1534,7 +1535,7 @@ private fun ChapterList(
                 )
             }
         }
-        item { Spacer(Modifier.height(16.dp)) }
+        item { Spacer(Modifier.height(ReaderDimens.spaceM)) }
     }
 }
 
@@ -1548,7 +1549,7 @@ private fun BookmarkList(
     if (bookmarks.isEmpty()) {
         Text(
             text = "暂无书签，阅读时点工具栏书签图标添加",
-            modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 16.dp),
+            modifier = Modifier.padding(start = ReaderDimens.pagePadding, end = ReaderDimens.pagePadding, top = ReaderDimens.spaceM),
             style = MiuixTheme.textStyles.footnote1,
             color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
         )
@@ -1561,7 +1562,7 @@ private fun BookmarkList(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable { onJumpTo(bookmark.pageIndex) }
-                    .padding(start = 20.dp, end = 4.dp, top = 2.dp, bottom = 2.dp),
+                    .padding(start = ReaderDimens.pagePadding, end = ReaderDimens.spaceXXS, top = ReaderDimens.spaceXXS, bottom = ReaderDimens.spaceXXS),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
@@ -1581,7 +1582,7 @@ private fun BookmarkList(
                 }
             }
         }
-        item { Spacer(Modifier.height(16.dp)) }
+        item { Spacer(Modifier.height(ReaderDimens.spaceM)) }
     }
 }
 
@@ -1595,12 +1596,12 @@ private fun TabChip(text: String, selected: Boolean, onClick: () -> Unit) {
         border = if (selected) {
             null
         } else {
-            BorderStroke(1.dp, MiuixTheme.colorScheme.outline)
+            BorderStroke(ReaderDimens.hairline, MiuixTheme.colorScheme.outline)
         },
     ) {
         Text(
             text = text,
-            modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+            modifier = Modifier.padding(horizontal = ReaderDimens.spaceM, vertical = ReaderDimens.spaceXS),
             style = MiuixTheme.textStyles.button,
             color = if (selected) {
                 MiuixTheme.colorScheme.onPrimary
@@ -1705,6 +1706,6 @@ private fun FilterChip(
             MiuixTheme.colorScheme.onSurfaceVariantSummary
         },
     ) {
-        Box(Modifier.padding(horizontal = 14.dp, vertical = 7.dp)) { label() }
+        Box(Modifier.padding(horizontal = ReaderDimens.spaceM, vertical = ReaderDimens.spaceXS)) { label() }
     }
 }

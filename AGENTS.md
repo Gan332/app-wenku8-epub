@@ -181,6 +181,9 @@ OkHttp 执行不了故直接 403。浏览器通过后下发的 `cf_clearance` **
 - **尺寸令牌**（0.18.0）：控件高度、页面边距、字号一律取 `ui/UiDimens.kt` 的令牌
   （`touchMin` / `rowMin`、`spaceXXS…spaceXL`、`captionSmall…display`、`MOTION_*`）；
   只有装饰性小值（进度圈直径、圆角等）允许直接写数值
+- **阅读器另有一份令牌**：`com/xyreader/core/ReaderDimens.kt`。因为 `com.xyreader`
+  不得反向依赖宿主（§4.8 第 1 条），它不能 import `UiDimens`，数值必须与 `UiDimens`
+  逐项一致；`DesignTokenTest` 同时锁定「两处数值相等」与「阅读器界面不出现裸 `dp`/`sp`」
 - **动效**（0.18.0）：统一用 `ui/Motion.kt`（交错入场/按压/展开/shimmer），
   时长经 `Motion.duration()` 换算，**必须尊重系统「移除动画」**（`ANIMATOR_DURATION_SCALE=0` 时归零）；
   长列表交错延迟只对前 `Motion.STAGGER_VISIBLE_LIMIT` 项累加，否则靠后的项会等几秒才出现

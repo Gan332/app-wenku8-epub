@@ -72,6 +72,7 @@ import com.example.hyperreader.R
 import com.example.hyperreader.settings.ReaderBackground
 import com.example.hyperreader.settings.ReaderPageTurnMode
 import com.example.hyperreader.settings.ReaderSettings
+import com.example.hyperreader.ui.UiDimens
 import top.yukonga.miuix.kmp.anim.DecelerateEasing
 import top.yukonga.miuix.kmp.anim.folmeSpring
 import top.yukonga.miuix.kmp.basic.BasicComponent
@@ -260,9 +261,9 @@ fun ReaderScreenCore(
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
                         CircularProgressIndicator(size = 24.dp)
-                        MiuixText("正在打开…", color = palette.text, fontSize = 14.sp)
+                        MiuixText("正在打开…", color = palette.text, fontSize = UiDimens.body)
                     }
-                    1 -> MiuixText(error.orEmpty(), Modifier.padding(24.dp), color = Color(0xFFB3261E))
+                    1 -> MiuixText(error.orEmpty(), Modifier.padding(UiDimens.spaceXL), color = MiuixTheme.colorScheme.error)
                     else -> book?.let { ReaderContent(it, state, actions, palette, imageResolver) }
                 }
             }
@@ -276,8 +277,8 @@ fun ReaderScreenCore(
                         .padding(12.dp)
                         .background(palette.background.copy(alpha = .92f))
                         .padding(horizontal = 14.dp, vertical = 8.dp),
-                    fontSize = 13.sp,
-                    color = Color(0xFFB3261E),
+                    fontSize = UiDimens.caption,
+                    color = MiuixTheme.colorScheme.error,
                 )
             }
         }
@@ -323,7 +324,7 @@ private fun ReaderBottomBar(state: ReaderUiState, actions: ReaderActions) {
         IconButton(onClick = { logReaderEvent("bottom.prev"); actions.previousChapter() }, enabled = hasPrevious, modifier = Modifier.size(TOUCH_TARGET.dp)) {
             Icon(MiuixIcons.ChevronBackward, contentDescription = "上一章")
         }
-        MiuixText("${state.chapterIndex + 1} / $chapterCount", fontSize = 14.sp, maxLines = 1)
+        MiuixText("${state.chapterIndex + 1} / $chapterCount", fontSize = UiDimens.body, maxLines = 1)
         Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
             IconButton(onClick = { logReaderEvent("bottom.toc"); actions.showToc(true) }, modifier = Modifier.size(TOUCH_TARGET.dp)) {
                 Icon(MiuixIcons.ListView, contentDescription = "目录")
@@ -523,7 +524,7 @@ private fun ReaderImageBlock(image: ReaderImage, alt: String, palette: ReaderPal
             MiuixText(
                 "图片无法显示：${alt.ifBlank { "(无标题)" }}",
                 color = palette.text.copy(alpha = .65f),
-                fontSize = 13.sp,
+                fontSize = UiDimens.caption,
                 maxLines = 3,
             )
         }
@@ -548,7 +549,7 @@ private fun ReaderTocSheet(book: ReaderBook, current: Int, onSelect: (Int) -> Un
                 BasicComponent(
                     title = "${index + 1}. ${chapter.title}",
                     endActions = {
-                        if (index == current) MiuixText("阅读中", fontSize = 12.sp, color = MiuixTheme.colorScheme.primary)
+                        if (index == current) MiuixText("阅读中", fontSize = UiDimens.captionSmall, color = MiuixTheme.colorScheme.primary)
                     },
                     onClick = { onSelect(index) },
                     modifier = Modifier.fillMaxWidth().animateItem(),
@@ -591,14 +592,7 @@ private fun ReaderSettingsSheet(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     items(ReaderBackground.entries.toList()) { background ->
-                        val swatch = when (background) {
-                            ReaderBackground.PAPER -> Color(0xFFF4EFE6)
-                            ReaderBackground.LIGHT -> Color(0xFFFFFFFF)
-                            ReaderBackground.GREEN -> Color(0xFFE7F0DF)
-                            ReaderBackground.DARK -> Color(0xFF17191C)
-                            ReaderBackground.OLED -> Color.Black
-                            ReaderBackground.CUSTOM -> Color(settings.customBackgroundColor)
-                        }
+                        val swatch = background.toPreviewColor(settings.customBackgroundColor)
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             modifier = Modifier
@@ -613,7 +607,7 @@ private fun ReaderSettingsSheet(
                                     ReaderBackground.DARK -> "夜间"; ReaderBackground.OLED -> "OLED"; ReaderBackground.CUSTOM -> "自定义"
                                 },
                                 color = readableTextOn(swatch, Color(settings.textColor)),
-                                fontSize = 13.sp,
+                                fontSize = UiDimens.caption,
                                 fontWeight = if (settings.background == background) FontWeight.Bold else FontWeight.Normal,
                             )
                         }
@@ -627,35 +621,35 @@ private fun ReaderSettingsSheet(
             item {
                 BasicComponent(
                     title = "字号",
-                    endActions = { AnimatedContent(settings.fontSizeSp.toInt(), label = "fontSize") { v -> MiuixText("$v sp", fontSize = 14.sp, color = MiuixTheme.colorScheme.primary) } },
+                    endActions = { AnimatedContent(settings.fontSizeSp.toInt(), label = "fontSize") { v -> MiuixText("$v sp", fontSize = UiDimens.body, color = MiuixTheme.colorScheme.primary) } },
                     bottomAction = { Slider(settings.fontSizeSp, { onFontSize(it) }, valueRange = 12f..32f, steps = 19) },
                 )
             }
             item {
                 BasicComponent(
                     title = "字重",
-                    endActions = { AnimatedContent(settings.fontWeight, label = "fontWeight") { v -> MiuixText("$v", fontSize = 14.sp, color = MiuixTheme.colorScheme.primary) } },
+                    endActions = { AnimatedContent(settings.fontWeight, label = "fontWeight") { v -> MiuixText("$v", fontSize = UiDimens.body, color = MiuixTheme.colorScheme.primary) } },
                     bottomAction = { Slider(settings.fontWeight.toFloat(), { onFontWeight(it.toInt()) }, valueRange = 100f..900f, steps = 7) },
                 )
             }
             item {
                 BasicComponent(
                     title = "行高",
-                    endActions = { AnimatedContent(settings.lineHeight, label = "lineHeight") { v -> MiuixText("%.1f".format(v), fontSize = 14.sp, color = MiuixTheme.colorScheme.primary) } },
+                    endActions = { AnimatedContent(settings.lineHeight, label = "lineHeight") { v -> MiuixText("%.1f".format(v), fontSize = UiDimens.body, color = MiuixTheme.colorScheme.primary) } },
                     bottomAction = { Slider(settings.lineHeight, { onLineHeight(it) }, valueRange = 1.2f..2.6f, steps = 13) },
                 )
             }
             item {
                 BasicComponent(
                     title = "段距",
-                    endActions = { AnimatedContent(settings.paragraphSpacingDp, label = "spacing") { v -> MiuixText("$v dp", fontSize = 14.sp, color = MiuixTheme.colorScheme.primary) } },
+                    endActions = { AnimatedContent(settings.paragraphSpacingDp, label = "spacing") { v -> MiuixText("$v dp", fontSize = UiDimens.body, color = MiuixTheme.colorScheme.primary) } },
                     bottomAction = { Slider(settings.paragraphSpacingDp.toFloat(), { onSpacing(it.toInt()) }, valueRange = 0f..48f, steps = 47) },
                 )
             }
             item {
                 BasicComponent(
                     title = "左右边距",
-                    endActions = { AnimatedContent(settings.horizontalPaddingDp, label = "padding") { v -> MiuixText("$v dp", fontSize = 14.sp, color = MiuixTheme.colorScheme.primary) } },
+                    endActions = { AnimatedContent(settings.horizontalPaddingDp, label = "padding") { v -> MiuixText("$v dp", fontSize = UiDimens.body, color = MiuixTheme.colorScheme.primary) } },
                     bottomAction = { Slider(settings.horizontalPaddingDp.toFloat(), { onPadding(it.toInt()) }, valueRange = 0f..48f, steps = 47) },
                 )
             }
@@ -751,16 +745,24 @@ internal fun readableTextOn(background: Color, preferred: Color): Color {
 
 internal const val MIN_TEXT_CONTRAST = 4.5
 
+/**
+ * 阅读背景枚举 → 实际底色。
+ *
+ * 色板预览与正文配色此前各写了一份同样的 `when`，改一处漏一处就会出现
+ * 「预览选中的颜色」与「实际阅读底色」不一致。
+ */
+private fun ReaderBackground.toPreviewColor(customBackgroundColor: Int): Color = when (this) {
+    ReaderBackground.PAPER -> Color(0xFFF4EFE6)
+    ReaderBackground.LIGHT -> Color(0xFFFFFFFF)
+    ReaderBackground.GREEN -> Color(0xFFE7F0DF)
+    ReaderBackground.DARK -> Color(0xFF17191C)
+    ReaderBackground.OLED -> Color.Black
+    ReaderBackground.CUSTOM -> Color(customBackgroundColor)
+}
+
 private fun readerPalette(settings: ReaderSettings): ReaderPalette {
-    val background = when (settings.background) {
-        ReaderBackground.PAPER -> Color(0xFFF4EFE6)
-        ReaderBackground.LIGHT -> Color(0xFFFFFFFF)
-        ReaderBackground.GREEN -> Color(0xFFE7F0DF)
-        ReaderBackground.DARK -> Color(0xFF17191C)
-        ReaderBackground.OLED -> Color.Black
-        // 之前 CUSTOM 直接用 textColor，而其默认值是深色 —— 选深色自定义背景就黑底黑字
-        ReaderBackground.CUSTOM -> Color(settings.customBackgroundColor)
-    }
+    // 之前 CUSTOM 直接用 textColor，而其默认值是深色 —— 选深色自定义背景就黑底黑字
+    val background = settings.background.toPreviewColor(settings.customBackgroundColor)
     val preferred = when (settings.background) {
         ReaderBackground.DARK, ReaderBackground.OLED -> Color.White
         else -> Color(settings.textColor)

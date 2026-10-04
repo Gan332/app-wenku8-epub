@@ -1,5 +1,6 @@
 package com.example.hyperreader.ui.cover
 
+import com.example.hyperreader.ui.UiDimens
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -106,13 +107,13 @@ fun CoverViewerDialog(
                             translationY = offset.y,
                         ),
                 )
-                failed -> MiuixText("封面加载失败", color = Color.White, fontSize = 14.sp)
-                else -> MiuixText("正在加载封面…", color = Color.White, fontSize = 14.sp)
+                failed -> MiuixText("封面加载失败", color = Color.White, fontSize = UiDimens.body)
+                else -> MiuixText("正在加载封面…", color = Color.White, fontSize = UiDimens.body)
             }
 
             IconButton(
                 onClick = onDismiss,
-                modifier = Modifier.align(Alignment.TopEnd).padding(8.dp).size(48.dp),
+                modifier = Modifier.align(Alignment.TopEnd).padding(UiDimens.spaceXS).size(UiDimens.touchMin),
             ) {
                 Icon(MiuixIcons.Close, contentDescription = "关闭")
             }

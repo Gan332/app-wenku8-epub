@@ -251,7 +251,7 @@ private fun BookPosterCard(book: SearchBook, onClick: () -> Unit, modifier: Modi
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(POSTER_RATIO)
-                .clip(RoundedCornerShape(8.dp)),
+                .clip(RoundedCornerShape(UiDimens.cardCorner)),
         ) {
             CoverImage(
                 url = book.coverUrl,

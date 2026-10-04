@@ -1,5 +1,6 @@
 package com.example.hyperreader.ui.cover
 
+import com.example.hyperreader.ui.UiDimens
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -73,12 +74,12 @@ fun CoverImage(
         )
     } else {
         Box(
-            modifier = modifier.background(MiuixTheme.colorScheme.background).padding(4.dp),
+            modifier = modifier.background(MiuixTheme.colorScheme.background).padding(UiDimens.spaceXXS),
             contentAlignment = Alignment.Center,
         ) {
             MiuixText(
                 text = if (failed) "无封面" else "加载中",
-                fontSize = 11.sp,
+                fontSize = UiDimens.captionSmall,
                 textAlign = TextAlign.Center,
                 color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f),
             )

@@ -90,7 +90,7 @@ fun ExploreDetailScreen(
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 28.dp),
+        contentPadding = PaddingValues(start = UiDimens.pagePadding, end = UiDimens.pagePadding, top = UiDimens.spaceS, bottom = UiDimens.spaceXL),
         verticalArrangement = Arrangement.spacedBy(UiDimens.spaceM),
     ) {
         item(key = "back") {
@@ -117,9 +117,9 @@ fun ExploreDetailScreen(
                 Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                     Box(
                         modifier = Modifier
-                            .width(160.dp)
+                            .width(UiDimens.coverWidth)
                             .aspectRatio(0.75f)
-                            .clip(RoundedCornerShape(8.dp))
+                            .clip(RoundedCornerShape(UiDimens.cardCorner))
                             .clickable(enabled = coverUrl != null) { showCover = true },
                     ) {
                         CoverImage(
@@ -133,7 +133,7 @@ fun ExploreDetailScreen(
             }
 
             item(key = "title") {
-                Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXS)) {
                     Text(title.ifBlank { "未命名" }, fontSize = UiDimens.title, fontWeight = FontWeight.Bold)
                     if (author.isNotBlank()) Text("作者：$author", fontSize = UiDimens.bodyStrong)
                     if (category.isNotBlank()) {
@@ -142,7 +142,7 @@ fun ExploreDetailScreen(
                     // 接口回来后给一个「已是最新」的轻提示；加载中显示进度，不阻塞已渲染的内容
                     if (loading) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
-                            CircularProgressIndicator(size = 16.dp)
+                            CircularProgressIndicator(size = UiDimens.indicator)
                             Text("正在通过接口刷新详情…", fontSize = UiDimens.captionSmall, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f))
                         }
                     }
@@ -283,7 +283,7 @@ fun ExploreDetailScreen(
  */
 @Composable
 internal fun FieldCard(label: String, value: String, index: Int = 0) {
-    Card(Modifier.fillMaxWidth().staggeredEnter(index), insideMargin = PaddingValues(vertical = 2.dp)) {
+    Card(Modifier.fillMaxWidth().staggeredEnter(index), insideMargin = PaddingValues(vertical = UiDimens.spaceXXS)) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()

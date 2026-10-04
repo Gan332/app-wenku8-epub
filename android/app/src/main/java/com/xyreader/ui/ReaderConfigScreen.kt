@@ -53,6 +53,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.hyperreader.R
+import com.xyreader.core.ReaderDimens
 import com.xyreader.core.ImageQuality
 import com.xyreader.core.ImageScale
 import com.xyreader.core.MangaDirection
@@ -121,8 +122,8 @@ fun ReaderConfigScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 6.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    .padding(horizontal = ReaderDimens.pagePadding, vertical = ReaderDimens.spaceXS),
+                horizontalArrangement = Arrangement.spacedBy(ReaderDimens.spaceS),
             ) {
                 CONFIG_TABS.forEachIndexed { index, label ->
                     CapsuleTab(
@@ -152,13 +153,13 @@ fun ReaderConfigScreen(
 private fun GroupPage(scrollable: Boolean = false, content: @Composable () -> Unit) {
     val base = Modifier
         .fillMaxSize()
-        .padding(horizontal = 16.dp)
+        .padding(horizontal = ReaderDimens.pagePadding)
     Column(
         modifier = if (scrollable) base.verticalScroll(rememberScrollState()) else base,
-        verticalArrangement = Arrangement.spacedBy(14.dp),
+        verticalArrangement = Arrangement.spacedBy(ReaderDimens.spaceM),
     ) {
         content()
-        Spacer(Modifier.height(24.dp))
+        Spacer(Modifier.height(ReaderDimens.spaceXL))
     }
 }
 
@@ -260,32 +261,32 @@ private fun DisplayGroupPage(prefs: ReaderPrefs, onUpdate: ((ReaderPrefs) -> Rea
 /** 阅读背景：四档圆色块 + 标签 */
 @Composable
 private fun BackgroundCard(selected: ReadBackground, onSelect: (ReadBackground) -> Unit) {
-    Surface(shape = RoundedCornerShape(24.dp), color = MiuixTheme.colorScheme.surfaceContainer) {
-        Column(Modifier.fillMaxWidth().padding(16.dp)) {
+    Surface(shape = RoundedCornerShape(ReaderDimens.panelCorner), color = MiuixTheme.colorScheme.surfaceContainer) {
+        Column(Modifier.fillMaxWidth().padding(ReaderDimens.pagePadding)) {
             Text(
                 "阅读背景",
                 style = MiuixTheme.textStyles.title4,
                 fontWeight = FontWeight.SemiBold,
                 color = MiuixTheme.colorScheme.onSurface,
             )
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(ReaderDimens.spaceXXS))
             ReadBackground.entries.forEach { bg ->
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(min = 48.dp)
+                        .heightIn(min = ReaderDimens.touchMin)
                         .clickable { onSelect(bg) },
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     RadioButton(selected = selected == bg, onClick = { onSelect(bg) })
                     Box(
                         modifier = Modifier
-                            .size(22.dp)
+                            .size(ReaderDimens.indicatorDot)
                             .clip(CircleShape)
                             .background(Color(bg.argb.toInt()))
-                            .border(1.dp, MiuixTheme.colorScheme.dividerLine, CircleShape),
+                            .border(ReaderDimens.hairline, MiuixTheme.colorScheme.dividerLine, CircleShape),
                     )
-                    Spacer(Modifier.width(10.dp))
+                    Spacer(Modifier.width(ReaderDimens.spaceS))
                     Text(
                         text = bg.label,
                         style = MiuixTheme.textStyles.body1,
@@ -306,8 +307,8 @@ private fun BackgroundCard(selected: ReadBackground, onSelect: (ReadBackground) 
 @Composable
 private fun BrightnessCard(brightness: Float?, onBrightness: (Float?) -> Unit) {
     var sliderValue by remember(brightness) { mutableFloatStateOf(brightness ?: 0.5f) }
-    Surface(shape = RoundedCornerShape(24.dp), color = MiuixTheme.colorScheme.surfaceContainer) {
-        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp)) {
+    Surface(shape = RoundedCornerShape(ReaderDimens.panelCorner), color = MiuixTheme.colorScheme.surfaceContainer) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = ReaderDimens.pagePadding, vertical = ReaderDimens.spaceM)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     "阅读亮度",
@@ -428,15 +429,15 @@ private fun FontListCard(
     onDeleteImported: (File) -> Unit,
     onImportClick: () -> Unit,
 ) {
-    Surface(shape = RoundedCornerShape(24.dp), color = MiuixTheme.colorScheme.surfaceContainer) {
-        Column(Modifier.fillMaxWidth().padding(16.dp)) {
+    Surface(shape = RoundedCornerShape(ReaderDimens.panelCorner), color = MiuixTheme.colorScheme.surfaceContainer) {
+        Column(Modifier.fillMaxWidth().padding(ReaderDimens.pagePadding)) {
             Text(
                 "小说字体",
                 style = MiuixTheme.textStyles.title4,
                 fontWeight = FontWeight.SemiBold,
                 color = MiuixTheme.colorScheme.onSurface,
             )
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(ReaderDimens.spaceXXS))
 
             NovelFontFamily.entries.forEach { family ->
                 val familyPreview = remember(family) { previewFamilyOf(family) }
@@ -468,11 +469,11 @@ private fun FontListCard(
                 )
             }
 
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(ReaderDimens.spaceXS))
             // MiuiX 没有 OutlinedButton，用普通 Button（内容为 RowScope 槽）
             Button(onClick = onImportClick, modifier = Modifier.fillMaxWidth()) {
-                Icon(MiuixIcons.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(6.dp))
+                Icon(MiuixIcons.Add, contentDescription = null, modifier = Modifier.size(ReaderDimens.iconSm))
+                Spacer(Modifier.width(ReaderDimens.spaceXS))
                 Text("导入字体（ttf / otf / ttc）")
             }
         }
@@ -491,7 +492,7 @@ private fun FontRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 52.dp)
+            .heightIn(min = ReaderDimens.touchMin)
             .clickable(onClick = onClick),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -530,12 +531,12 @@ private fun SwitchCard(
     checked: Boolean,
     onChange: (Boolean) -> Unit,
 ) {
-    Surface(shape = RoundedCornerShape(24.dp), color = MiuixTheme.colorScheme.surfaceContainer) {
+    Surface(shape = RoundedCornerShape(ReaderDimens.panelCorner), color = MiuixTheme.colorScheme.surfaceContainer) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .clickable { onChange(!checked) }
-                .padding(horizontal = 16.dp, vertical = 12.dp),
+                .padding(horizontal = ReaderDimens.pagePadding, vertical = ReaderDimens.spaceS),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(Modifier.weight(1f)) {
@@ -545,14 +546,14 @@ private fun SwitchCard(
                     fontWeight = FontWeight.SemiBold,
                     color = MiuixTheme.colorScheme.onSurface,
                 )
-                Spacer(Modifier.height(2.dp))
+                Spacer(Modifier.height(ReaderDimens.spaceXXS))
                 Text(
                     hint,
                     style = MiuixTheme.textStyles.footnote1,
                     color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                 )
             }
-            Spacer(Modifier.width(10.dp))
+            Spacer(Modifier.width(ReaderDimens.spaceS))
             Switch(checked = checked, onCheckedChange = onChange)
         }
     }
@@ -562,15 +563,15 @@ private fun SwitchCard(
 @Composable
 private fun NovelFontSizeCard(sizeSp: Float, onSizeChange: (Float) -> Unit) {
     val sliderValue = remember(sizeSp) { mutableFloatStateOf(sizeSp.coerceIn(12f, 36f)) }
-    Surface(shape = RoundedCornerShape(24.dp), color = MiuixTheme.colorScheme.surfaceContainer) {
-        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp)) {
+    Surface(shape = RoundedCornerShape(ReaderDimens.panelCorner), color = MiuixTheme.colorScheme.surfaceContainer) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = ReaderDimens.pagePadding, vertical = ReaderDimens.spaceM)) {
             Text(
                 "小说字号",
                 style = MiuixTheme.textStyles.title4,
                 fontWeight = FontWeight.SemiBold,
                 color = MiuixTheme.colorScheme.onSurface,
             )
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(ReaderDimens.spaceXXS))
             Text(
                 "${sliderValue.floatValue.roundToInt()} sp",
                 style = MiuixTheme.textStyles.body2,
@@ -602,20 +603,20 @@ private fun <T> PrefCard(
     sublabel: ((T) -> String?)? = null,
     onSelect: (T) -> Unit,
 ) {
-    Surface(shape = RoundedCornerShape(24.dp), color = MiuixTheme.colorScheme.surfaceContainer) {
-        Column(Modifier.fillMaxWidth().padding(16.dp)) {
+    Surface(shape = RoundedCornerShape(ReaderDimens.panelCorner), color = MiuixTheme.colorScheme.surfaceContainer) {
+        Column(Modifier.fillMaxWidth().padding(ReaderDimens.pagePadding)) {
             Text(
                 title,
                 style = MiuixTheme.textStyles.title4,
                 fontWeight = FontWeight.SemiBold,
                 color = MiuixTheme.colorScheme.onSurface,
             )
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(ReaderDimens.spaceXXS))
             options.forEach { option ->
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(min = 48.dp)
+                        .heightIn(min = ReaderDimens.touchMin)
                         .clickable { onSelect(option) },
                     verticalAlignment = Alignment.CenterVertically,
                 ) {

@@ -84,11 +84,11 @@ fun SearchScreen(state: StudioUiState, viewModel: StudioViewModel, onLogin: () -
         state.searchMessage?.let { MessageCard(it) }
         if (state.searchResults.isEmpty() && state.searchBusy) {
             Row(
-                Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin).padding(vertical = 8.dp),
+                Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin).padding(vertical = UiDimens.spaceXS),
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                CircularProgressIndicator(size = 24.dp)
+                CircularProgressIndicator(size = UiDimens.indicator)
             }
         } else if (state.searchResults.isEmpty() && !state.searchBusy) {
             val emptyMessage = if (state.searchPage > 0) "没有找到结果。" else "输入关键词开始搜索。"
@@ -98,7 +98,7 @@ fun SearchScreen(state: StudioUiState, viewModel: StudioViewModel, onLogin: () -
                 items(state.searchResults, key = { it.id }) { result -> SearchResultCard(result, viewModel::openSearchBook, Modifier.animateItem()) }
                 item {
                     Column(
-                        Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                        Modifier.fillMaxWidth().padding(vertical = UiDimens.spaceXS),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS),
                     ) {
@@ -114,7 +114,7 @@ fun SearchScreen(state: StudioUiState, viewModel: StudioViewModel, onLogin: () -
                                     Text("加载更多")
                                 }
                             }
-                            if (state.searchLoadingMore) CircularProgressIndicator(size = 24.dp)
+                            if (state.searchLoadingMore) CircularProgressIndicator(size = UiDimens.indicator)
                         } else if (state.searchPage > 0) {
                             Text(
                                 "已加载第 ${state.searchPage} 页",
@@ -132,7 +132,7 @@ fun SearchScreen(state: StudioUiState, viewModel: StudioViewModel, onLogin: () -
 @Composable
 private fun SearchResultCard(result: SearchBook, onOpen: (SearchBook) -> Unit, modifier: Modifier = Modifier) {
     Card(modifier.fillMaxWidth(), insideMargin = PaddingValues(UiDimens.cardInset)) {
-        Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXS)) {
             Text(result.title, fontSize = UiDimens.section, fontWeight = FontWeight.Bold, maxLines = 2)
             if (result.author.isNotBlank()) Text("作者：${result.author}", fontSize = UiDimens.caption)
             val meta = buildList {

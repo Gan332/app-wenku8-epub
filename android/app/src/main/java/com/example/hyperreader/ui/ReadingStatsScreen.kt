@@ -32,16 +32,16 @@ fun ReadingStatsScreen(stats: ReadingStats, onClear: () -> Unit) {
     var selectedDate by remember { mutableStateOf<LocalDate?>(null) }
     Column(Modifier.fillMaxWidth().padding(top = UiDimens.spaceL), verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
         Text("阅读统计", fontSize = UiDimens.display, fontWeight = FontWeight.Bold)
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceXS)) {
             StatCard("总时长", formatDuration(stats.totalSeconds), Modifier.weight(1f))
             StatCard("今日", formatDuration(stats.todaySeconds), Modifier.weight(1f))
         }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceXS)) {
             StatCard("连续天数", "${stats.currentStreak} 天", Modifier.weight(1f))
             StatCard("最长连续", "${stats.longestStreak} 天", Modifier.weight(1f))
         }
         Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(UiDimens.cardInset)) {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXS)) {
                 Text("阅读热力图", fontWeight = FontWeight.Bold)
                 ReadingHeatmap(
                     dailySeconds = stats.dailySeconds,
@@ -71,11 +71,11 @@ fun ReadingStatsScreen(stats: ReadingStats, onClear: () -> Unit) {
             Text("还没有阅读记录。打开阅读器后会自动统计。", color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f), fontSize = UiDimens.caption)
         } else {
             val max = stats.bookSeconds.values.maxOrNull()?.coerceAtLeast(1L) ?: 1L
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXS)) {
                 items(stats.bookSeconds.entries.sortedByDescending { it.value }) { entry ->
                     val title = stats.bookTitles[entry.key] ?: entry.key
                     Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(UiDimens.cardInset)) {
-                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXXS)) {
                             Text(title, fontWeight = FontWeight.Bold, maxLines = 1)
                             Text(formatDuration(entry.value), color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f), fontSize = UiDimens.captionSmall)
                             LinearProgressIndicator(progress = entry.value.toFloat() / max, modifier = Modifier.fillMaxWidth().height(8.dp))
@@ -91,7 +91,7 @@ fun ReadingStatsScreen(stats: ReadingStats, onClear: () -> Unit) {
 @Composable
 private fun StatCard(label: String, value: String, modifier: Modifier) {
     Card(modifier, insideMargin = PaddingValues(UiDimens.cardInset)) {
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXXS)) {
             Text(label, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f), fontSize = UiDimens.captionSmall)
             Text(value, fontSize = UiDimens.section, fontWeight = FontWeight.Bold)
         }

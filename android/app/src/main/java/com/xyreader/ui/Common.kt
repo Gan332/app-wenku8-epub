@@ -6,8 +6,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import com.xyreader.core.ReaderDimens
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -48,8 +47,8 @@ fun CapsuleTab(label: String, selected: Boolean, onClick: () -> Unit) {
     ) {
         Text(
             text = label,
-            modifier = Modifier.padding(horizontal = 18.dp, vertical = 8.dp),
-            fontSize = 14.sp,
+            modifier = Modifier.padding(horizontal = ReaderDimens.spaceL, vertical = ReaderDimens.spaceXS),
+            fontSize = ReaderDimens.body,
             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
             color = if (selected) {
                 MiuixTheme.colorScheme.onPrimaryContainer

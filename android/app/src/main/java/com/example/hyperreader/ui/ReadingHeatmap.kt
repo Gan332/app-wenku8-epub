@@ -221,7 +221,7 @@ private val MonthLabelHeight: Dp = 14.dp
 /** 左侧周内标签宽度，够放「一/三/五/日」单字。 */
 private val SideLabelWidth: Dp = 12.dp
 /** 轴标签字号。 */
-private val AxisLabelSize = 10.sp
+private val AxisLabelSize = UiDimens.badge
 
 /** 默认展示的周数（约半年）：再多列在窄屏上格子会小到难以点中。 */
 private const val DEFAULT_WEEKS = 26L

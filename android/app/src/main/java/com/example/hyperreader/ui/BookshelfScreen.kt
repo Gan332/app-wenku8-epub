@@ -225,11 +225,11 @@ private fun BookshelfCard(
             CoverImage(
                 url = entry.coverUrl,
                 contentDescription = entry.title,
-                modifier = Modifier.size(CardCoverWidth, CardCoverHeight).clip(RoundedCornerShape(8.dp)),
+                modifier = Modifier.size(CardCoverWidth, CardCoverHeight).clip(RoundedCornerShape(UiDimens.cardCorner)),
                 targetWidthDp = 282,
             )
             Column(
-                modifier = Modifier.weight(1f).padding(start = 12.dp),
+                modifier = Modifier.weight(1f).padding(start = UiDimens.spaceS),
                 verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXS),
             ) {
                 Text(entry.title, fontSize = UiDimens.section, fontWeight = FontWeight.Bold, maxLines = 2)
@@ -284,7 +284,7 @@ private fun BookEntryMenu(
         block()
         onDismiss()
     }
-    Card(insideMargin = PaddingValues(vertical = 4.dp)) {
+    Card(insideMargin = PaddingValues(vertical = UiDimens.spaceXXS)) {
         Column(Modifier.width(IntrinsicSize.Min)) {
             if (entry.localUri != null) {
                 BasicComponent(title = "打开阅读", onClick = { act { viewModel.markShelfRead(entry.id); onOpenLocal(entry) } })

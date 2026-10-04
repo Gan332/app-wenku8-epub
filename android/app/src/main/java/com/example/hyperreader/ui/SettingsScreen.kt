@@ -527,12 +527,12 @@ private fun AppearanceSection(viewModel: StudioViewModel) {
         {
             Row(horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceM)) {
                 listOf(0xFFA34B2F.toInt(), 0xFF2D6A4F.toInt(), 0xFF2563EB.toInt(), 0xFF7C3AED.toInt(), 0xFF111827.toInt()).forEach { color ->
-                    Box(Modifier.size(34.dp).background(Color(color)).clickable { viewModel.setAccentColor(color) })
+                    Box(Modifier.size(UiDimens.swatch).background(Color(color)).clickable { viewModel.setAccentColor(color) })
                 }
             }
         },
         {
-            Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(10.dp)) {
+            Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(UiDimens.spaceS)) {
                 ColorPicker(
                     color = Color(theme.accentColor),
                     onColorChanged = { viewModel.setAccentColor(it.toArgb()) },
@@ -692,7 +692,7 @@ private fun SettingsScaffold(title: String, onBack: () -> Unit, blocks: List<@Co
         Text(title, fontSize = UiDimens.title, fontWeight = FontWeight.Bold)
         LazyColumn(
             modifier = Modifier.fillMaxWidth().weight(1f),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+            contentPadding = PaddingValues(horizontal = UiDimens.pagePadding, vertical = UiDimens.spaceXXS),
             verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS),
         ) {
             items(blocks.size) { index -> blocks[index]() }
@@ -707,7 +707,7 @@ private fun SectionTitle(text: String) {
 
 @Composable
 private fun ToggleRow(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
-    Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(vertical = 2.dp)) {
+    Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(vertical = UiDimens.spaceXXS)) {
         Row(Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin).padding(horizontal = UiDimens.pagePadding), verticalAlignment = Alignment.CenterVertically) {
             Text(label, modifier = Modifier.weight(1f), fontSize = UiDimens.bodyStrong)
             Switch(checked = checked, onCheckedChange = onChange)
@@ -721,7 +721,7 @@ private fun ColorSwatchRow(onPicked: (Int) -> Unit) {
     Row(horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS), modifier = Modifier.fillMaxWidth()) {
         colors.forEach { color ->
             Box(
-                Modifier.size(40.dp).background(Color(color)).clickable { onPicked(color) }
+                Modifier.size(UiDimens.swatch).background(Color(color)).clickable { onPicked(color) }
             )
         }
     }
