@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
 import com.example.hyperreader.Wenku8Application
 import com.example.hyperreader.ui.AppMiuixTheme
+import com.example.hyperreader.ui.UiDimens
 import com.xyreader.core.BookEntity
 import com.xyreader.core.BookFormat
 import com.xyreader.core.ReaderGraph
