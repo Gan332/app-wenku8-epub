@@ -198,7 +198,7 @@ private fun BookshelfGroupHeader(section: BookshelfSection, expanded: Boolean, o
                     label = "bookshelfGroupArrow",
                 )
                 Icon(
-                    imageVector = ImageVector.vectorResource(R.drawable.expand_more_24px),
+                    imageVector = ImageVector.vectorResource(com.example.hyperreader.R.drawable.expand_more_24px),
                     contentDescription = if (expanded) "收起" else "展开",
                     tint = MiuixTheme.colorScheme.onSurface.copy(alpha = .6f),
                     modifier = Modifier.size(UiDimens.spaceL).rotate(rotation),
