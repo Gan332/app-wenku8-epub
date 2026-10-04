@@ -5,7 +5,7 @@
 # （且部分文件的换行被规范化为 CRLF），因此不能用 `git merge-base` 判祖先。
 # 本脚本的做法是：
 #   1. 取远端 main 的 commit / tree；
-#   2. 用 `git diff --name-only <local-base> HEAD` 算出「本次真正改动的文件」
+#   2. 用 `git diff --name-only --ignore-cr-at-eol <local-base> HEAD` 算出「本次真正改动的文件」
 #      （local-base 是内容与远端等价的本地提交）；
 #   3. 把这些文件作为 blob 挂到**远端 tree** 上，创建新 commit，PATCH ref。
 # 这样远端换行差异不会被本地内容回冲。
@@ -14,6 +14,11 @@
 #   1. 用 bash 直接调用 gh.exe（Node spawnSync 会因安全软件锁文件报 EBUSY）。
 #   2. 进程替换 <(...) 在此 Git Bash 下不可用，payload 一律先写临时文件再 --input。
 #   3. gh api 响应偶发为空，此时先查远端 SHA，已更新则视为成功，避免重复提交。
+#   4. **必须带 --ignore-cr-at-eol**（坑 4）：本机 core.autocrlf=true，而 .gitattributes
+#      只写了 `* text=auto`、没给 *.kt/*.xml 显式指定 eol，于是本地工作区几乎所有文本文件
+#      是 CRLF、远端是 LF。不忽略行尾时 `git diff` 会把上百个「只有行尾不同」的文件算成
+#      本次改动，逐个上传后又把它们以 CRLF 写回远端——这既是 AGENTS §6.1 记的分叉成因，
+#      也让每次推送多出上百次无谓的 blob API 调用。
 set -euo pipefail
 
 REPO="Gan332/app-wenku8-epub"
@@ -45,13 +50,13 @@ LOCAL_SHA="$(git rev-parse HEAD)"
 echo "    local HEAD = $LOCAL_SHA"
 echo "    diff base  = $LOCAL_BASE"
 
-git diff --name-only --diff-filter=d "$LOCAL_BASE" "$LOCAL_SHA" > "$TMP/files"
+git diff --name-only --ignore-cr-at-eol --diff-filter=d "$LOCAL_BASE" "$LOCAL_SHA" > "$TMP/files"
 echo "==> 本次改动文件"
 sed 's/^/    /' "$TMP/files"
 
 # 删除的文件：tree 里以 sha=null 显式摘除。少了这一步，远端会留下本地已删的文件
 # （--diff-filter=d 只给新增/修改，删除必须单独取）。
-git diff --name-only --diff-filter=D "$LOCAL_BASE" "$LOCAL_SHA" > "$TMP/deleted"
+git diff --name-only --ignore-cr-at-eol --diff-filter=D "$LOCAL_BASE" "$LOCAL_SHA" > "$TMP/deleted"
 if [ -s "$TMP/deleted" ]; then
   echo "==> 本次删除文件"
   sed 's/^/    - /' "$TMP/deleted"

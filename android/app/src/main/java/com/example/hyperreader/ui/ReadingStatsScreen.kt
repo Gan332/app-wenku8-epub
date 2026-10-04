@@ -10,21 +10,26 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.hyperreader.model.ReadingStats
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.LinearProgressIndicator
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.theme.MiuixTheme
-import java.time.LocalDate
-import java.time.format.DateTimeFormatter
 
 @Composable
 fun ReadingStatsScreen(stats: ReadingStats, onClear: () -> Unit) {
+    var selectedDate by remember { mutableStateOf<LocalDate?>(null) }
     Column(Modifier.fillMaxWidth().padding(top = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text("阅读统计", fontSize = UiDimens.display, fontWeight = FontWeight.Bold)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -37,18 +42,25 @@ fun ReadingStatsScreen(stats: ReadingStats, onClear: () -> Unit) {
         }
         Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(16.dp)) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("最近 7 天", fontWeight = FontWeight.Bold)
-                val today = LocalDate.now()
-                val days = (6 downTo 0).map { today.minusDays(it.toLong()) }
-                val max = days.maxOfOrNull { stats.dailySeconds[it.toString()] ?: 0L }?.coerceAtLeast(1L) ?: 1L
-                days.forEach { day ->
-                    val value = stats.dailySeconds[day.toString()] ?: 0L
-                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text(day.format(DateTimeFormatter.ofPattern("MM-dd")), fontSize = UiDimens.captionSmall)
-                            Text(formatDuration(value), fontSize = UiDimens.captionSmall, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f))
-                        }
-                        LinearProgressIndicator(progress = (value.toFloat() / max).coerceIn(0f, 1f), modifier = Modifier.fillMaxWidth().height(8.dp))
+                Text("阅读热力图", fontWeight = FontWeight.Bold)
+                ReadingHeatmap(
+                    dailySeconds = stats.dailySeconds,
+                    onSelectDate = { selectedDate = it },
+                )
+            }
+        }
+        // 点选某天后展示当天明细；未点选时给出引导文案而不是留白。
+        val day = selectedDate
+        if (day != null) {
+            val seconds = stats.dailySeconds[day.toString()] ?: 0L
+            Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(UiDimens.cardInset)) {
+                Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXS)) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text(day.format(DateTimeFormatter.ofPattern("M月d日 EEEE", java.time.format.TextStyle.SHORT, java.util.Locale.getDefault())), fontWeight = FontWeight.Bold, fontSize = UiDimens.bodyStrong)
+                        Text(formatDuration(seconds), fontSize = UiDimens.caption, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f))
+                    }
+                    if (seconds <= 0L) {
+                        Text("这天没有阅读记录", fontSize = UiDimens.captionSmall, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f))
                     }
                 }
             }
