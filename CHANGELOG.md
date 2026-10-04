@@ -2,6 +2,22 @@
 
 本项目遵循语义化版本。
 
+## [Unreleased]
+
+### 变更
+
+- **阅读统计热力图**（参考 LNR `HeatMapCalendar`）：「最近 7 天」进度条换成 GitHub 式年度网格，
+  列 = 周、行 = 周内七天，五档色阶，色阶阈值按非零阅读时长的 25%/50%/75% 分位动态计算，
+  图例标注最高档阈值；点选某天显示当天时长。网格横向滚动、默认停在最近一周。
+
+### 内部
+
+- `ui/ReadingHeatmap.kt`：阈值分档、网格切分与点击命中测试抽为纯函数，
+  由 `ReadingHeatmapTest`（24 例）锁定。
+- `scripts/push-via-api.sh`：算「本次改动文件」时补上 `--ignore-cr-at-eol`。此前本机
+  `core.autocrlf=true` 且 `.gitattributes` 未给 `*.kt`/`*.xml` 指定 eol，纯行尾差异会被
+  算成改动，既拖慢推送（多出上百次 blob 调用），也会把远端 LF 文件回冲成 CRLF。
+
 ## [0.18.0-alpha01] - 2026-10-06（预发布）
 
 本版为**预发布（prerelease）**：功能面大、动效与布局仍在调整，默认关闭中继等新特性为可选。
