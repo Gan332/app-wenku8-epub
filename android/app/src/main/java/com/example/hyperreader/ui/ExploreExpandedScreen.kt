@@ -35,8 +35,9 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
  * 全屏榜单展开页（0.18.0，对应 LNR 的 `ExpandedPageScreen`）。
  *
  * 展示当前榜单（[StudioUiState.activeExplorePage]）的全部行，网格排布书卡；
- * 顶部提供返回与刷新。**刷新用按钮而非下拉手势**——Material 的 `PullToRefresh` 被 AGENTS §4.4
- * 禁用，MiuiX 0.9.4 没有等价组件，故不用不确定的依赖。
+ * 顶部提供返回与刷新。**刷新用按钮而非下拉手势**——MiuiX 0.9.4 其实自带 `PullToRefresh`
+ * （探索首页已在用），但本页是「展开某榜单」的临时视图，按钮比手势更省事，也不必处理
+ * 网格滚动与下拉的冲突。
  */
 @Composable
 fun ExploreExpandedScreen(state: StudioUiState, viewModel: StudioViewModel, modifier: Modifier = Modifier) {
