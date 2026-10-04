@@ -253,12 +253,14 @@ fun ReadingHeatmap(
     val labelColor = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.55f)
     var selected by remember { mutableStateOf<LocalDate?>(null) }
     val scrollState = rememberScrollState()
+    // 密度只能在组合期读：LocalDensity.current 是 @Composable，不能在 LaunchedEffect 协程里取。
+    val density = LocalDensity.current
 
     // 网格一进来就定位到最新一列：统计是回看「最近」的习惯，默认停在半年前没有意义。
     // scrollTo 的单位是 px，故先按 LocalDensity 把「格子+间距」的 dp 换成 px 再定位。
     // 取与 maxValue 的较大值：内容比视口窄时初值会被钳在 0，直接滚到末列起点会停住。
     LaunchedEffect(grid) {
-        val pitchPx: Float = with(LocalDensity.current) { (CellSize + CellGap).toPx() }
+        val pitchPx: Float = with(density) { (CellSize + CellGap).toPx() }
         val lastColumnStart: Int = (pitchPx * (grid.weeks.size - 1)).roundToInt()
         scrollState.scrollTo(maxOf(lastColumnStart, scrollState.maxValue))
     }
