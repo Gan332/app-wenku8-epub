@@ -26,9 +26,15 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
@@ -55,8 +61,6 @@ import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.VerticalScrollBar
 import top.yukonga.miuix.kmp.basic.rememberScrollBarAdapter
 import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.ExpandLess
-import top.yukonga.miuix.kmp.icon.extended.ExpandMore
 import top.yukonga.miuix.kmp.icon.extended.Favorites
 import top.yukonga.miuix.kmp.icon.extended.ListView
 import top.yukonga.miuix.kmp.icon.extended.More
@@ -187,12 +191,17 @@ private fun BookshelfGroupHeader(section: BookshelfSection, expanded: Boolean, o
                     modifier = Modifier.weight(1f),
                 )
                 // 展开 / 收起用两个图标而不是旋转箭头：MiuiX 图标集里没有可旋转的展开箭头，
-                // 旋转 Emoji 类素材在暗色主题下也不跟色。
+                // 故自带 expand_more_24px（Material chevron），只靠 rotate() 表达状态。
+                val rotation by animateFloatAsState(
+                    targetValue = if (expanded) 0f else 180f,
+                    animationSpec = tween(Motion.duration(UiDimens.MOTION_FAST), easing = FastOutSlowInEasing),
+                    label = "bookshelfGroupArrow",
+                )
                 Icon(
-                    imageVector = if (expanded) MiuixIcons.ExpandLess else MiuixIcons.ExpandMore,
+                    imageVector = ImageVector.vectorResource(R.drawable.expand_more_24px),
                     contentDescription = if (expanded) "收起" else "展开",
                     tint = MiuixTheme.colorScheme.onSurface.copy(alpha = .6f),
-                    modifier = Modifier.size(UiDimens.spaceL),
+                    modifier = Modifier.size(UiDimens.spaceL).rotate(rotation),
                 )
             }
             HorizontalDivider(Modifier.fillMaxWidth())

@@ -64,4 +64,10 @@ object ReaderDimens {
 
     /** 阅读设置面板分页区高度：容纳最高的字体组。 */
     val sheetPagerHeight: Dp = 340.dp
+
+    /** 弹层列表行圆角（页内搜索结果行）。 */
+    val sheetItemCorner: Dp = 12.dp
+
+    /** 页内搜索结果列表高度上限：给正文留出可见区域，不让弹层铺满全屏。 */
+    val searchResultMaxHeight: Dp = 320.dp
 }

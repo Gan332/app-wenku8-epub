@@ -5,6 +5,8 @@ import com.example.hyperreader.ui.HeatThresholds
 import com.example.hyperreader.ui.buildHeatGrid
 import com.example.hyperreader.ui.heatLevelFor
 import com.example.hyperreader.ui.heatThresholds
+import com.example.hyperreader.ui.MAX_HEAT_WEEKS
+import com.example.hyperreader.ui.heatWeekRange
 import com.example.hyperreader.ui.hitTestHeatGrid
 import com.example.hyperreader.ui.quickSelectMinutes
 import java.time.DayOfWeek
@@ -17,6 +19,47 @@ import org.junit.Test
 
 /** 阅读热力图的纯逻辑（阈值分档、网格切分、命中测试）。 */
 class ReadingHeatmapTest {
+
+    // —— 动态周数范围 ——
+
+    @Test
+    fun weekRangeCountsFromEarliestRecord() {
+        val today = LocalDate.of(2026, 10, 4)
+        // 最早记录在 9 月 27 日，距今约 1 周
+        val daily = mapOf("2026-09-27" to 600L, "2026-10-04" to 900L)
+        val weeks = heatWeekRange(daily, today)
+        assertTrue("应至少覆盖 1 周，实际 $weeks", weeks >= 1)
+        assertTrue("不应超过实际跨度", weeks <= 2)
+    }
+
+    @Test
+    fun weekRangeClampsToMaxWeeks() {
+        val today = LocalDate.of(2026, 10, 4)
+        // 记录在一年多以前，应截断到上界 52 周
+        val daily = mapOf("2025-01-01" to 600L)
+        assertEquals(MAX_HEAT_WEEKS, heatWeekRange(daily, today))
+    }
+
+    @Test
+    fun weekRangeReturnsOneForNoRecords() {
+        assertEquals(1L, heatWeekRange(emptyMap(), LocalDate.of(2026, 10, 4)))
+        assertEquals(1L, heatWeekRange(mapOf("2026-10-04" to 0L), LocalDate.of(2026, 10, 4)))
+    }
+
+    @Test
+    fun weekRangeUsesCustomMax() {
+        val today = LocalDate.of(2026, 10, 4)
+        val daily = mapOf("2026-01-01" to 600L)
+        assertEquals(26L, heatWeekRange(daily, today, maxWeeks = 26L))
+    }
+
+    @Test
+    fun weekRangeHandlesFutureRecord() {
+        // 记录日期在今天之后：ChronoUnit 返回负值，应被 clamp 到 1
+        val today = LocalDate.of(2026, 10, 4)
+        val daily = mapOf("2026-10-10" to 600L)
+        assertEquals(1L, heatWeekRange(daily, today))
+    }
 
     // —— 分位数 ——
 

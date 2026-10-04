@@ -1,0 +1,13 @@
+<!-- 书架分组头的展开箭头。
+     MiuiX 0.9.4 图标集只有静态的 ExpandLess / ExpandMore，做不出旋转动画，
+     故自带一份 Material 风格的向下 chevron：只靠 rotate() 就能表达展开/收起。 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="960"
+    android:viewportHeight="960"
+    android:tint="?attr/colorControlNormal">
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M480,720L200,440L257,383L480,606L703,383L760,440L480,720Z" />
+</vector>

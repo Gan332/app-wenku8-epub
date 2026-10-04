@@ -67,6 +67,7 @@ import top.yukonga.miuix.kmp.basic.Surface
 import top.yukonga.miuix.kmp.basic.Switch
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
+import top.yukonga.miuix.kmp.basic.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
@@ -138,6 +139,7 @@ import top.yukonga.miuix.kmp.icon.extended.Favorites
 import top.yukonga.miuix.kmp.icon.extended.FavoritesFill
 import top.yukonga.miuix.kmp.icon.extended.ListView
 import top.yukonga.miuix.kmp.icon.extended.Lock
+import top.yukonga.miuix.kmp.icon.extended.Search
 import top.yukonga.miuix.kmp.icon.extended.Tune
 import top.yukonga.miuix.kmp.icon.extended.Unlock
 import kotlin.math.roundToInt
@@ -489,6 +491,8 @@ private fun ReaderPagerArea(
     val columnZoomState = remember { PageZoomState() }
     // 「复制文字」弹层开关（仅文字小说）
     var showCopyDialog by remember { mutableStateOf(false) }
+    // 「页内搜索」弹层开关（仅文字小说）。关闭时取消扫描，避免后台继续翻文本。
+    var showSearchSheet by remember { mutableStateOf(false) }
     val isTextNovel by viewModel.isTextNovel.collectAsState()
 
     fun turnTo(target: Int) {
@@ -918,6 +922,12 @@ private fun ReaderPagerArea(
                     )
                     if (isTextNovel) {
                         ReaderBarIconButton(
+                            icon = MiuixIcons.Search,
+                            desc = "页内搜索",
+                            modifier = Modifier.weight(1f),
+                            onClick = { showSearchSheet = true },
+                        )
+                        ReaderBarIconButton(
                             icon = MiuixIcons.Copy,
                             desc = "复制文字",
                             modifier = Modifier.weight(1f),
@@ -1016,6 +1026,141 @@ private fun ReaderPagerArea(
                 page = currentPage,
                 onDismiss = { showCopyDialog = false },
             )
+        }
+
+        // —— 页内搜索弹层（仅文字小说；关闭即取消扫描）——
+        if (showSearchSheet) {
+            ReaderSearchSheet(
+                viewModel = viewModel,
+                onJumpToPage = { target ->
+                    turnTo(target)
+                    showSearchSheet = false
+                },
+                onDismiss = {
+                    showSearchSheet = false
+                    viewModel.cancelSearch()
+                },
+            )
+        }
+    }
+}
+
+/**
+ * 页内搜索弹层（MiuiX OverlayBottomSheet，与阅读设置面板同款容器）。
+ *
+ * 输入框 + 结果列表：每项显示「第 N 页」与上下文摘要，摘要里命中段用 [SNIPPET_MARK]
+ * 分隔，渲染时给命中段上强调色。扫描是长任务，故显式展示 `已扫 x / y 页` 进度。
+ */
+@Composable
+private fun ReaderSearchSheet(
+    viewModel: ReaderViewModel,
+    onJumpToPage: (Int) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val state by viewModel.search.collectAsState()
+    var input by rememberSaveable { mutableStateOf("") }
+
+    OverlayBottomSheet(show = true, onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = ReaderDimens.pagePadding, vertical = ReaderDimens.spaceS),
+            verticalArrangement = Arrangement.spacedBy(ReaderDimens.spaceS),
+        ) {
+            Text(
+                text = "页内搜索",
+                style = MiuixTheme.textStyles.title4,
+                fontWeight = FontWeight.SemiBold,
+            )
+            TextField(
+                value = input,
+                onValueChange = { input = it },
+                label = "输入关键词",
+                useLabelAsPlaceholder = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(ReaderDimens.spaceS),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                TextButton(
+                    text = if (state.running) "搜索中…" else "开始搜索",
+                    enabled = input.isNotBlank() && !state.running,
+                    modifier = Modifier.weight(1f),
+                    onClick = { viewModel.searchBook(input) },
+                )
+                if (state.running || state.scannedPages > 0) {
+                    Text(
+                        text = if (state.running) "已扫 ${state.scannedPages} / ${state.totalPages} 页"
+                        else "已扫 ${state.scannedPages} 页 · ${state.hits.size} 处命中",
+                        style = MiuixTheme.textStyles.body2,
+                        color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                    )
+                }
+            }
+            when {
+                state.hits.isEmpty() && state.finished && input.isNotBlank() ->
+                    Text(
+                        text = "没有找到「${state.query}」。若正在在线阅读，未抓取的章节搜不到。",
+                        style = MiuixTheme.textStyles.body2,
+                        color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                    )
+                state.hits.isEmpty() -> Text(
+                    text = "输入关键词后开始搜索。结果按页码顺序列出，点一条即可跳转。",
+                    style = MiuixTheme.textStyles.body2,
+                    color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                )
+                else -> LazyColumn(
+                    modifier = Modifier.heightIn(max = ReaderDimens.searchResultMaxHeight),
+                    verticalArrangement = Arrangement.spacedBy(ReaderDimens.spaceXS),
+                ) {
+                    items(state.hits, key = { it.page }) { hit ->
+                        SearchHitRow(hit = hit, onClick = { onJumpToPage(hit.page) })
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** 结果行：页码 + 摘要（命中段上强调色）。 */
+@Composable
+private fun SearchHitRow(hit: SearchHit, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(ReaderDimens.sheetItemCorner),
+        color = MiuixTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.5f),
+    ) {
+        Column(
+            modifier = Modifier.padding(
+                horizontal = ReaderDimens.spaceM,
+                vertical = ReaderDimens.spaceS,
+            ),
+            verticalArrangement = Arrangement.spacedBy(ReaderDimens.spaceXXS),
+        ) {
+            Text(
+                text = "第 ${hit.page + 1} 页",
+                style = MiuixTheme.textStyles.body2,
+                color = MiuixTheme.colorScheme.primary,
+                fontWeight = FontWeight.SemiBold,
+            )
+            // 摘要按 SNIPPET_MARK 切开：命中段强调，其余弱化。
+            Row(Modifier.fillMaxWidth()) {
+                hit.snippet.split(SNIPPET_MARK).forEachIndexed { index, part ->
+                    if (part.isNotEmpty()) {
+                        Text(
+                            text = part,
+                            style = MiuixTheme.textStyles.body2,
+                            color = if (index % 2 == 1) MiuixTheme.colorScheme.primary
+                            else MiuixTheme.colorScheme.onSurface.copy(alpha = 0.75f),
+                            fontWeight = if (index % 2 == 1) FontWeight.Medium else FontWeight.Normal,
+                            modifier = Modifier.weight(if (index % 2 == 1) 1.4f else 1f, fill = false),
+                        )
+                    }
+                }
+            }
         }
     }
 }

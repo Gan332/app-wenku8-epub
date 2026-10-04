@@ -182,6 +182,70 @@ class ReaderViewModel(
     private val _events = MutableSharedFlow<String>(extraBufferCapacity = 4)
     val events: SharedFlow<String> = _events.asSharedFlow()
 
+    // —— 页内搜索 ——
+    //
+    // 扫描节奏：逐页调用 [PageSource.pageText]，每页各自进出一次 `renderMutex`
+    // （`NovelPageSource.pageText` 内部持锁）。不把全书攒齐再算，是因为锁与翻页渲染
+    // 串行——一次锁住上千页会让用户在搜索期间完全翻不动页。
+    private val _search = MutableStateFlow(SearchState())
+    val search: StateFlow<SearchState> = _search.asStateFlow()
+
+    private var searchJob: Job? = null
+
+    /**
+     * 搜索全书文字。非文字源（[PageSource.pageText] 恒为 null）直接给出提示。
+     *
+     * [growable] 源（在线阅读）只扫**已加载**的那些页：未抓章节的正文还不存在，
+     * 搜不到是预期而非失败，因此结束时按已扫页数如实汇报。
+     */
+    fun searchBook(query: String) {
+        val needle = query.trim()
+        searchJob?.cancel()
+        if (needle.isEmpty()) {
+            _search.value = SearchState()
+            return
+        }
+        val src = source
+        if (src == null) {
+            _search.value = SearchState(query = needle, finished = true)
+            return
+        }
+        searchJob = viewModelScope.launch {
+            _search.value = SearchState(query = needle, running = true)
+            val found = mutableListOf<SearchHit>()
+            val total = src.pageCount
+            for (page in 0 until total) {
+                // 用户翻页/换书时取消搜索，避免结果对应的是另一本书。
+                if (!isActive) return@launch
+                val body = runCatching { src.pageText(page) }.getOrNull() ?: continue
+                val snippet = contextSnippet(body, needle) ?: continue
+                found += SearchHit(page, snippet)
+                _search.value = SearchState(
+                    query = needle,
+                    hits = found.toList(),
+                    scannedPages = page + 1,
+                    totalPages = total,
+                    running = true,
+                )
+            }
+            _search.value = SearchState(
+                query = needle,
+                hits = found,
+                scannedPages = total,
+                totalPages = total,
+                running = false,
+                finished = true,
+            )
+        }
+    }
+
+    /** 取消正在进行的搜索（关闭搜索面板、切换书籍时调用）。 */
+    fun cancelSearch() {
+        searchJob?.cancel()
+        searchJob = null
+        _search.value = SearchState()
+    }
+
     /** 样式键：小说文字样式与版面参数变化都要重建排版。 */
     private fun styleKey(prefs: ReaderPrefs): String =
         listOf(
@@ -712,6 +776,9 @@ class ReaderViewModel(
     }
 
     override fun onCleared() {
+        // 搜索是长任务（全书逐页取文本），必须在销毁时取消，
+        // 否则它会一直持有 PageSource 并与渲染抢 renderMutex。
+        searchJob?.cancel()
         // ViewModel 销毁可能发生在主线程；进度落库与关源转到独立 IO scope，并等待渲染退出。
         cleanupScope.launch {
             sourceLifecycleMutex.withLock {

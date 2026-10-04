@@ -223,8 +223,33 @@ private val SideLabelWidth: Dp = 12.dp
 /** 轴标签字号。 */
 private val AxisLabelSize = UiDimens.badge
 
-/** 默认展示的周数（约半年）：再多列在窄屏上格子会小到难以点中。 */
-private const val DEFAULT_WEEKS = 26L
+/**
+ * 自动展示时的周数上界（约一年）。
+ *
+ * 超过这个量级，格子在窄屏上会小到难以点中；此时横向滚动也失去意义——
+ * 用户要找的「最近」内容已经远在视野之外。
+ */
+const val MAX_HEAT_WEEKS = 52L
+
+/**
+ * 按实际记录算出要展示多少周：从**最早一次有阅读记录的日期**起铺到今天。
+ *
+ * 只看非零记录：0 秒的日子（打开过但没读）会把起点拉到很远，白白多出几十列空档。
+ * 结果夹在 `1..[maxWeeks]`——没有任何记录时返回 1（网格仍是完整一周，只是全空）。
+ */
+fun heatWeekRange(
+    dailySeconds: Map<String, Long>,
+    today: LocalDate,
+    maxWeeks: Long = MAX_HEAT_WEEKS,
+): Long {
+    val earliest = dailySeconds.entries
+        .filter { it.value > 0 }
+        .mapNotNull { runCatching { LocalDate.parse(it.key) }.getOrNull() }
+        .minOrNull() ?: return 1L
+    // 从「最早那天所在周的周一」算起，与 buildHeatGrid 的周对齐保持一致。
+    val weeksApart = ChronoUnit.WEEKS.between(earliest, today)
+    return (weeksApart + 1).coerceIn(1L, maxWeeks.coerceAtLeast(1L))
+}
 
 /** 网格区整体高度：月份标签行 + 7 行格子。 */
 private val GridHeight: Dp = MonthLabelHeight + CellSize * 7f + CellGap * 6f
@@ -236,17 +261,22 @@ private fun gridContentWidth(weeks: Int): Dp = CellSize * weeks + CellGap * (wee
  * 阅读热力图。
  *
  * @param dailySeconds `日期字符串 -> 当日秒数`，直接传 `ReadingStats.dailySeconds`。
+ * @param weeks 展示的周数；`0` 表示自动——按 [heatWeekRange] 从最早记录算起，
+ *   上界 [MAX_HEAT_WEEKS]。传非 0 值可强制固定列数。
  * @param onSelectDate 用户点选某一天时回调；命中测试保证只对真实日期触发。
  */
 @Composable
 fun ReadingHeatmap(
     dailySeconds: Map<String, Long>,
     modifier: Modifier = Modifier,
-    weeks: Long = DEFAULT_WEEKS,
+    weeks: Long = 0L,
     onSelectDate: ((LocalDate) -> Unit)? = null,
 ) {
     val today = remember { LocalDate.now() }
-    val startDate = remember(today, weeks) { today.minusWeeks(weeks).plusDays(1) }
+    val resolvedWeeks = remember(dailySeconds, today, weeks) {
+        if (weeks > 0) weeks else heatWeekRange(dailySeconds, today)
+    }
+    val startDate = remember(today, resolvedWeeks) { today.minusWeeks(resolvedWeeks).plusDays(1) }
     val grid = remember(startDate, today, dailySeconds) { buildHeatGrid(startDate, today, dailySeconds) }
     val thresholds = remember(dailySeconds) { heatThresholds(dailySeconds) }
     val colors = heatColorsFor()
@@ -296,7 +326,7 @@ fun ReadingHeatmap(
             // 绘制与点击共用一个 Canvas：命中测试的尺寸换算与绘制用的是同一组 dp，保证所见即所点。
             Canvas(
                 Modifier
-                    .width(gridContentWidth(weeks.toInt()))
+                    .width(gridContentWidth(resolvedWeeks.toInt()))
                     .height(GridHeight)
                     .horizontalScroll(scrollState)
                     .pointerInput(grid) {

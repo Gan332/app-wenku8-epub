@@ -2,6 +2,31 @@
 
 本项目遵循语义化版本。
 
+## [Unreleased]
+
+### 变更
+
+- **阅读器页内搜索**：底部工具栏新增搜索入口（仅文字小说，与「复制文字」同一条件）。
+  输入关键词后全书扫描，结果按页码列出「第 N 页 + 上下文摘要」，命中段在摘要里用 `‖`
+  分隔并高亮；点结果直接跳到该页。扫描逐页释放 `renderMutex`，不长时间占用翻页渲染锁；
+  面板显式显示「已扫 x / y 页」进度。在线阅读只搜已加载章节（未抓的正文尚不存在）。
+- **阅读统计热力图改为动态范围**：按最早一次非零阅读记录铺开到今天，上界 52 周；
+  无记录时退化为 1 周。原先固定 26 周，长期使用的人看不到更早的记录。
+- **书架分组头箭头改为旋转动画**：新增 `expand_more_24px`（MiuiX 图标集只有静态的
+  ExpandLess/ExpandMore，做不出旋转），收起时旋 180°，时长经 `Motion.duration()`
+  换算并尊重系统「移除动画」。
+
+### 内部
+
+- `ReaderSearch.kt`：`contextSnippet` / `searchResultPages` 为纯函数，`ReaderSearchTest`（12 例）
+  锁定摘要截取、忽略大小写、空查询、负半径退化、null 页跳过等边界。
+- `ReaderViewModel.searchBook` 逐页调 `PageSource.pageText`（每页各自进出 `renderMutex`），
+  用 `SearchState` 发布进度；`onCleared` 与面板关闭时取消，避免后台继续翻文本。
+- `heatWeekRange` 为纯函数，`ReadingHeatmapTest` 补 5 例（最早记录计数、截断到上界、
+  无记录退化为 1 周、自定义上界、未来日期）。
+- `ReaderDimens` 新增 `sheetItemCorner` / `searchResultMaxHeight`，阅读器界面无裸 `dp`/`sp`
+  （由 `DesignTokenTest.readerUiHasNoHardcodedSizes` 锁定）。
+
 ## [0.19.0-alpha01] - 2026-10-04（预发布）
 
 本版为**预发布（prerelease）**：三处界面重构刚落地，密度与手感仍待真机确认，
