@@ -19,6 +19,8 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.lazy.stickyHeader
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -44,6 +46,7 @@ import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.Badge
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.HorizontalDivider
+import top.yukonga.miuix.kmp.basic.Surface
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.Text
@@ -51,10 +54,15 @@ import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.VerticalScrollBar
 import top.yukonga.miuix.kmp.basic.rememberScrollBarAdapter
 import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.Bookmark
+import top.yukonga.miuix.kmp.icon.extended.ExpandLess
+import top.yukonga.miuix.kmp.icon.extended.ExpandMore
+import top.yukonga.miuix.kmp.icon.extended.Favorites
 import top.yukonga.miuix.kmp.icon.extended.More
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 @Composable
+@OptIn(ExperimentalFoundationApi::class)
 fun BookshelfScreen(
     state: StudioUiState,
     viewModel: StudioViewModel,
@@ -87,44 +95,56 @@ fun BookshelfScreen(
                 Text("书架还是空的。\n可以从“探索”加入 Wenku8 书籍，或导入本地 EPUB。", fontSize = UiDimens.body, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .8f))
             }
         } else {
-            Text("共 ${state.bookshelf.size} 本", color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f), fontSize = UiDimens.caption)
+            val sections = remember(state.bookshelf) { groupBookshelf(state.bookshelf) }
+            // 折叠状态存在这里而非 ViewModel：纯 UI 关注点，不该进业务状态（AGENTS §4.6.1）。
+            var collapsed by remember { mutableStateOf(emptySet<BookshelfGroup>()) }
             val listState = rememberLazyListState()
             Box(Modifier.fillMaxWidth()) {
                 LazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
-                    itemsIndexed(state.bookshelf, key = { _, entry -> entry.id }) { index, entry ->
-                        Box {
-                            BookshelfCard(
-                                entry,
-                                readingProgress[entry.bookId],
-                                now,
-                                // 0.18.0：交错入场（按索引延迟，索引超过首屏上限后不再累加延迟）
-                                modifier = Modifier.animateItem().staggeredEnter(index),
-                                onMore = { menuEntryId = entry.id },
-                            ) {
-                                // 卡片主体直接打开：本地书进阅读器并记阅读，远程书进详情页
-                                if (entry.localUri != null) {
-                                    viewModel.markShelfRead(entry.id)
-                                    onOpenLocal(entry)
-                                } else {
-                                    onOpenRemote(entry)
-                                }
-                            }
-                            if (menuEntryId == entry.id) {
-                                // Popup(alignment, offset) 的 offset 是 IntOffset（像素），需按 density 换算
-                                val menuOffset = with(LocalDensity.current) { IntOffset(0, 120.dp.roundToPx()) }
-                                Popup(
-                                    onDismissRequest = { menuEntryId = null },
-                                    alignment = Alignment.TopEnd,
-                                    offset = menuOffset,
-                                ) {
-                                    BookEntryMenu(
-                                        entry = entry,
-                                        viewModel = viewModel,
-                                        onOpenLocal = { onOpenLocal(it); menuEntryId = null },
-                                        onOpenRemote = { onOpenRemote(it); menuEntryId = null },
-                                        onOpenDetail = { onOpenDetail(it); menuEntryId = null },
-                                        onDismiss = { menuEntryId = null },
-                                    )
+                    sections.forEach { section ->
+                        stickyHeader(key = "header-${section.group}") {
+                            BookshelfGroupHeader(
+                                section = section,
+                                expanded = section.group !in collapsed,
+                                onToggle = { collapsed = if (section.group in collapsed) collapsed - section.group else collapsed + section.group },
+                            )
+                        }
+                        if (section.group !in collapsed) {
+                            itemsIndexed(section.entries, key = { _, entry -> entry.id }) { index, entry ->
+                                BookshelfCard(
+                                    entry = entry,
+                                    resume = readingProgress[entry.bookId],
+                                    now = now,
+                                    // 交错入场：按分组内索引延迟，超过首屏上限后不再累加（AGENTS §4.4）
+                                    modifier = Modifier.animateItem().staggeredEnter(index),
+                                    onMore = { menuEntryId = entry.id },
+                                    onOpen = {
+                                        // 点卡片主体直接读：本地书进阅读器并记阅读，远程书进在线阅读（AGENTS §4.6.1）
+                                        if (entry.localUri != null) {
+                                            viewModel.markShelfRead(entry.id)
+                                            onOpenLocal(entry)
+                                        } else {
+                                            onOpenRemote(entry)
+                                        }
+                                    },
+                                )
+                                if (menuEntryId == entry.id) {
+                                    // Popup(alignment, offset) 的 offset 是 IntOffset（像素），需按 density 换算
+                                    val menuOffset = with(LocalDensity.current) { IntOffset(0, 120.dp.roundToPx()) }
+                                    Popup(
+                                        onDismissRequest = { menuEntryId = null },
+                                        alignment = Alignment.TopEnd,
+                                        offset = menuOffset,
+                                    ) {
+                                        BookEntryMenu(
+                                            entry = entry,
+                                            viewModel = viewModel,
+                                            onOpenLocal = { onOpenLocal(it); menuEntryId = null },
+                                            onOpenRemote = { onOpenRemote(it); menuEntryId = null },
+                                            onOpenDetail = { onOpenDetail(it); menuEntryId = null },
+                                            onDismiss = { menuEntryId = null },
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -139,6 +159,49 @@ fun BookshelfScreen(
     }
 }
 
+@Composable
+private fun BookshelfGroupHeader(section: BookshelfSection, expanded: Boolean, onToggle: () -> Unit) {
+    // stickyHeader：跟随 LNR BookshelfHomeContent 的分组头，滚动时钉在顶部。
+    Surface(color = MiuixTheme.colorScheme.background) {
+        Column {
+            Row(
+                modifier = Modifier.fillMaxWidth().height(UiDimens.rowMin).clickable(onClick = onToggle).padding(horizontal = UiDimens.pagePadding),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    imageVector = when (section.group) {
+                        BookshelfGroup.Pinned -> MiuixIcons.Favorites
+                        BookshelfGroup.All -> MiuixIcons.Bookmark
+                    },
+                    contentDescription = null,
+                    tint = MiuixTheme.colorScheme.primary,
+                    modifier = Modifier.size(UiDimens.spaceL),
+                )
+                Spacer(Modifier.size(UiDimens.spaceS))
+                Text(
+                    section.group.title(section.entries.size),
+                    fontSize = UiDimens.bodyStrong,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f),
+                )
+                // 展开 / 收起用两个图标而不是旋转箭头：MiuiX 图标集里没有可旋转的展开箭头，
+                // 旋转 Emoji 类素材在暗色主题下也不跟色。
+                Icon(
+                    imageVector = if (expanded) MiuixIcons.ExpandLess else MiuixIcons.ExpandMore,
+                    contentDescription = if (expanded) "收起" else "展开",
+                    tint = MiuixTheme.colorScheme.onSurface.copy(alpha = .6f),
+                    modifier = Modifier.size(UiDimens.spaceL),
+                )
+            }
+            HorizontalDivider(Modifier.fillMaxWidth())
+        }
+    }
+}
+
+/**
+ * 书架卡片，尺寸与排版对齐 LNR `BookCardContent`：94×144 封面、146dp 卡高、
+ * 作者用强调色、简介两行。断点行保留本工程特有的「读到第 x 章」（AGENTS §4.8）。
+ */
 @Composable
 private fun BookshelfCard(
     entry: BookshelfEntry,
@@ -160,15 +223,16 @@ private fun BookshelfCard(
             CoverImage(
                 url = entry.coverUrl,
                 contentDescription = entry.title,
-                modifier = Modifier.size(64.dp, 88.dp).clip(RoundedCornerShape(6.dp)),
-                targetWidthDp = 192,
+                modifier = Modifier.size(CardCoverWidth, CardCoverHeight).clip(RoundedCornerShape(8.dp)),
+                targetWidthDp = 282,
             )
             Column(
                 modifier = Modifier.weight(1f).padding(start = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXS),
             ) {
                 Text(entry.title, fontSize = UiDimens.section, fontWeight = FontWeight.Bold, maxLines = 2)
-                Text(entry.author, fontSize = UiDimens.caption, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f), maxLines = 1)
+                // 作者用强调色：与 LNR BookCardContent 一致，也让「谁写的」在长列表里一眼可辨。
+                Text(entry.author, fontSize = UiDimens.caption, color = MiuixTheme.colorScheme.primary, fontWeight = FontWeight.Bold, maxLines = 1)
                 val meta = buildList {
                     add(if (entry.source == BookshelfSource.LOCAL_EPUB) "本地 EPUB" else "Wenku8")
                     entry.wordCount?.let { add("${formatWordCount(it)} 字") }
@@ -253,3 +317,9 @@ private fun BookEntryMenu(
         }
     }
 }
+
+// —— 卡片尺寸 ——
+// 封面比例取 LNR BookCardContent 的 94:144（2:3），高度放大后一行能放下两行简介。
+// 属装饰性布局尺寸，与控件最小触控区无关，故不走 UiDimens 令牌（AGENTS §4.4）。
+private val CardCoverWidth = 94.dp
+private val CardCoverHeight = 144.dp
