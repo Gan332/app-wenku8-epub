@@ -56,7 +56,8 @@ fun ReadingStatsScreen(stats: ReadingStats, onClear: () -> Unit) {
             Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(UiDimens.cardInset)) {
                 Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXS)) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text(day.format(DateTimeFormatter.ofPattern("M月d日 EEEE", java.time.format.TextStyle.SHORT, java.util.Locale.getDefault())), fontWeight = FontWeight.Bold, fontSize = UiDimens.bodyStrong)
+                        // ofPattern 没有 (pattern, TextStyle, Locale) 重载，用 withLocale 单独指定。
+                        Text(day.format(DateTimeFormatter.ofPattern("M月d日 EEEE").withLocale(java.util.Locale.getDefault())), fontWeight = FontWeight.Bold, fontSize = UiDimens.bodyStrong)
                         Text(formatDuration(seconds), fontSize = UiDimens.caption, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f))
                     }
                     if (seconds <= 0L) {

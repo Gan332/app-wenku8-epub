@@ -46,6 +46,7 @@ import java.time.YearMonth
 import java.time.format.TextStyle as JavaTextStyle
 import java.time.temporal.ChronoUnit
 import java.util.Locale
+import kotlin.math.roundToInt
 
 /**
  * 阅读热力图（参考 LNR `HeatMapCalendar` + `Levels.kt`）。
@@ -223,10 +224,10 @@ private val AxisLabelSize = 10.sp
 private const val DEFAULT_WEEKS = 26L
 
 /** 网格区整体高度：月份标签行 + 7 行格子。 */
-private val GridHeight: Dp = MonthLabelHeight + CellSize * 7 + CellGap * 6
+private val GridHeight: Dp = MonthLabelHeight + CellSize * 7f + CellGap * 6f
 
 /** 网格内容宽度：[weeks] 列按固定格子宽排布。 */
-private fun gridContentWidth(weeks: Long): Dp = CellSize * weeks + CellGap * (weeks - 1)
+private fun gridContentWidth(weeks: Int): Dp = CellSize * weeks + CellGap * (weeks - 1)
 
 /**
  * 阅读热力图。
@@ -253,7 +254,11 @@ fun ReadingHeatmap(
     val scrollState = rememberScrollState()
 
     // 网格一进来就定位到最新一列：统计是回看「最近」的习惯，默认停在半年前没有意义。
-    LaunchedEffect(grid) { scrollState.scrollTo(((grid.weeks.size - 1) * (CellSize + CellGap)).toInt()) }
+    // 取与 maxValue 的较大值：内容比视口窄时初值会被钳在 0，直接滚到末列起点会停住。
+    LaunchedEffect(grid) {
+        val lastColumnStart = ((CellSize + CellGap) * (grid.weeks.size - 1)).roundToInt()
+        scrollState.scrollTo(maxOf(lastColumnStart, scrollState.maxValue))
+    }
 
     // 入场淡入；系统「移除动画」时 duration 为 0，直接显示（AGENTS §4.4）。
     val appear by animateFloatAsState(
@@ -284,7 +289,7 @@ fun ReadingHeatmap(
             // 绘制与点击共用一个 Canvas：命中测试的尺寸换算与绘制用的是同一组 dp，保证所见即所点。
             Canvas(
                 Modifier
-                    .width(gridContentWidth(weeks))
+                    .width(gridContentWidth(weeks.toInt()))
                     .height(GridHeight)
                     .horizontalScroll(scrollState)
                     .pointerInput(grid) {
