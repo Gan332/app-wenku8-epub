@@ -9,6 +9,7 @@ import com.example.hyperreader.ui.hitTestHeatGrid
 import com.example.hyperreader.ui.quickSelectMinutes
 import java.time.DayOfWeek
 import java.time.LocalDate
+import java.time.temporal.ChronoUnit
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -71,7 +72,17 @@ class ReadingHeatmapTest {
             put("2026-10-02", 900L)
             repeat(40) { put("2026-09-${(it + 1).toString().padStart(2, '0')}", 0L) }
         }
-        assertEquals(5, heatThresholds(daily).top)
+        // 分钟值是 [5, 15]（size=2，0.5*2=1 偏向下标 1），分位全落在 5 或 15。
+        assertEquals(HeatThresholds(5, 15, 15), heatThresholds(daily))
+    }
+
+    @Test
+    fun subMinuteEntriesDoNotDragLowThresholdToZero() {
+        // 30 秒与 1 分钟混在一起时，若先按秒剔除 0 再整除，30 秒会变成 0 分钟参与分位，
+        // 把 low 压到 0，图例显示「0 分钟」。换算顺序必须是「先整除、再剔除」。
+        val thresholds = heatThresholds(mapOf("2026-10-01" to 30L, "2026-10-02" to 600L))
+        assertEquals("sub-minute reading must not zero the low threshold", 10, thresholds.low)
+        assertEquals(HeatThresholds(10, 10, 10), thresholds)
     }
 
     // —— 分档 ——
@@ -93,10 +104,12 @@ class ReadingHeatmapTest {
     }
 
     @Test
-    fun subMinuteReadingStaysOutOfFirstBucket() {
-        // 不足 1 分钟的秒数换算成 0 分钟，应落在 Zero 而非 One。
-        val t = HeatThresholds(0, 0, 10)
-        assertEquals(HeatLevel.Zero, heatLevelFor(59L, t))
+    fun subMinuteReadingLandsInLowestNonZeroBucket() {
+        // 59 秒换算成 0 分钟；但它本身是「读过」，不该与「完全没读」的 0 秒同色。
+        // 阈值全为 0 时（无任何记录）才是 Zero。
+        assertEquals(HeatLevel.Zero, heatLevelFor(59L, HeatThresholds(0, 0, 0)))
+        assertEquals(HeatLevel.One, heatLevelFor(59L, HeatThresholds(5, 10, 20)))
+        assertEquals(HeatLevel.Zero, heatLevelFor(0L, HeatThresholds(5, 10, 20)))
     }
 
     // —— 网格 ——
@@ -160,7 +173,8 @@ class ReadingHeatmapTest {
         val end = LocalDate.of(2026, 11, 20)
         val grid = buildHeatGrid(start, end, emptyMap())
         val dates = grid.weeks.flatten().filterNotNull().map { it.date }.sorted()
-        assertEquals("区间内每一天都应出现且只出现一次", start.datesUntil(end.plusDays(1)).count(), dates.size)
+        // datesUntil 是序列，用 count() 之外再转 Int 与 Int 比较，避免 Long/Integer 混比。
+        assertEquals("区间内每一天都应出现且只出现一次", start.until(end.plusDays(1), ChronoUnit.DAYS).toInt(), dates.size)
         assertEquals(start, dates.first())
         assertEquals(end, dates.last())
     }
