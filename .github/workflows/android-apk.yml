@@ -13,6 +13,8 @@ on:
 
 permissions:
   contents: write
+  # 缓存水位脚本要删条目（scripts/ci-trim-cache.sh）。只给 contents: write 时其余权限全为 none。
+  actions: write
 
 concurrency:
   group: android-apk-${{ github.workflow }}-${{ github.ref }}
@@ -63,6 +65,16 @@ jobs:
             ~/.cargo/bin
             rust/target
           key: rust-${{ runner.os }}-${{ hashFiles('rust/**/Cargo.toml') }}
+
+      # 缓存水位控制。必须在 Cache Rust 之后（要先 restore 再算占用），
+      # 且放在所有构建步骤之前，这样清出的空间本次构建就能用上。
+      - name: Trim Actions cache when near the quota
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CACHE_MAX_MB: '10240'
+          CACHE_THRESHOLD_PCT: '90'
+          CACHE_TARGET_PCT: '70'
+        run: bash scripts/ci-trim-cache.sh
 
       - name: Rust tests
         working-directory: rust
