@@ -36,6 +36,11 @@ class SettingsRepository(private val context: Context) {
         EpubEngine.fromName(prefs[EXPORT_ENGINE])
     }
 
+    /** 书架排序方式；未设置或值非法时回退 [BookshelfSort.RecentRead]（与 0.19.0 之前一致）。 */
+    val bookshelfSort: Flow<BookshelfSort> = data.safeData().map { prefs ->
+        BookshelfSort.fromName(prefs[BOOKSHELF_SORT])
+    }
+
     /**
      * 第三方中继开关（仅公开页链路，AGENTS §4.11）。
      *
@@ -89,6 +94,9 @@ class SettingsRepository(private val context: Context) {
     /** 切换 EPUB 导出引擎；只影响之后创建的导出任务。 */
     suspend fun setExportEngine(engine: EpubEngine) = edit { it[EXPORT_ENGINE] = engine.name }
 
+    /** 切换书架排序方式；只影响展示顺序，不改动书目数据本身。 */
+    suspend fun setBookshelfSort(sort: BookshelfSort) = edit { it[BOOKSHELF_SORT] = sort.name }
+
     /** 开关关闭时自动把已保存的端点清空，避免下次打开时误用过期端点。 */
     suspend fun setRelayEnabled(enabled: Boolean) = edit {
         it[RELAY_ENABLED] = enabled
@@ -133,6 +141,8 @@ class SettingsRepository(private val context: Context) {
         val THEME_MODE = stringPreferencesKey("theme_mode")
         /** EPUB 导出引擎（`EpubEngine.name`）；缺失/非法回退 CLASSIC。 */
         val EXPORT_ENGINE = stringPreferencesKey("export_engine")
+        /** 书架排序方式（`BookshelfSort.name`）；缺失/非法回退 RecentRead。 */
+        val BOOKSHELF_SORT = stringPreferencesKey("bookshelf_sort")
         /** 第三方中继开关（仅公开页），默认 false。 */
         val RELAY_ENABLED = booleanPreferencesKey("relay_enabled")
         /** 第三方中继端点，如 `https://relay.example.com`；为空则中继不生效。 */

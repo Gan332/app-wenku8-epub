@@ -17,12 +17,16 @@ class BookshelfRepository(context: Context) {
     private val data = context.applicationContext.appDataStore
     private val serializer = ListSerializer(BookshelfEntry.serializer())
 
+    /**
+     * 书架条目。
+     *
+     * **不再在这里排序**：排序方式自 0.19.0-alpha03 起是用户设置
+     * （`BookshelfSort`），由展示层用 `ui/sortBookshelf` 应用。
+     * 仓库保留存储顺序，避免「设置排序」与「仓库排序」两个真相来源打架
+     * （此前这里硬编码「置顶 → 最近阅读 → 标题」，用户无从选择）。
+     */
     val entries: Flow<List<BookshelfEntry>> = data.safeData().map { prefs ->
-        decode(prefs[BOOKSHELF]).sortedWith(
-            compareByDescending<BookshelfEntry> { it.isPinned }
-                .thenByDescending { it.lastReadAt.takeIf { value -> value > 0 } ?: it.addedAt }
-                .thenBy { it.title }
-        )
+        decode(prefs[BOOKSHELF])
     }
 
     suspend fun add(entry: BookshelfEntry) = data.edit { prefs ->

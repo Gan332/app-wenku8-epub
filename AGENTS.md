@@ -13,7 +13,7 @@
 
 当前主要发版对象是 **Android 原生应用**。Android 版本不需要 Node.js 服务，WebView 仅用于 wenku8 登录。
 
-当前版本：`0.19.0-alpha02`（versionCode 27，见 `android/app/build.gradle.kts`，以该文件为准）
+当前版本：`0.19.0-alpha03`（versionCode 28，见 `android/app/build.gradle.kts`，以该文件为准）
 发布节奏：0.18.x 为**预发布**（prerelease，标签带 `-alphaNN`），功能收敛后再转正式版。
 包名：`com.example.hyperreader`（由 `com.wenku8.epubstudio` 于 0.9.0 重命名，非原地改名，升级需数据迁移）
 

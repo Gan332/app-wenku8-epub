@@ -19,8 +19,8 @@ android {
         applicationId = "com.example.hyperreader"
         minSdk = 26
         targetSdk = 36
-    versionCode = 27
-    versionName = "0.19.0-alpha02"
+    versionCode = 28
+    versionName = "0.19.0-alpha03"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

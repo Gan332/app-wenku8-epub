@@ -198,6 +198,8 @@ data class StudioUiState(
     val searchMessage: String? = null,
     val loggedIn: Boolean = false,
     val bookshelf: List<BookshelfEntry> = emptyList(),
+    /** 书架排序方式（持久化设置；0.19.0-alpha03 起用户可选）。 */
+    val bookshelfSort: com.example.hyperreader.settings.BookshelfSort = com.example.hyperreader.settings.BookshelfSort.RecentRead,
     val readingStats: ReadingStats = ReadingStats(),
     val exploreRows: List<ExploreBooksRow> = emptyList(),
     val exploreBusy: Boolean = false,
@@ -337,7 +339,11 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
             settingsRepository.searchHistory.collect { history -> mutable.update { it.copy(searchHistory = history) } }
         }
         viewModelScope.launch {
-            bookshelfRepository.entries.collect { entries -> mutable.update { it.copy(bookshelf = entries) } }
+            bookshelfRepository.entries.collect { entries ->
+                // 仓库只给存储顺序，排序在这里按当前设置应用（两个 collector 都写 bookshelf，
+                // 因此各自都要维持「已排序」不变量，否则后到的原始列表会覆盖排序结果）
+                mutable.update { state -> state.copy(bookshelf = sortBookshelf(entries, state.bookshelfSort)) }
+            }
         }
         viewModelScope.launch {
             readingStatsRepository.stats.collect { stats -> mutable.update { it.copy(readingStats = stats) } }
@@ -345,6 +351,12 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch {
             settingsRepository.readerSettings.collect { settings ->
                 mutable.update { it.copy(readerSettings = settings) }
+            }
+        }
+        // 书架排序是持久化设置：与书目数据分开收集，两者任一变化都重排（见下方 bookshelf 收集）
+        viewModelScope.launch {
+            settingsRepository.bookshelfSort.collect { sort ->
+                mutable.update { state -> state.copy(bookshelfSort = sort, bookshelf = sortBookshelf(state.bookshelf, sort)) }
             }
         }
         viewModelScope.launch {
@@ -711,6 +723,11 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     fun removeFromShelf(id: String) { viewModelScope.launch { bookshelfRepository.remove(id) } }
     fun setPinned(id: String, pinned: Boolean) { viewModelScope.launch { bookshelfRepository.setPinned(id, pinned) } }
     fun markShelfRead(id: String) { viewModelScope.launch { bookshelfRepository.recordRead(id) } }
+
+    /** 切换书架排序；只改展示顺序，下次启动仍生效（DataStore）。 */
+    fun setBookshelfSort(sort: com.example.hyperreader.settings.BookshelfSort) {
+        viewModelScope.launch { settingsRepository.setBookshelfSort(sort) }
+    }
     /**
      * 从书架卡片发起导出向导：先解析目录，成功后直接进入选章节。
      * 失败时停在 [ExportStep.RESOLVING] 并给出可重试的错误文案。

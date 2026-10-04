@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -45,6 +46,7 @@ import androidx.compose.ui.window.Popup
 import com.example.hyperreader.model.BookshelfEntry
 import com.example.hyperreader.model.BookshelfSource
 import com.example.hyperreader.reader.onlineReaderIntent
+import com.example.hyperreader.settings.BookshelfSort
 import com.example.hyperreader.settings.ReadingProgress
 import com.example.hyperreader.ui.cover.CoverImage
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -64,6 +66,7 @@ import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Favorites
 import top.yukonga.miuix.kmp.icon.extended.ListView
 import top.yukonga.miuix.kmp.icon.extended.More
+import top.yukonga.miuix.kmp.overlay.OverlayBottomSheet
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 @Composable
@@ -80,6 +83,8 @@ fun BookshelfScreen(
     // 「更多」弹出菜单的锚定条目 id（null = 关闭）。
     // 交互：点卡片主体直接打开书，行尾 More 弹操作菜单（替换旧的全屏操作弹窗）。
     var menuEntryId by remember { mutableStateOf<String?>(null) }
+    // 排序选择 Sheet（0.19.0-alpha03）：编辑型设置用轻量 Sheet，不占二级页（AGENTS §4.12）
+    var sortSheet by remember { mutableStateOf(false) }
     // 阅读断点（第 x 章 · 第 y 段）：reader_progress_ 前缀键的全量视图
     val readingProgress by viewModel.readingProgress.collectAsStateWithLifecycle(initialValue = emptyMap())
     // 数据变化时刷新「N 分钟前」的基准时刻，避免长开应用后相对时间停在启动瞬间
@@ -88,7 +93,17 @@ fun BookshelfScreen(
         // 0.17.0：导出记录已独立成页（入口在设置 → 概览与通知栏路由），书架只留进行中的任务概览
         Text("书架", fontSize = UiDimens.display, fontWeight = FontWeight.Bold)
         Text("在线书籍和本地 EPUB 都可以在这里继续阅读。", color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f), fontSize = UiDimens.caption)
-        Button(onClick = onImportEpub, modifier = Modifier.fillMaxWidth()) { Text("导入 EPUB") }
+        Row(horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
+            Button(onClick = onImportEpub, modifier = Modifier.weight(1f)) { Text("导入 EPUB") }
+            // 排序入口只在有书时出现：空书架没有可排的东西
+            if (state.bookshelf.isNotEmpty()) {
+                TextButton(
+                    text = "排序：${state.bookshelfSort.label}",
+                    onClick = { sortSheet = true },
+                    modifier = Modifier.heightIn(min = UiDimens.touchMin),
+                )
+            }
+        }
         ActiveExportSection(
             jobs = state.jobs,
             onOpen = { jobId -> viewModel.route(StudioViewModel.ROUTE_EXPORT_PROGRESS, jobId) },
@@ -158,6 +173,34 @@ fun BookshelfScreen(
                 VerticalScrollBar(
                     rememberScrollBarAdapter(listState),
                     Modifier.align(Alignment.TopEnd).fillMaxHeight(),
+                )
+            }
+        }
+    }
+    // 排序选择：与设置页「EPUB 导出引擎」同一套轻量 Sheet 范式（AGENTS §4.12）
+    if (sortSheet) {
+        OverlayBottomSheet(show = true, onDismissRequest = { sortSheet = false }) {
+            Column(
+                modifier = Modifier.padding(UiDimens.spaceL),
+                verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS),
+            ) {
+                Text("书架排序", fontSize = UiDimens.section, fontWeight = FontWeight.Bold)
+                Text(
+                    "置顶的书始终排在最前，排序只影响各分组内部。",
+                    fontSize = UiDimens.captionSmall,
+                    color = MiuixTheme.colorScheme.onSurface.copy(alpha = .7f),
+                )
+                BookshelfSort.entries.forEach { option ->
+                    TextButton(
+                        text = if (option == state.bookshelfSort) "✓ ${option.label}" else option.label,
+                        onClick = { viewModel.setBookshelfSort(option) },
+                        modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
+                    )
+                }
+                Text(
+                    state.bookshelfSort.summary,
+                    fontSize = UiDimens.captionSmall,
+                    color = MiuixTheme.colorScheme.primary,
                 )
             }
         }

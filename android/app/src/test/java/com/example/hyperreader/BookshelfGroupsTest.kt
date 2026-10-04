@@ -61,7 +61,8 @@ class BookshelfGroupsTest {
 
     @Test
     fun orderWithinSectionFollowsInput() {
-        // 分组不重排：顺序由 BookshelfRepository 决定，避免两个真相来源。
+        // 分组只切段、不重排：段内顺序由调用方决定——0.19.0-alpha03 起是
+        // `ui/sortBookshelf`（按用户选择的 BookshelfSort 排好后再传进来）。
         val sections = groupBookshelf(listOf(entry("z"), entry("m"), entry("a")))
         assertEquals(listOf("z", "m", "a"), sections.single().entries.map { it.id })
     }
