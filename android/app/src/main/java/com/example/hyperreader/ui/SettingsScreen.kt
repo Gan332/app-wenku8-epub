@@ -456,7 +456,7 @@ private fun RelaySettings(viewModel: StudioViewModel) {
         enabled -> "公开页将走 $normalized；会话链路（搜索/榜单/标签/正文）仍直连"
         else -> "端点已保存，开关关闭中；开启后公开页走中继"
     }
-    Card(modifier = Modifier.fillMaxWidth(), insideMargin = PaddingValues(14.dp)) {
+    Card(modifier = Modifier.fillMaxWidth(), insideMargin = PaddingValues(UiDimens.cardInset)) {
         Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
             Row(
                 modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
@@ -513,7 +513,7 @@ private fun AppearanceSection(viewModel: StudioViewModel) {
             }
         },
         {
-            Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(14.dp)) {
+            Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(UiDimens.cardInset)) {
                 Row(Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text("使用系统动态色", fontWeight = FontWeight.Bold)
@@ -618,7 +618,7 @@ private fun CatalogSection(state: StudioUiState, viewModel: StudioViewModel, onI
         ?: "尚未更新"
     SettingsScaffold("书目缓存", viewModel::backSettings, listOf(
         {
-            Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(14.dp)) {
+            Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(UiDimens.cardInset)) {
                 Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXS)) {
                     Text("已缓存 ${state.catalogSize} 本", fontWeight = FontWeight.Bold, fontSize = UiDimens.section)
                     Text(updated, fontSize = UiDimens.caption, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f))
@@ -655,7 +655,7 @@ private fun CatalogSection(state: StudioUiState, viewModel: StudioViewModel, onI
 private fun AboutSection(viewModel: StudioViewModel) {
     SettingsScaffold("关于", viewModel::backSettings, listOf(
         {
-            Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(14.dp)) {
+            Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(UiDimens.cardInset)) {
                 Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXS)) {
                     Text("HyperReader", fontWeight = FontWeight.Bold, fontSize = UiDimens.section)
                     Text("版本 0.7.0", fontSize = UiDimens.caption, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f))
@@ -687,7 +687,7 @@ private fun SettingsScaffold(title: String, onBack: () -> Unit, blocks: List<@Co
     // 必须 fillMaxSize + LazyColumn 用 weight(1f)：
     // 只写 fillMaxWidth 时 Column 会把剩余高度给最后一个子项但不做滚动预算，
     // 内容一旦超出就被裁掉（真机上「字重以下全部不可达」）。
-    Column(Modifier.fillMaxSize().padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
+    Column(Modifier.fillMaxSize().padding(top = UiDimens.spaceL), verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
         TextButton(text = "‹ 返回设置", onClick = onBack)
         Text(title, fontSize = UiDimens.title, fontWeight = FontWeight.Bold)
         LazyColumn(
@@ -708,7 +708,7 @@ private fun SectionTitle(text: String) {
 @Composable
 private fun ToggleRow(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
     Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(vertical = 2.dp)) {
-        Row(Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin).padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin).padding(horizontal = UiDimens.pagePadding), verticalAlignment = Alignment.CenterVertically) {
             Text(label, modifier = Modifier.weight(1f), fontSize = UiDimens.bodyStrong)
             Switch(checked = checked, onCheckedChange = onChange)
         }

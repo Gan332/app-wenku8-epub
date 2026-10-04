@@ -80,7 +80,7 @@ fun BookshelfScreen(
     val readingProgress by viewModel.readingProgress.collectAsStateWithLifecycle(initialValue = emptyMap())
     // 数据变化时刷新「N 分钟前」的基准时刻，避免长开应用后相对时间停在启动瞬间
     val now = remember(state.bookshelf, readingProgress) { System.currentTimeMillis() }
-    Column(Modifier.fillMaxWidth().padding(top = 16.dp), verticalArrangement = Arrangement.spacedBy(UiDimens.spaceM)) {
+    Column(Modifier.fillMaxWidth().padding(top = UiDimens.spaceL), verticalArrangement = Arrangement.spacedBy(UiDimens.spaceM)) {
         // 0.17.0：导出记录已独立成页（入口在设置 → 概览与通知栏路由），书架只留进行中的任务概览
         Text("书架", fontSize = UiDimens.display, fontWeight = FontWeight.Bold)
         Text("在线书籍和本地 EPUB 都可以在这里继续阅读。", color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f), fontSize = UiDimens.caption)
@@ -92,7 +92,7 @@ fun BookshelfScreen(
         )
         HorizontalDivider(Modifier.fillMaxWidth())
         if (state.bookshelf.isEmpty()) {
-            Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(18.dp)) {
+            Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(UiDimens.cardInset)) {
                 Text("书架还是空的。\n可以从“探索”加入 Wenku8 书籍，或导入本地 EPUB。", fontSize = UiDimens.body, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .8f))
             }
         } else {
@@ -219,7 +219,7 @@ private fun BookshelfCard(
             .fillMaxWidth()
             .clickable(interactionSource = interaction, indication = null) { onOpen(entry) }
             .pressableScale(interaction),
-        insideMargin = PaddingValues(12.dp),
+        insideMargin = PaddingValues(UiDimens.cardInset),
     ) {
         Row(verticalAlignment = Alignment.Top) {
             CoverImage(

@@ -172,7 +172,7 @@ fun ExploreDetailScreen(
             // 目录页单独失败：书籍信息仍可用，就地提示 + 重试，不整页报错
             if (error != null) {
                 item(key = "error") {
-                    Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(14.dp)) {
+                    Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(UiDimens.cardInset)) {
                         Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
                             Text("部分信息加载失败", fontSize = UiDimens.bodyStrong, fontWeight = FontWeight.Bold)
                             Text(error, fontSize = UiDimens.caption, color = MiuixTheme.colorScheme.error)
@@ -200,7 +200,7 @@ fun ExploreDetailScreen(
             }
 
             item(key = "summary") {
-                Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(14.dp)) {
+                Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(UiDimens.cardInset)) {
                     Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
                         Text("内容简介", fontWeight = FontWeight.Bold)
                         Text(

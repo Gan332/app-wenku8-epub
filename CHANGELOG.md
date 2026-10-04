@@ -2,7 +2,10 @@
 
 本项目遵循语义化版本。
 
-## [Unreleased]
+## [0.19.0-alpha01] - 2026-10-04（预发布）
+
+本版为**预发布（prerelease）**：三处界面重构刚落地，密度与手感仍待真机确认，
+建议当「尝鲜版」试用。功能面相对 v0.18.0-alpha01 是净增量，无配置变更、无数据迁移。
 
 ### 变更
 
@@ -18,6 +21,11 @@
 
 ### 内部
 
+- **全局排版放宽**：`UiDimens` 间距六档整体上调一档（4/8/12 → 6/10/14，`spaceL` 16 → 18，
+  `spaceXL` 24 → 26），`cardInset` 14 → 16dp，`rowMin` 44 → 48dp（与最小触控区对齐）。
+  另把 37 处绕过令牌直接写 `dp` 的间距（`PaddingValues(12/14/16/18.dp)`、`spacedBy(10.dp)`、
+  `padding(top = 12/14/16/18.dp)`）统一换成 `cardInset` / `spaceS` / `spaceL` / `pagePadding`，
+  消除「部分控件拥挤、部分宽松」的不一致。阅读器（`com.xyreader`）按 §4.8 保持上游原样。
 - `ui/ReadingHeatmap.kt`：阈值分档、网格切分与点击命中测试抽为纯函数，
   由 `ReadingHeatmapTest`（24 例）锁定。
 - `ui/BookshelfGroups.kt`：`groupBookshelf` 为纯函数，`BookshelfGroupsTest`（7 例）锁定

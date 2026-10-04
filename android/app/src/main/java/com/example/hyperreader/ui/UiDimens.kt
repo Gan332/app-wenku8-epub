@@ -20,22 +20,23 @@ object UiDimens {
     val touchMin: Dp = 48.dp
 
     /** 紧凑信息行的最小高度（详情页字段卡、设置摘要行）。 */
-    val rowMin: Dp = 44.dp
+    val rowMin: Dp = 48.dp
 
     // —— 间距六档（只允许用这六档表达元素间距）——
+    // 0.18.1 起整体放宽一档：原先 4/8/12 在高密度屏上偏紧，控件之间挤在一起。
     val spaceXXS: Dp = 2.dp
-    val spaceXS: Dp = 4.dp
-    val spaceS: Dp = 8.dp
-    val spaceM: Dp = 12.dp
-    val spaceL: Dp = 16.dp
-    val spaceXL: Dp = 24.dp
+    val spaceXS: Dp = 6.dp
+    val spaceS: Dp = 10.dp
+    val spaceM: Dp = 14.dp
+    val spaceL: Dp = 18.dp
+    val spaceXL: Dp = 26.dp
 
     // —— 页面结构 ——
     /** 页面左右内边距。 */
     val pagePadding: Dp = 16.dp
 
     /** Card 内边距（MiuiX `insideMargin`）。 */
-    val cardInset: Dp = 14.dp
+    val cardInset: Dp = 16.dp
 
     /** 列表项之间的间距。 */
     val listGap: Dp = spaceS

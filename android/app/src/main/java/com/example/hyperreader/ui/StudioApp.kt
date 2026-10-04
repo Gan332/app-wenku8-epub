@@ -255,7 +255,7 @@ private fun StudioApp(
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding).padding(horizontal = 18.dp)) {
+        Column(Modifier.fillMaxSize().padding(padding).padding(horizontal = UiDimens.pagePadding)) {
             // 全屏覆盖页统一转场（0.18.0）：探索详情 / 导出记录 / 榜单展开 / 搜索 / 导出向导 / tab 内容
             // 五类全屏页互斥，用同一个 AnimatedContent 承载；时长由 Motion 按系统「移除动画」缩放。
             val motionFast = Motion.duration(UiDimens.MOTION_FAST)
@@ -430,13 +430,13 @@ private fun ExportWizardScreen(state: StudioUiState, viewModel: StudioViewModel)
 @Composable
 private fun ResolvingScreen(state: StudioUiState, viewModel: StudioViewModel) {
     Column(
-        Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(top = 18.dp),
+        Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(top = UiDimens.spaceL),
         verticalArrangement = Arrangement.spacedBy(UiDimens.spaceM),
     ) {
         TextButton(text = "‹ 关闭", onClick = viewModel::closeExport)
         Text("正在读取目录…", fontSize = UiDimens.title, fontWeight = FontWeight.Bold)
         state.detailError?.let { error ->
-            Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(16.dp)) {
+            Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(UiDimens.cardInset)) {
                 Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceM)) {
                     Text("目录读取失败", fontWeight = FontWeight.Bold)
                     Text(error, fontSize = UiDimens.body, color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.72f))
@@ -468,7 +468,7 @@ private fun ResolvingScreen(state: StudioUiState, viewModel: StudioViewModel) {
  */
 @Composable
 private fun JobHistoryScreen(state: StudioUiState, viewModel: StudioViewModel) {
-    Column(Modifier.fillMaxWidth().padding(top = 18.dp), verticalArrangement = Arrangement.spacedBy(UiDimens.spaceM)) {
+    Column(Modifier.fillMaxWidth().padding(top = UiDimens.spaceL), verticalArrangement = Arrangement.spacedBy(UiDimens.spaceM)) {
         TextButton(text = "‹ 返回", onClick = { viewModel.setShowJobHistory(false) })
         HistoryScreen(state.jobs, viewModel)
     }
@@ -481,7 +481,7 @@ private fun ChaptersScreen(state: StudioUiState, viewModel: StudioViewModel) {
     val visible = remember(state.search, index) {
         index.chapters.filter { state.search.isBlank() || it.title.contains(state.search, true) || it.volume.contains(state.search, true) }
     }
-    Column(Modifier.fillMaxWidth().padding(top = 14.dp), verticalArrangement = Arrangement.spacedBy(UiDimens.spaceM)) {
+    Column(Modifier.fillMaxWidth().padding(top = UiDimens.spaceL), verticalArrangement = Arrangement.spacedBy(UiDimens.spaceM)) {
         TextButton(text = "‹ 关闭向导", onClick = viewModel::closeExport)
         BookHeader(book.title, book.author, book.category, index.chapters.size, state.selectedIds.size)
         TextField(value = state.search, onValueChange = viewModel::setSearch, label = "搜索章节标题", useLabelAsPlaceholder = true, modifier = Modifier.fillMaxWidth())
@@ -503,12 +503,12 @@ private fun ExportScreen(state: StudioUiState, viewModel: StudioViewModel) {
     val book = state.book ?: return
     val selected = state.index?.chapters?.count { it.id in state.selectedIds } ?: 0
     Column(
-        Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(top = 18.dp),
+        Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(top = UiDimens.spaceL),
         verticalArrangement = Arrangement.spacedBy(UiDimens.spaceM),
     ) {
         TextButton(text = "‹ 返回章节", onClick = viewModel::backToChapters)
         BookHeader(book.title, book.author, book.category, selected, selected)
-        Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(16.dp)) {
+        Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(UiDimens.cardInset)) {
             Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceM)) {
                 Text("导出摘要", fontWeight = FontWeight.Bold)
                 Text("章节：$selected", fontSize = UiDimens.bodyStrong)
@@ -531,7 +531,7 @@ private fun ExportScreen(state: StudioUiState, viewModel: StudioViewModel) {
 private fun ProgressScreen(state: StudioUiState, viewModel: StudioViewModel) {
     val job = state.jobs.firstOrNull { it.id == state.activeJobId } ?: state.jobs.firstOrNull { it.status == JobStatus.running }
     if (job == null) {
-        Column(Modifier.fillMaxWidth().padding(top = 18.dp), verticalArrangement = Arrangement.spacedBy(UiDimens.spaceM)) {
+        Column(Modifier.fillMaxWidth().padding(top = UiDimens.spaceL), verticalArrangement = Arrangement.spacedBy(UiDimens.spaceM)) {
             TextButton(text = "‹ 关闭向导", onClick = viewModel::closeExport)
             Text("任务状态已更新。", color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f))
             TextButton(text = "查看导出记录", onClick = { viewModel.closeExport(); viewModel.setShowJobHistory(true) })
@@ -546,10 +546,10 @@ private fun ProgressContent(job: ExportJob, viewModel: StudioViewModel) {
     var showWarnings by remember { mutableStateOf(false) }
     val progress = job.progress.percent / 100f
     Column(
-        Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(top = 18.dp),
+        Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(top = UiDimens.spaceL),
         verticalArrangement = Arrangement.spacedBy(UiDimens.spaceM),
     ) {
-        Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(18.dp)) {
+        Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(UiDimens.cardInset)) {
             Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceM)) {
                 Text(job.book.title, fontSize = UiDimens.title, fontWeight = FontWeight.Bold)
                 Text(job.progress.message, color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.72f))
@@ -604,9 +604,9 @@ private fun ProgressContent(job: ExportJob, viewModel: StudioViewModel) {
 private fun HistoryScreen(jobs: List<ExportJob>, viewModel: StudioViewModel) {
     val context = LocalContext.current
     if (jobs.isEmpty()) { Text("还没有导出任务。", Modifier.padding(top = 20.dp), color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.72f)); return }
-    LazyColumn(Modifier.fillMaxWidth().padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(UiDimens.spaceM)) {
+    LazyColumn(Modifier.fillMaxWidth().padding(top = UiDimens.spaceL), verticalArrangement = Arrangement.spacedBy(UiDimens.spaceM)) {
         items(jobs, key = { it.id }) { job ->
-            Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(16.dp)) {
+            Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(UiDimens.cardInset)) {
                 Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
                     Text(job.book.title, fontWeight = FontWeight.Bold, maxLines = 2)
                     Text(statusText(job), color = MiuixTheme.colorScheme.primary, fontSize = UiDimens.caption)
@@ -628,7 +628,7 @@ private fun HistoryScreen(jobs: List<ExportJob>, viewModel: StudioViewModel) {
 
 @Composable
 private fun BookHeader(title: String, author: String, category: String, total: Int, selected: Int) {
-    Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(16.dp)) {
+    Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(UiDimens.cardInset)) {
         Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
             Text(category, color = MiuixTheme.colorScheme.primary, fontSize = UiDimens.captionSmall, fontWeight = FontWeight.Bold)
             Text(title, fontSize = UiDimens.title, fontWeight = FontWeight.Bold, maxLines = 2)
@@ -656,7 +656,7 @@ private fun ChapterRow(chapter: Chapter, selected: Boolean, onToggle: () -> Unit
 
 @Composable
 internal fun MessageCard(message: String) {
-    Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(14.dp)) { Text(message, color = MiuixTheme.colorScheme.error, fontSize = UiDimens.body) }
+    Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(UiDimens.cardInset)) { Text(message, color = MiuixTheme.colorScheme.error, fontSize = UiDimens.body) }
 }
 
 private fun statusText(job: ExportJob): String = when (job.status) {

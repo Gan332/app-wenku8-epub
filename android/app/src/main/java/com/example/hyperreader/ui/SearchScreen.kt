@@ -33,13 +33,13 @@ import com.example.hyperreader.model.SearchField
 
 @Composable
 fun SearchScreen(state: StudioUiState, viewModel: StudioViewModel, onLogin: () -> Unit, onClose: (() -> Unit)? = null) {
-    Column(Modifier.fillMaxWidth().padding(top = 16.dp), verticalArrangement = Arrangement.spacedBy(UiDimens.spaceM)) {
+    Column(Modifier.fillMaxWidth().padding(top = UiDimens.spaceL), verticalArrangement = Arrangement.spacedBy(UiDimens.spaceM)) {
         // 0.18.0：搜索成为独立二级页，从探索页 TopBar 进入，故带返回
         if (onClose != null) TextButton(text = "‹ 返回探索", onClick = onClose)
         Text("搜索轻小说", fontSize = UiDimens.display, fontWeight = FontWeight.Bold)
         Text("登录 wenku8 后按书名或作者搜索。", color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f), fontSize = UiDimens.caption)
         if (!state.loggedIn) {
-            Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(14.dp)) {
+            Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(UiDimens.cardInset)) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text("搜索需要 wenku8 登录", fontSize = UiDimens.body)
                     TextButton(text = "登录", onClick = onLogin)
@@ -131,7 +131,7 @@ fun SearchScreen(state: StudioUiState, viewModel: StudioViewModel, onLogin: () -
 
 @Composable
 private fun SearchResultCard(result: SearchBook, onOpen: (SearchBook) -> Unit, modifier: Modifier = Modifier) {
-    Card(modifier.fillMaxWidth(), insideMargin = PaddingValues(14.dp)) {
+    Card(modifier.fillMaxWidth(), insideMargin = PaddingValues(UiDimens.cardInset)) {
         Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
             Text(result.title, fontSize = UiDimens.section, fontWeight = FontWeight.Bold, maxLines = 2)
             if (result.author.isNotBlank()) Text("作者：${result.author}", fontSize = UiDimens.caption)

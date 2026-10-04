@@ -49,7 +49,7 @@ fun ConfigSection(
 ) {
     ConfigScaffold("配置导入导出", onBack, listOf(
         {
-            Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(14.dp)) {
+            Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(UiDimens.cardInset)) {
                 Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXS)) {
                     Text("导出内容", fontWeight = FontWeight.Bold, fontSize = UiDimens.section)
                     Text("仅主题与阅读器设置。", fontSize = UiDimens.caption, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f))
@@ -105,7 +105,7 @@ fun ConfigSection(
 
 @Composable
 private fun ConfigScaffold(title: String, onBack: () -> Unit, blocks: List<@Composable () -> Unit>) {
-    Column(Modifier.fillMaxWidth().padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
+    Column(Modifier.fillMaxWidth().padding(top = UiDimens.spaceL), verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
         TextButton(text = "‹ 返回设置", onClick = onBack)
         Text(title, fontSize = UiDimens.title, fontWeight = FontWeight.Bold)
         LazyColumn(

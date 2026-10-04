@@ -30,7 +30,7 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 @Composable
 fun ReadingStatsScreen(stats: ReadingStats, onClear: () -> Unit) {
     var selectedDate by remember { mutableStateOf<LocalDate?>(null) }
-    Column(Modifier.fillMaxWidth().padding(top = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    Column(Modifier.fillMaxWidth().padding(top = UiDimens.spaceL), verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
         Text("阅读统计", fontSize = UiDimens.display, fontWeight = FontWeight.Bold)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             StatCard("总时长", formatDuration(stats.totalSeconds), Modifier.weight(1f))
@@ -40,7 +40,7 @@ fun ReadingStatsScreen(stats: ReadingStats, onClear: () -> Unit) {
             StatCard("连续天数", "${stats.currentStreak} 天", Modifier.weight(1f))
             StatCard("最长连续", "${stats.longestStreak} 天", Modifier.weight(1f))
         }
-        Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(16.dp)) {
+        Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(UiDimens.cardInset)) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("阅读热力图", fontWeight = FontWeight.Bold)
                 ReadingHeatmap(
@@ -74,7 +74,7 @@ fun ReadingStatsScreen(stats: ReadingStats, onClear: () -> Unit) {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(stats.bookSeconds.entries.sortedByDescending { it.value }) { entry ->
                     val title = stats.bookTitles[entry.key] ?: entry.key
-                    Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(14.dp)) {
+                    Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(UiDimens.cardInset)) {
                         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(title, fontWeight = FontWeight.Bold, maxLines = 1)
                             Text(formatDuration(entry.value), color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f), fontSize = UiDimens.captionSmall)
@@ -90,7 +90,7 @@ fun ReadingStatsScreen(stats: ReadingStats, onClear: () -> Unit) {
 
 @Composable
 private fun StatCard(label: String, value: String, modifier: Modifier) {
-    Card(modifier, insideMargin = PaddingValues(14.dp)) {
+    Card(modifier, insideMargin = PaddingValues(UiDimens.cardInset)) {
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(label, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f), fontSize = UiDimens.captionSmall)
             Text(value, fontSize = UiDimens.section, fontWeight = FontWeight.Bold)
