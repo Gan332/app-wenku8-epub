@@ -77,6 +77,15 @@ data class NovelStyle(
      * 由阅读器按配置传入；false 时沿用旧的连排行为。
      */
     val chapterNewPage: Boolean = false,
+    /**
+     * 无缝流（上下滚动）：整列页与页首尾相接，不允许页间出现空白带。
+     *
+     * 开启后上下页边距不再逐页重复：上边距只落在首页顶部、下边距只落在末页底部，
+     * 页位图高度按实际占用高度出图（见 `NovelPageSource.pageHeightAt`），
+     * 因此相邻页之间既没有「上边距 + 下边距」的叠加，也没有向下取整剩下的死区。
+     * 左右翻页（false）保持整屏页与四边页边距的原有观感。
+     */
+    val seamlessFlow: Boolean = false,
 )
 
 /** 一个文字段落：文本 + 所属章节序号（各格式解析器填充） */
@@ -143,7 +152,11 @@ private class NovelPage(
  * == 分页算法（断点结构） ==
  * - 行高 lineHeightPx 取自探针 StaticLayout 相邻内侧行的 getLineTop 差
  *   （同一 TextPaint 下全书行高一致，含配置的行距倍率）；
- * - 页容量 = (pageHeight - paddingTop - paddingBottom) / lineHeightPx（向下取整）；
+ * - 页容量 = (pageHeight - 该页上内边距) / lineHeightPx（向下取整）；
+ * - 上下滚动（[NovelStyle.seamlessFlow]）是**无缝流版面**：上边距只在首页、
+ *   下边距只在末页生效，其余页上下内边距为 0，且位图高度按该页实际占用高度出图，
+ *   相邻页首尾相接（既没有两倍页边距叠加，也没有取整剩下的页底死区）；
+ *   左右翻页沿用整屏页 + 四边页边距；
  * - 逐段构建 StaticLayout 记录行数，行数按页容量切分为若干
  *   [PageFragment]（paragraphIndex, startLine, lineCount），跨页段落被切成
  *   多个片段分属相邻页；页 = 有序片段列表，故 pageCount 在打开时固化。
@@ -154,6 +167,9 @@ private class NovelPage(
  * 每页新建透明底 ARGB_8888 Bitmap → Canvas 平移 (paddingLeft, 首行槽位 y -
  * layout.getLineTop(startLine)) → clipRect 页内容区 → StaticLayout.draw。
  * 片段定位使用 layout 自身的 getLineTop（行高与分页探针同源），槽位与绘制零漂移。
+ *
+ * 无缝流下整列页高一致（首页因让出上边距略矮、末页因多出下边距略高），
+ * 连续列表按页宽高比排布即可严丝合缝，不需要任何额外的页间距补偿。
  *
  * 线程安全：renderPage 用 [Mutex] 串行化（StaticLayout LruCache 与位图生成都在其内），
  * 阻塞工作在 Dispatchers.IO；分页在构造完成（调用方 ArchiveFactory.open 已在 IO 线程）。
@@ -212,10 +228,37 @@ class NovelPageSource internal constructor(
     /** 统一行高（px）：探针布局的相邻内侧行顶差，分页与渲染共用同一数值保证零漂移 */
     private val lineHeightPx: Int = measureLineHeight()
 
-    /** 页容量行数：页高 - 上下内边距，向下取整；极端小屏至少 1 行 */
-    private val linesPerPage: Int =
-        (((metrics.pageHeightPx - metrics.paddingTop - metrics.paddingBottom) / lineHeightPx).toInt())
-            .coerceAtLeast(1)
+    /**
+     * 第 [index] 页的上内边距（px）：无缝流下上边距只在首页出现一次，其余页为 0，
+     * 相邻页因此不会有「上一页下边距 + 下一页上边距」的叠加空白。
+     */
+    private fun pageTop(index: Int): Float =
+        PageFlowGeometry.pageTop(style.seamlessFlow, index, metrics.paddingTop)
+
+    /** 第 [index] 页容量行数：按该页实际可用高度向下取整；极端小屏至少 1 行 */
+    private fun linesOnPage(index: Int): Int =
+        PageFlowGeometry.linesOnPage(metrics.pageHeightPx, pageTop(index), lineHeightPx)
+
+    /**
+     * 第 [index] 页位图高度（px）。
+     *
+     * 无缝流取该页**实际占用**高度而不是整屏高：否则「整屏高 - 行高整数倍」剩下的
+     * 死区会让每页底部留一条空白带，滚动时表现为页与页之间断开。
+     * 左右翻页保持整屏页，逐像素不变。
+     */
+    private fun pageHeightAt(index: Int): Int =
+        if (!style.seamlessFlow) {
+            PageFlowGeometry.fullPageHeight(metrics.pageHeightPx)
+        } else {
+            PageFlowGeometry.flowPageHeight(
+                pageHeightPx = metrics.pageHeightPx,
+                index = index,
+                lastIndex = pages.lastIndex,
+                paddingTop = metrics.paddingTop,
+                paddingBottom = metrics.paddingBottom,
+                lineHeightPx = lineHeightPx,
+            )
+        }
 
     /** 分页结果：每个元素为文本页（片段列表）或整页图片页 */
     private val pages: List<NovelPage>
@@ -348,8 +391,9 @@ class NovelPageSource internal constructor(
             var startLine = 0
             var firstFragment = true
             while (startLine < lineCount) {
-                if (usedLines == linesPerPage) flushPage()
-                val take = minOf(lineCount - startLine, linesPerPage - usedLines)
+                // 容量随页序变化（无缝流下首页让出上边距），故每轮按当前页序重取
+                if (usedLines >= linesOnPage(pagesOut.size)) flushPage()
+                val take = minOf(lineCount - startLine, linesOnPage(pagesOut.size) - usedLines)
                 currentFrags += PageFragment(paraIdx, startLine, take)
                 if (firstFragment) {
                     firstPages[paraIdx] = pagesOut.size
@@ -425,21 +469,23 @@ class NovelPageSource internal constructor(
         return renderMutex.withLock {
             withContext(Dispatchers.IO) {
                 val page = pages[index]
+                val pageHeight = pageHeightAt(index)
                 // 透明底：不填色，pager 背景直接透出
                 val bitmap = Bitmap.createBitmap(
-                    metrics.pageWidthPx, metrics.pageHeightPx, Bitmap.Config.ARGB_8888,
+                    metrics.pageWidthPx, pageHeight, Bitmap.Config.ARGB_8888,
                 )
                 val canvas = Canvas(bitmap)
                 // 整页图片（EPUB 封面页 / 插图页）：等比居中描绘；解码失败留透明底不崩
                 page.imageBytes?.let { bytes ->
-                    drawImagePage(canvas, bytes)
+                    drawImagePage(canvas, bytes, pageHeight)
                     return@withContext bitmap.asImageBitmap()
                 }
+                val top0 = pageTop(index)
                 var slot = 0
                 for (frag in page.fragments) {
                     val layout = layoutFor(frag.paragraphIndex)
-                    val top = metrics.paddingTop + slot * lineHeightPx
-                    val bottom = metrics.paddingTop + (slot + frag.lineCount) * lineHeightPx
+                    val top = top0 + slot * lineHeightPx
+                    val bottom = top0 + (slot + frag.lineCount) * lineHeightPx
                     canvas.save()
                     canvas.clipRect(
                         metrics.paddingLeft, top,
@@ -459,19 +505,19 @@ class NovelPageSource internal constructor(
         }
     }
 
-    /** 整页图片绘制：等比适合页面、居中；解码失败时不绘制（留透明底不崩） */
-    private fun drawImagePage(canvas: Canvas, bytes: ByteArray) {
+    /** 整页图片绘制：等比适合 [pageHeight] 高的页面、居中；解码失败时不绘制（留透明底不崩） */
+    private fun drawImagePage(canvas: Canvas, bytes: ByteArray, pageHeight: Int) {
         val bmp = decodeDownsampledImage(
-            bytes, maxOf(metrics.pageWidthPx, metrics.pageHeightPx),
+            bytes, maxOf(metrics.pageWidthPx, pageHeight),
         ) ?: return
         val scale = minOf(
             metrics.pageWidthPx / bmp.width.toFloat(),
-            metrics.pageHeightPx / bmp.height.toFloat(),
+            pageHeight / bmp.height.toFloat(),
         )
         val drawWidth = bmp.width * scale
         val drawHeight = bmp.height * scale
         val left = (metrics.pageWidthPx - drawWidth) / 2f
-        val top = (metrics.pageHeightPx - drawHeight) / 2f
+        val top = (pageHeight - drawHeight) / 2f
         canvas.drawBitmap(bmp, null, RectF(left, top, left + drawWidth, top + drawHeight), imagePaint)
         bmp.recycle()
     }

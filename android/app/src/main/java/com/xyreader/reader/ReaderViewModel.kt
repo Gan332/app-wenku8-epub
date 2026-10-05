@@ -19,6 +19,7 @@ import com.xyreader.core.Chapter
 import com.xyreader.core.ImageQuality
 import com.xyreader.core.NovelFonts
 import com.xyreader.core.NovelFontWeight
+import com.xyreader.core.PageMode
 import com.xyreader.core.PageSource
 import com.xyreader.core.ReadBackground
 import com.xyreader.core.ReaderGraph
@@ -263,6 +264,7 @@ class ReaderViewModel(
             prefs.novelLetterSpacingPx.toString(),
             prefs.novelFirstLineIndent.toString(),
             prefs.novelChapterNewPage.toString(),
+            prefs.pageMode.name,
         ).joinToString("|")
 
     /** 背景色 → 文字小说正文字色：深背景配浅灰字，浅背景配深字 */
@@ -299,6 +301,9 @@ class ReaderViewModel(
             ),
             firstLineIndent = prefs.novelFirstLineIndent,
             chapterNewPage = prefs.novelChapterNewPage,
+            // 上下滚动是无缝流：页边距只落首页/末页、页高按实际占用高度，
+            // 与左右翻页的整屏页是两种版面，必须参与样式键（否则切模式不重排）。
+            seamlessFlow = prefs.pageMode == PageMode.UP_DOWN,
         )
     }
 
