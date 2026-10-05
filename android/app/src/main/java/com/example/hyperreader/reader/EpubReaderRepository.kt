@@ -6,6 +6,7 @@ import com.example.hyperreader.core.Wenku8Exception
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
+import org.jsoup.nodes.TextNode
 import org.jsoup.parser.Parser
 import java.io.File
 import java.io.FileInputStream
@@ -114,31 +115,85 @@ class EpubReaderRepository(private val context: Context? = null) {
         }
     }
 
+    /**
+     * 章节 HTML → 内容块。
+     *
+     * **递归下降**，不是「只扫 body 的直接子元素」：本应用自己导出的 EPUB 必然套一层容器
+     * （CLASSIC 的 `<body><section epub:type="chapter">`、POTATO 的 `<div id="content">`），
+     * 图片又额外包一层 `<figure>` / `<div class="div_image">`。只扫一层的后果是整章塌成
+     * 一个大段落、**插图全部消失**、扉页封面也不显示。
+     *
+     * 规则：
+     * - `img` 在任意深度都产出 [ReaderBlock.Image]；
+     * - 容器元素（[CONTAINER_TAGS]）与「后代含 img」「直接子元素是容器」的元素递归下钻，
+     *   下钻时把散落在子元素之间的文本按出现顺序攒成段落，不丢也不乱序；
+     * - 其余（`p` / `span` / `b` / `a` …）按整体文本并入当前段落，与原行为一致。
+     */
     private fun parseBlocks(html: String, chapterPath: String): List<ReaderBlock> {
         val document = Jsoup.parse(html, chapterPath, Parser.htmlParser())
         document.select("script,style,noscript,iframe,object,embed").remove()
         val body = document.body() ?: return emptyList()
         val blocks = mutableListOf<ReaderBlock>()
-        for (element in body.children()) {
-            when (element.tagName().lowercase()) {
-                "h1", "h2", "h3", "h4", "h5", "h6" -> blocks += ReaderBlock.Heading(element.tagName().removePrefix("h").toIntOrNull() ?: 1, element.text().trim())
-                "p" -> blocks += ReaderBlock.Paragraph(element.text().trim())
-                "img" -> {
-                    val src = element.attr("src")
-                    if (src.isNotBlank() && !src.startsWith("data:")) blocks += ReaderBlock.Image(resolveImage(chapterPath, src), element.attr("alt"))
-                }
-                else -> {
-                    val text = element.text().trim()
-                    if (text.isNotBlank()) blocks += ReaderBlock.Paragraph(text)
-                }
-            }
-        }
+        collectBlocks(body, chapterPath, blocks)
         if (blocks.isEmpty()) {
+            // 结构化解析一无所获（纯文本章节）：退回整体文本，至少正文可读
             val text = body.text().trim()
             if (text.isNotBlank()) blocks += ReaderBlock.Paragraph(text)
         }
         return blocks.filter { it !is ReaderBlock.Paragraph || it.text.isNotBlank() }
     }
+
+    private fun collectBlocks(parent: Element, chapterPath: String, out: MutableList<ReaderBlock>) {
+        val pending = StringBuilder()
+
+        fun flush() {
+            val text = pending.toString().replace(WHITESPACE_RUN, " ").trim()
+            pending.setLength(0)
+            if (text.isNotEmpty()) out += ReaderBlock.Paragraph(text)
+        }
+
+        for (node in parent.childNodes()) {
+            when (node) {
+                is TextNode -> pending.append(node.text())
+                is Element -> when (node.tagName().lowercase()) {
+                    "br" -> pending.append(' ')
+                    // 分隔线没有对应块类型，直接断开当前段落即可
+                    "hr" -> flush()
+                    "img" -> {
+                        flush()
+                        imageSource(node)?.let { out += ReaderBlock.Image(resolveImage(chapterPath, it), node.attr("alt")) }
+                    }
+                    else ->
+                        if (needsRecursion(node)) {
+                            flush()
+                            collectBlocks(node, chapterPath, out)
+                        } else {
+                            // 行内元素（span / a / b / em …）：文本并入当前段落，顺序不丢
+                            pending.append(node.text())
+                        }
+                }
+                else -> Unit
+            }
+        }
+        flush()
+    }
+
+    /** 是否需要下钻：容器标签、后代含 img、或直接子元素里有容器。 */
+    private fun needsRecursion(node: Element): Boolean =
+        node.tagName().lowercase() in CONTAINER_TAGS ||
+            node.select("img").isNotEmpty() ||
+            node.children().any { it.tagName().lowercase() in CONTAINER_TAGS }
+
+    /**
+     * 图片地址：优先 `src`，懒加载格式回退到 `data-src` / `data-original`。
+     *
+     * 本应用导出的 EPUB 用 `src`；外部 EPUB（尤其是网页另存的）常用懒加载属性，
+     * 只认 `src` 会读到空串而整张丢图。`data:` 与空值一律跳过。
+     */
+    private fun imageSource(node: Element): String? =
+        listOf("src", "data-src", "data-original", "data-lazy-src")
+            .map { node.attr(it).trim() }
+            .firstOrNull { it.isNotEmpty() && !it.startsWith("data:") }
 
     /**
      * 图片条目路径：`chapterPath` 已是 zip 根相对全路径，src 相对它归一即可。
@@ -192,5 +247,16 @@ class EpubReaderRepository(private val context: Context? = null) {
     private companion object {
         const val MAX_EPUB_BYTES = 200L * 1024 * 1024
         const val MAX_ENTRY_BYTES = 30 * 1024 * 1024
+
+        /** 需要下钻的容器标签：正文骨架、图片包裹层与常见块级结构。 */
+        private val CONTAINER_TAGS = setOf(
+            "p", "div", "section", "article", "main", "aside", "header", "footer",
+            "figure", "figcaption", "ul", "ol", "li", "dl", "dt", "dd",
+            "table", "thead", "tbody", "tfoot", "tr", "td", "th",
+            "blockquote", "pre", "center", "h1", "h2", "h3", "h4", "h5", "h6", "body",
+        )
+
+        /** 段落内的连续空白（含源码缩进与换行）压成单个空格。 */
+        private val WHITESPACE_RUN = Regex("\\s+")
     }
 }

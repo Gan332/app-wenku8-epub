@@ -11,6 +11,13 @@ import java.io.File
 class SimpleContentBuilder {
     private val _images: MutableMap<Pair<String, String>, File> = mutableMapOf()
     val images: Map<Pair<String, String>, File> get() = _images
+
+    /** href → MIME。上游把章节插图的 mediaType 写死 `image/jpeg`，png/webp 会被 OPF 谎报。 */
+    private val _imageMimes: MutableMap<String, String> = mutableMapOf()
+
+    /** 取图片的真实 MIME，未登记时回落到上游默认的 `image/jpeg`。 */
+    fun mimeOf(href: String): String = _imageMimes[href] ?: "image/jpeg"
+
     val document: Document = DocumentHelper.createDocument()
     val rootElement: Element = document.addElement("html", "http://www.w3.org/1999/xhtml")
     val headElement: Element = rootElement.addElement("head")
@@ -49,14 +56,19 @@ class SimpleContentBuilder {
     }
 
     /**
-     * make sure image is jpeg file
+     * 插入整页插图。
+     *
+     * [mime] 是新增参数：wenku8 上的插图有 png/gif/webp，写死 `image/jpeg` 会让 OPF
+     * 谎报资源类型，部分阅读器据此判定资源损坏并不渲染该图。默认保持上游行为。
      */
     fun image(
         image: File,
         id: String = "image_${image.hashCode()}",
-        src: String = "image/$id.jpg"
+        src: String = "image/$id.jpg",
+        mime: String = "image/jpeg"
     ) {
         _images[Pair(id, src)] = image
+        _imageMimes[src] = mime
         XmlBuilder.ElementBuilder(contentElement, "div", arrayOf(Attribute("class", "div_image"))) {
             "img"(
                 "border" to 0,

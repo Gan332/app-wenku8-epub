@@ -5,6 +5,7 @@ import com.example.hyperreader.epub.EpubBuilder
 import com.example.hyperreader.model.Book
 import com.example.hyperreader.model.Chapter
 import com.example.hyperreader.model.ContentBlock
+import com.example.hyperreader.model.DownloadedImage
 import com.example.hyperreader.model.JobPhase
 import com.example.hyperreader.model.ParsedChapter
 import com.example.hyperreader.reader.EpubNative
@@ -221,5 +222,118 @@ class ExportPipelineTest {
         assertEquals("书籍信息", parsed.chapters[0].title)
         assertEquals("第一章", parsed.chapters[1].title)
         assertTrue(parsed.chapters[1].blocks.any { it is ReaderBlock.Paragraph })
+    }
+
+    /**
+     * 自产 EPUB 的回读回归（本组测试的核心）。
+     *
+     * EpubBuilder 产出的章节是 `<body><section epub:type="chapter">`，图片包一层 `<figure>`。
+     * 原先 parseBlocks 只遍历 `body.children()` 一层且只认裸 `img`，于是每章塌成一个段落、
+     * **插图全部消失**——而旧断言只有 `any { it is ReaderBlock.Paragraph }`，恰好测不出来。
+     */
+    @Test
+    fun selfProducedEpubKeepsParagraphsAndImagesOnReadback() {
+        val dir = Files.createTempDirectory("epub-illustration").toFile()
+        val output = File(dir, "book.epub")
+        val image = File(dir, "image-0001.png").apply { writeBytes(byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47)) }
+        val book = Book(
+            title = "插图测试书",
+            sourceUrl = "https://www.wenku8.net/book/2.htm",
+            bookUrl = "https://www.wenku8.net/book/2.htm",
+        )
+        val chapters = listOf(
+            ParsedChapter(
+                id = "c1",
+                title = "彩页",
+                volume = "彩页",
+                order = 1,
+                url = "https://www.wenku8.net/novel/2/1/1.html",
+                blocks = listOf(
+                    ContentBlock.Text("图前正文。"),
+                    ContentBlock.Image(0),
+                    ContentBlock.Text("图后正文。"),
+                ),
+            ),
+        )
+        val downloaded = DownloadedImage(
+            chapterId = "c1",
+            sourceId = "c1",
+            chapterIndex = 0,
+            globalIndex = 0,
+            fileName = "image-0001.png",
+            manifestId = "img-0001",
+            mime = "image/png",
+            localPath = image.absolutePath,
+            ext = "png",
+            bytes = image.length(),
+        )
+        EpubBuilder().build(book, chapters, listOf(downloaded), null, output)
+
+        val parsed = EpubReaderRepository().parseArchive("local:illu", output)
+        val chapter = parsed.chapters.first { it.title == "彩页" }
+        val blocks = chapter.blocks
+
+        // 插图必须还在：路径归一到 manifest 里登记的 EPUB/images/image-0001.png
+        val readImage = blocks.filterIsInstance<ReaderBlock.Image>().singleOrNull()
+        assertNotNull("回读后插图丢失：$blocks", readImage)
+        assertEquals("EPUB/images/image-0001.png", readImage!!.path)
+
+        // 段落不能塌成一段：图前图后各成一块
+        val paragraphs = blocks.filterIsInstance<ReaderBlock.Paragraph>().map { it.text }
+        assertTrue("正文段落应保留分段：$paragraphs", paragraphs.size >= 2)
+        assertTrue(paragraphs.any { it.contains("图前正文") })
+        assertTrue(paragraphs.any { it.contains("图后正文") })
+
+        // 块顺序必须与原文一致，不能因为递归而把图甩到段末
+        val imageIndex = blocks.indexOfFirst { it is ReaderBlock.Image }
+        val before = blocks.take(imageIndex).filterIsInstance<ReaderBlock.Paragraph>().any { it.text.contains("图前正文") }
+        val after = blocks.drop(imageIndex).filterIsInstance<ReaderBlock.Paragraph>().any { it.text.contains("图后正文") }
+        assertTrue("插图与段落顺序错乱：$blocks", before && after)
+    }
+
+    /** POTATO 产物的容器是 `<div id="content">` + `<div class="div_image">`，同样必须解析出图。 */
+    @Test
+    fun potatoStyleNestingAlsoKeepsImages() {
+        val json = """
+            {"packageDir":"EPUB","title":"书名","author":"作者","language":"zh-CN","chapters":[
+              {"id":"c1","title":"彩页","href":"EPUB/c1.xhtml",
+               "html":"<html><body><div id=\"content\"><div class=\"div_image\"><img src=\"images/b.png\" alt=\"彩页\"/></div><p>尾部正文。</p></div></body></html>"}
+            ]}
+        """.trimIndent()
+        val parsed = EpubReaderRepository().fromNativeJson("local:potato", json, File("/tmp/any.epub"))
+        val blocks = parsed.chapters.single().blocks
+        assertEquals("EPUB/images/b.png", blocks.filterIsInstance<ReaderBlock.Image>().single().path)
+        assertTrue(blocks.filterIsInstance<ReaderBlock.Paragraph>().any { it.text.contains("尾部正文") })
+    }
+
+    /** 懒加载图必须按 `data-base` 基准解析——与 Web 版 `test/parsers.test.js` 对等。 */
+    @Test
+    fun resolvesLazyImageAgainstDataBase() {
+        val chapterUrl = "https://www.wenku8.net/novel/2/2835/113354.htm"
+        val html = "<div id=\"content\"><p>这是足够长的章节正文内容。</p>" +
+            "<img data-base=\"/image-root/\" data-src=\"cover/a.jpg\"><p>后续正文仍然存在。</p></div>"
+        val parsed = Wenku8Parser.parseChapter(
+            html,
+            chapter.copy(url = chapterUrl),
+            chapterUrl,
+        )
+        assertEquals(listOf("https://www.wenku8.net/image-root/cover/a.jpg"), parsed.imageUrls)
+        assertEquals(listOf(ContentBlock.Image(0)), parsed.blocks.filterIsInstance<ContentBlock.Image>())
+    }
+
+    /** 缓存命中不得把 `putImage` 中途失败留下的 `.tmp` 当成正式图片。 */
+    @Test
+    fun exportCacheIgnoresLeftoverTmpFiles() {
+        val dir = Files.createTempDirectory("export-cache-tmp").toFile()
+        val cache = ExportCache(dir)
+        val url = "https://img.wenku8.com/image/a.png"
+        val source = File(dir, "src.png").apply { writeBytes(byteArrayOf(0x89.toByte(), 0x50)) }
+        val stored = requireNotNull(cache.putImage(url, source, "png"))
+        assertNotNull("正式文件必须命中", cache.image(url))
+
+        // 模拟进程在 copy 与 rename 之间被杀：正式文件没了，只剩 `${key}.png.tmp`
+        assertTrue(stored.delete())
+        File(stored.parentFile, "${stored.name}.tmp").writeBytes(byteArrayOf(0x89.toByte(), 0x50))
+        assertNull("`.tmp` 残留不得被当成缓存命中，否则 EPUB 里会少一张图且无告警", cache.image(url))
     }
 }

@@ -5,6 +5,7 @@ import com.example.hyperreader.model.ContentBlock
 import com.example.hyperreader.model.DownloadedImage
 import com.example.hyperreader.model.OutputFile
 import com.example.hyperreader.model.ParsedChapter
+import com.example.hyperreader.service.imageMimeFor
 import io.nightfish.potatoepub.builder.EpubBuilder
 import java.io.File
 import java.util.Locale
@@ -47,9 +48,19 @@ class PotatoEpubBuilder {
             modifier = java.time.LocalDateTime.now()
         }
 
-        // 封面：potatoepub 的 cover() 只接受 jpg，非 jpg 直接跳过（不阻断整次导出）
-        cover?.takeIf { it.mime == "image/jpeg" || it.ext.equals("jpg", true) || it.ext.equals("jpeg", true) }
-            ?.let { runCatching { builder.cover(File(it.localPath)) } }
+        // 封面：potatoepub 的 cover() 只接受 jpg，非 jpg 直接跳过（不阻断整次导出）。
+        // 跳过时必须把默认清单里的 cover.jpg 撤掉——resFiles 里没有这个文件，
+        // OPF 却声明了它，epubcheck 报「manifest 引用不存在的资源」，
+        // Calibre / Apple Books 会提示「书籍损坏」。本应用自读看不出来，
+        // 只有用户把文件发出去时才爆。
+        val usableCover = cover?.takeIf {
+            it.mime == "image/jpeg" || it.ext.equals("jpg", true) || it.ext.equals("jpeg", true)
+        }
+        if (usableCover != null) {
+            runCatching { builder.cover(File(usableCover.localPath)) }
+        } else {
+            builder.manifestItems.removeIf { it.href == "cover.jpg" }
+        }
 
         var imageSeq = 0
         chapters.forEach { chapter ->
@@ -69,6 +80,7 @@ class PotatoEpubBuilder {
                                         image = File(image.localPath),
                                         id = "img_${imageSeq++}",
                                         src = "images/${image.fileName}",
+                                        mime = imageMimeFor(image.ext),
                                     )
                                 }
                         }

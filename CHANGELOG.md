@@ -15,6 +15,51 @@
   末页底部，其余页上下内边距为 0，且位图高度取该页**实际占用**高度，相邻页严丝合缝。
   左右翻页仍是整屏页 + 四边页边距，逐像素不变。
 
+### 插图修复
+
+插图链路的四处缺陷。一次专项排查覆盖「源站解析 → 下载 → 打包 → 回读」四段，
+确认**解析期的标记法、下载期的对齐键与失败占位本来就是正确的**（下载失败不会让后续
+图片错位，两引擎过滤条件逐字一致），真实缺陷集中在两端。
+
+- **自产 EPUB 回读时插图全部消失、正文塌成一大段**（最严重，两引擎通杀）：
+  `EpubReaderRepository.parseBlocks` 只遍历 `body.children()` **一层**且只认**裸** `img`，
+  而 EpubBuilder 产出的章节是 `<body><section epub:type="chapter">`、图片包一层
+  `<figure>`，POTATO 侧是 `<div id="content">` + `<div class="div_image">`。
+  结果是导入自己导出的 EPUB 后**每章变成一整段没有分段的长文、所有插图消失**、
+  扉页封面也不显示。改为递归下降：`img` 在任意深度都产出图片块，容器元素下钻且
+  把散落在子元素之间的文本按顺序攒成段落（不丢也不乱序），其余行内元素并入当前段落。
+  Rust 快路径与 legacy 共用该函数，一处改动两条路径同时生效。顺带支持懒加载
+  `data-src` / `data-original` 作为图片地址回退（外部 EPUB 常用）。
+- **部分彩页在导出期就少图**：Kotlin 侧解析图片一律以章节 URL 为基准，缺了源站给懒加载图
+  的 `data-base` 基准。`data-base="/image-root/" data-src="cover/a.jpg"` 这类写法整章解析不出图，
+  而告警只含糊地说「未能下载」，用户无法判断是源站问题还是解析错了。
+  改为先算 `data-base` 再按原优先级解析，与 Web 版 `src/wenku8.js` 的 `imageSource` 同源
+  （此前只有 JS 侧有对等测试，Kotlin 侧完全没有）。
+- **缓存可能把 `.tmp` 当成正式图片**：`ExportCache.image()` 用 `startsWith("${key}.")` 匹配，
+  会命中 `putImage` 在 copy 与 rename 之间被杀留下的 `${key}.jpg.tmp`。于是扩展名变成
+  `tmp`、mime 兜底成 image/jpeg，EPUB 里少一张图且**没有任何告警**。改为按扩展名白名单过滤。
+- **POTATO 引擎两处 OPF 硬伤**（本应用自读看不出来，发给第三方才爆）：
+  无封面时 OPF 仍无条件声明 `cover.jpg`，epubcheck 报「manifest 引用不存在的资源」，
+  Calibre / Apple Books 提示「书籍损坏」——跳过封面时改为撤掉该条目；
+  章节插图的 mediaType 写死 `image/jpeg`，png/webp 被谎报，部分阅读器据此判定资源损坏
+  并丢图——改为传入真实 mime（`SimpleContentBuilder.image` 与 `imgRes` 新增可选参数，
+  默认保持上游行为）。
+
+#### 内部
+
+- 新增 4 条回归测试（`ExportPipelineTest`）：自产 EPUB 回读必须保住分段、插图与顺序；
+  POTATO 的 `<div>` 嵌套同样解析出图；`data-base` 懒加载基准（与 `test/parsers.test.js` 对等）；
+  缓存不得把 `.tmp` 残留当成命中。
+- 顺带发现此前**没有任何测试**给 `EpubBuilder` 构造过 `DownloadedImage`——插图的打包路径
+  （figure 结构、manifest mediaType、zip 条目名）此前完全没有保护。
+
+#### 未做
+
+- POTATO 正文仍无 `<p>` 段落结构、`ContentBlock.Rich` 在该引擎下仍以字面量 `<b>` 显示
+  （vendored 的 `SimpleContentBuilder.text` 走 dom4j `addText`，标签被转义）。
+  这是正文问题不是插图问题，且要改 vendored 第三方代码，另开一批处理。
+- POTATO 章 id 由「内容 + 标题」hash 派生，重复标题且内容相同的章节会撞 id 并少一章（低概率）。
+
 ### 界面动效与组件优化
 
 一次面向 MiuiX 界面的专项排查（不引入 material/material3，界面统一 MiuiX 的约定不变）。

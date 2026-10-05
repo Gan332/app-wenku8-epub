@@ -58,7 +58,7 @@ class EpubBuilder {
                         EpubManifest.Item(
                             href = it.key.second,
                             id = it.key.first,
-                            mediaType = "image/jpeg",
+                            mediaType = simpleContentBuilder.mimeOf(it.key.second),
                         )
                     )
                     resFiles[it.key.second] = it.value
@@ -69,16 +69,18 @@ class EpubBuilder {
         chapters.add(chapter)
     }
 
+    /** [mime] 新增默认参数：默认保持上游的 `image/jpeg`，调用方可传真实类型。 */
     fun imgRes(
         href: String,
         id: String,
-        file: File
+        file: File,
+        mime: String = "image/jpeg"
     ) {
         manifestItems.add(
             EpubManifest.Item(
                 href = href,
                 id = id,
-                mediaType = "image/jpeg",
+                mediaType = mime,
             )
         )
         resFiles[href] = file

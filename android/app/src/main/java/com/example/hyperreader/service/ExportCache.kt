@@ -37,11 +37,21 @@ class ExportCache(root: File) {
         }
     }
 
-    /** 命中返回图片文件（扩展名决定 mime），未命中返回 null。 */
+    /**
+     * 命中返回图片文件（扩展名决定 mime），未命中返回 null。
+     *
+     * 必须过滤掉 [IMAGE_EXTENSIONS] 之外的扩展名：`putImage` 先写 `${key}.jpg.tmp` 再 rename，
+     * 进程在两步之间被杀就会留下 `.tmp` 残留。原先的 `startsWith("${key}.")` 会命中它，
+     * `extension` 变成 `tmp`、`imageMimeFor` 兜底成 image/jpeg，最终 EPUB 里少一张图
+     * 且**没有任何告警**——第三方阅读器按扩展名/魔数不符直接拒绝渲染。
+     */
     fun image(url: String): File? {
         val prefix = "${key(url)}."
-        return imagesDir.listFiles { file -> file.isFile && file.name.startsWith(prefix) && file.length() > 0L }
-            ?.firstOrNull()
+        return imagesDir.listFiles { file ->
+            file.isFile && file.length() > 0L &&
+                file.name.startsWith(prefix) &&
+                file.extension.lowercase() in IMAGE_EXTENSIONS
+        }?.firstOrNull()
     }
 
     /**
@@ -84,6 +94,13 @@ class ExportCache(root: File) {
         }
     }
 }
+
+/**
+ * 缓存图片的合法扩展名（与 [imageMimeFor] 的集合一致）。
+ *
+ * 只认这些，才能把 `putImage` 中途失败留下的 `.tmp` 残留排除在缓存命中之外。
+ */
+internal val IMAGE_EXTENSIONS = setOf("jpg", "jpeg", "png", "gif", "webp")
 
 /** 扩展名 → MIME（与 Wenku8HttpClient.detectImage 的集合一致）。 */
 internal fun imageMimeFor(ext: String): String = when (ext.lowercase()) {

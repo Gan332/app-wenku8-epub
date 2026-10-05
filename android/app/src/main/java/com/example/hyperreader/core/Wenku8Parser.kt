@@ -108,7 +108,7 @@ object Wenku8Parser {
         root.select("[id^=adv],[class*=advert],[class*=banner]").remove()
         val imageUrls = mutableListOf<String>()
         for (image in root.select("img").toList()) {
-            val url = direct(sequenceOf("data-original", "data-src", "data-lazy-src", "src").mapNotNull { Wenku8Url.resolve(pageUrl, image.attr(it)) }.firstOrNull())
+            val url = direct(imageSource(image, pageUrl))
             val width = image.attr("width").toIntOrNull() ?: 0
             val height = image.attr("height").toIntOrNull() ?: 0
             if (url == null || (width in 1..3) || (height in 1..3) || Regex("spacer|blank\\.(gif|png)|pixel", RegexOption.IGNORE_CASE).containsMatchIn(image.attr("src"))) {
@@ -131,6 +131,24 @@ object Wenku8Parser {
             blocks.filterIsInstance<ContentBlock.Rich>().joinToString("") { stripRichHtml(it.html) }
         if (plain.length < 10 && imageUrls.isEmpty()) throw Wenku8Exception("章节正文为空：${chapter.title}", "EMPTY_CHAPTER")
         return ParsedChapter(chapter.id, chapter.title, chapter.volume, chapter.order, pageUrl, imageUrls, blocks, plain.length)
+    }
+
+    /**
+     * 图片地址：先算懒加载基准，再按 `data-original > data-src > data-lazy-src > src` 取值。
+     *
+     * `data-base` 是源站给懒加载图用的**基准目录**：彩页常用
+     * `data-base="/image-root/" data-src="cover/a.jpg"`，此时相对地址必须以 `data-base`
+     * 为基准而非章节 URL。少了这一步这类插图**在导出期就解析不出来**，成品 EPUB 里整章无图，
+     * 而告警只会含糊地说「未能下载」，用户无法判断是源站问题还是解析错了。
+     *
+     * 与 Web 版 `src/wenku8.js` 的 `imageSource` 同源，回归见
+     * `ExportPipelineTest.resolvesLazyImageAgainstDataBase`。
+     */
+    private fun imageSource(image: Element, pageUrl: String): String? {
+        val dataBase = Wenku8Url.resolve(pageUrl, image.attr("data-base")) ?: pageUrl
+        return sequenceOf("data-original", "data-src", "data-lazy-src", "src")
+            .mapNotNull { Wenku8Url.resolve(dataBase, image.attr(it)) }
+            .firstOrNull()
     }
 
     /** 强调白名单：输出的标签**全部由代码生成**，结构上不存在属性注入面。 */
