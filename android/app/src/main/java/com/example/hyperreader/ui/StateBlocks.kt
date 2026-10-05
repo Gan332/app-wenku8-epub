@@ -37,7 +37,6 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
  */
 @Composable
 fun LoadingBlock(text: String? = null, modifier: Modifier = Modifier) {
-    val spec = tween(Motion.duration())
     Row(
         modifier
             .fillMaxWidth()

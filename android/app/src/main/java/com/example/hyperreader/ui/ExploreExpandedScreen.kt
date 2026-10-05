@@ -28,7 +28,6 @@ import com.example.hyperreader.model.SearchBook
 import com.example.hyperreader.ui.cover.CoverImage
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
-import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 /**
  * 全屏榜单展开页（0.18.0，对应 LNR 的 `ExpandedPageScreen`）。

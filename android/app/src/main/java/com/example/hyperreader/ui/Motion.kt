@@ -90,20 +90,24 @@ object Motion {
 fun Modifier.staggeredEnter(index: Int, visible: Boolean = true): Modifier = composed {
     val alpha = remember { Animatable(0f) }
     val scale = remember { Animatable(ENTER_SCALE_FROM) }
+    // 时长与延迟必须在**组合期**算好再传进去：`LaunchedEffect` 的 block 不是
+    // @Composable 上下文，在里面调 Motion.duration() / staggeredDelay() 编译不过。
+    val alphaDuration = Motion.duration()
+    val scaleDuration = Motion.duration(UiDimens.MOTION_SLOW)
+    val delay = Motion.staggeredDelay(index)
     LaunchedEffect(visible, index) {
-        val delay = Motion.staggeredDelay(index)
         coroutineScope {
             // alpha 与 scale 同时推进：串行 await 会让缩放白白多等一个 alpha 时长
             launch {
                 alpha.animateTo(
                     targetValue = if (visible) 1f else 0f,
-                    animationSpec = tween(Motion.duration(), delay, FastOutSlowInEasing),
+                    animationSpec = tween(alphaDuration, delay, FastOutSlowInEasing),
                 )
             }
             launch {
                 scale.animateTo(
                     targetValue = if (visible) 1f else ENTER_SCALE_FROM,
-                    animationSpec = tween(Motion.duration(UiDimens.MOTION_SLOW), delay, FastOutSlowInEasing),
+                    animationSpec = tween(scaleDuration, delay, FastOutSlowInEasing),
                 )
             }
         }
