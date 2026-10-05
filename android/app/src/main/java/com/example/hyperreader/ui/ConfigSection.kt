@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -47,7 +46,7 @@ fun ConfigSection(
     onExportRequest: () -> Unit,
     onImportRequest: () -> Unit,
 ) {
-    ConfigScaffold("配置导入导出", onBack, listOf(
+    SettingsScaffold("配置导入导出", onBack, listOf(
         {
             Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(UiDimens.cardInset)) {
                 Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXS)) {
@@ -56,7 +55,7 @@ fun ConfigSection(
                 }
             }
         },
-        { ConfigSectionTitle("导出") },
+        { SectionTitle("导出") },
         {
             TextButton(
                 text = "导出配置文件",
@@ -64,7 +63,7 @@ fun ConfigSection(
                 modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
             )
         },
-        { ConfigSectionTitle("导入") },
+        { SectionTitle("导入") },
         {
             TextButton(
                 text = "从文件导入",
@@ -87,40 +86,19 @@ fun ConfigSection(
                 )
             }
         },
-        { ConfigSectionTitle("导出包含什么") },
+        { SectionTitle("导出包含什么") },
         { ConfigBullet("主题：配色模式、动态色开关、强调色") },
         { ConfigBullet("阅读器：背景、文字色、字号、字重、行高、段距、左右边距、翻页方式、屏幕常亮、沉浸模式") },
-        { ConfigSectionTitle("绝不包含") },
+        { SectionTitle("绝不包含") },
         { ConfigBullet("Wenku8 登录 Cookie、PHPSESSID、jieqiUserInfo 与任何 Token") },
         { ConfigBullet("账号与密码（应用从不保存密码）") },
         { ConfigBullet("书架条目、阅读记录与阅读统计——属用户内容，需单独迁移") },
         { ConfigBullet("EPUB 与字体文件本体；自定义字体是设备本地授权，不随配置同步") },
-        { ConfigSectionTitle("导入规则") },
+        { SectionTitle("导入规则") },
         { ConfigBullet("配置版本不匹配时整份拒绝并提示，不会静默降级") },
         { ConfigBullet("单个字段非法只跳过该字段并计数，其余照常导入") },
         { ConfigBullet("越界数值按合法区间钳制，与设置页滑杆范围一致") },
     ))
-}
-
-
-@Composable
-private fun ConfigScaffold(title: String, onBack: () -> Unit, blocks: List<@Composable () -> Unit>) {
-    Column(Modifier.fillMaxWidth().padding(top = UiDimens.spaceL), verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
-        TextButton(text = "‹ 返回设置", onClick = onBack)
-        Text(title, fontSize = UiDimens.title, fontWeight = FontWeight.Bold)
-        LazyColumn(
-            modifier = Modifier.fillMaxWidth(),
-            contentPadding = PaddingValues(horizontal = UiDimens.pagePadding, vertical = UiDimens.spaceXXS),
-            verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS),
-        ) {
-            items(blocks.size) { index -> blocks[index]() }
-        }
-    }
-}
-
-@Composable
-private fun ConfigSectionTitle(text: String) {
-    Text(text, fontWeight = FontWeight.Bold, fontSize = UiDimens.section)
 }
 
 @Composable

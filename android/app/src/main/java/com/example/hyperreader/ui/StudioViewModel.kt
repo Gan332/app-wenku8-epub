@@ -198,6 +198,14 @@ data class StudioUiState(
     val searchMessage: String? = null,
     val loggedIn: Boolean = false,
     val bookshelf: List<BookshelfEntry> = emptyList(),
+    /**
+     * 书架是否已从 DataStore 读到首帧。
+     *
+     * [bookshelf] 初值是空列表，而 DataStore 首次 emit 之前 UI 会直接渲染空态卡——
+     * 冷启动先闪一屏「书架还是空的」，再被真实列表整体替换。区分「还没读到」与
+     * 「确实是空的」，让首屏渲染骨架而不是误报空态。
+     */
+    val bookshelfLoaded: Boolean = false,
     /** 书架排序方式（持久化设置；0.19.0-alpha03 起用户可选）。 */
     val bookshelfSort: com.example.hyperreader.settings.BookshelfSort = com.example.hyperreader.settings.BookshelfSort.RecentRead,
     val readingStats: ReadingStats = ReadingStats(),
@@ -342,7 +350,12 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
             bookshelfRepository.entries.collect { entries ->
                 // 仓库只给存储顺序，排序在这里按当前设置应用（两个 collector 都写 bookshelf，
                 // 因此各自都要维持「已排序」不变量，否则后到的原始列表会覆盖排序结果）
-                mutable.update { state -> state.copy(bookshelf = sortBookshelf(entries, state.bookshelfSort)) }
+                mutable.update { state ->
+                    state.copy(
+                        bookshelf = sortBookshelf(entries, state.bookshelfSort),
+                        bookshelfLoaded = true,
+                    )
+                }
             }
         }
         viewModelScope.launch {

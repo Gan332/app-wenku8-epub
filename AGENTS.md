@@ -187,6 +187,16 @@ OkHttp 执行不了故直接 403。浏览器通过后下发的 `cf_clearance` **
 - **动效**（0.18.0）：统一用 `ui/Motion.kt`（交错入场/按压/展开/shimmer），
   时长经 `Motion.duration()` 换算，**必须尊重系统「移除动画」**（`ANIMATOR_DURATION_SCALE=0` 时归零）；
   长列表交错延迟只对前 `Motion.STAGGER_VISIBLE_LIMIT` 项累加，否则靠后的项会等几秒才出现
+  （阅读器侧同源实现是 `com/xyreader/core/ReaderMotion.kt`，独立声明的原因同 `ReaderDimens`）
+  **所有 `tween(...)` 的时长都不得写裸常量**：包括 `animateItem()` 的 spec，
+  默认 spring 同样不行——它不响应系统动画缩放
+- **入场动画必须真的会播**：`animateFloatAsState(targetValue=…)` 首次组合时初值即终值，
+  进场动画等于没做；需要入场动画时用 `Animatable` + `LaunchedEffect`，
+  或 `AnimatedVisibility(visibleState = remember { MutableTransitionState(false).apply { targetState = true } })`
+- **状态呈现**（0.19.0）：加载中用 `ui/StateBlocks.kt` 的 `LoadingBlock`（转圈 + 可选说明），
+  空态用 `EmptyState`（标题 + 可选说明 + 可选动作）；骨架用 `ShimmerLine`（整行）或
+  `ShimmerBlock`（封面等非整行占位）。**骨架尺寸必须与真实内容一致**，否则数据到达时
+  内容整屏跳位；同一屏不要同时出现骨架与转圈两套加载指示
 - 长列表使用 `LazyColumn`，不要一次性构建全部条目
 - 读图/解析类操作放 `Dispatchers.IO`
 - MiuX 组件**唯一**：0.9.3 起 material/material3/material-icons 全量移除，

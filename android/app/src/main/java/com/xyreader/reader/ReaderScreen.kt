@@ -145,11 +145,11 @@ import top.yukonga.miuix.kmp.icon.extended.Unlock
 import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.distinctUntilChanged
+import com.xyreader.core.ReaderMotion
 
 /** 工具栏浮层统一样式：半透明深底 + 20dp 圆角 */
 private val BarBackground = Color(0xCC101318)
 private val BarCorner = RoundedCornerShape(ReaderDimens.panelCorner)
-private const val BAR_ANIM_MS = 250
 
 /** 页内双击放大的目标倍数 */
 private const val PAGE_ZOOM = 2.5f
@@ -472,6 +472,10 @@ private fun ReaderPagerArea(
     val currentPage = if (upDown) verticalListState.firstVisibleItemIndex else pagerState.currentPage
     // 页面与页边距（ContentScale.Fit 留白）统一使用配置的阅读背景色
     val bgColor = prefs.readBackground.toComposeColor()
+    // 浮层进出与缩放动画统一经 ReaderMotion 换算：系统「移除动画」时归零，
+    // 阅读器不再与 App 其它页面的动效行为分叉。
+    val barAnim = ReaderMotion.duration()
+    val zoomAnim = ReaderMotion.duration(ReaderMotion.ZOOM_BASE)
 
     var toolbarVisible by remember { mutableStateOf(false) }
     var sliderActive by remember { mutableStateOf(false) }
@@ -509,7 +513,7 @@ private fun ReaderPagerArea(
         scope.launch {
             val from = pageZoom.scale
             val to = if (from > 1f) 1f else PAGE_ZOOM
-            animate(from, to, animationSpec = tween(200)) { value, _ -> pageZoom.set(value) }
+            animate(from, to, animationSpec = tween(zoomAnim)) { value, _ -> pageZoom.set(value) }
             if (to == 1f) pageZoom.reset()
         }
     }
@@ -595,7 +599,7 @@ private fun ReaderPagerArea(
                                             val target = anchoredScrollOffset(pixel.toInt(), offset.y, to / from)
                                             val (index, offsetInItem) =
                                                 ContinuousZoomMath.locate(heights, target, to)
-                                            animate(from, to, animationSpec = tween(200)) { value, _ ->
+                                            animate(from, to, animationSpec = tween(zoomAnim)) { value, _ ->
                                                 columnZoomState.setScalePreservePan(value)
                                             }
                                             if (to <= 1f) {
@@ -717,8 +721,8 @@ private fun ReaderPagerArea(
         AnimatedVisibility(
             visible = toolbarVisible && !locked,
             modifier = Modifier.align(Alignment.TopCenter),
-            enter = fadeIn(tween(BAR_ANIM_MS)) + slideInVertically(tween(BAR_ANIM_MS)) { -it },
-            exit = fadeOut(tween(BAR_ANIM_MS)) + slideOutVertically(tween(BAR_ANIM_MS)) { -it },
+            enter = fadeIn(tween(barAnim)) + slideInVertically(tween(barAnim)) { -it },
+            exit = fadeOut(tween(barAnim)) + slideOutVertically(tween(barAnim)) { -it },
         ) {
             Row(
                 modifier = Modifier
@@ -780,8 +784,8 @@ private fun ReaderPagerArea(
         AnimatedVisibility(
             visible = toolbarVisible && !locked,
             modifier = Modifier.align(Alignment.BottomCenter),
-            enter = fadeIn(tween(BAR_ANIM_MS)) + slideInVertically(tween(BAR_ANIM_MS)) { it },
-            exit = fadeOut(tween(BAR_ANIM_MS)) + slideOutVertically(tween(BAR_ANIM_MS)) { it },
+            enter = fadeIn(tween(barAnim)) + slideInVertically(tween(barAnim)) { it },
+            exit = fadeOut(tween(barAnim)) + slideOutVertically(tween(barAnim)) { it },
         ) {
             val last = (pageCount - 1).coerceAtLeast(0)
             val shownPage = (if (sliderActive) sliderPage else currentPage)
@@ -978,9 +982,9 @@ private fun ReaderPagerArea(
         AnimatedVisibility(
             visible = locked && lockBadgeVisible,
             modifier = Modifier.align(Alignment.CenterEnd),
-            enter = fadeIn(tween(BAR_ANIM_MS)) +
-                slideInHorizontally(tween(BAR_ANIM_MS)) { it },
-            exit = fadeOut(tween(BAR_ANIM_MS)),
+            enter = fadeIn(tween(barAnim)) +
+                slideInHorizontally(tween(barAnim)) { it },
+            exit = fadeOut(tween(barAnim)),
         ) {
             Surface(
                 onClick = {

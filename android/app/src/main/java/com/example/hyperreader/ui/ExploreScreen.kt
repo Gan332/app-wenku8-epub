@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -119,10 +120,15 @@ fun ExploreScreen(
 
         if (state.exploreBusy && state.exploreRows.isEmpty()) {
             item(key = "explore-loading") {
+                // 骨架按真实封面卡尺寸出图（POSTER_WIDTH × 3:4），而不是三条任意高度的灰条——
+                // 否则数据到达时下方内容整体上移近一屏高度
                 Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
                     ShimmerLine(heightDp = 18)
-                    ShimmerLine(heightDp = 132)
-                    ShimmerLine(heightDp = 18)
+                    Row(horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
+                        repeat(2) {
+                            ShimmerBlock(Modifier.size(POSTER_WIDTH, POSTER_WIDTH * 4f / 3f))
+                        }
+                    }
                 }
             }
         }

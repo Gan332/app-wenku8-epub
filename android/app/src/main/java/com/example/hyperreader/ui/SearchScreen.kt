@@ -7,6 +7,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.clickable
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
@@ -83,19 +86,27 @@ fun SearchScreen(state: StudioUiState, viewModel: StudioViewModel, onLogin: () -
         }
         state.searchMessage?.let { MessageCard(it) }
         if (state.searchResults.isEmpty() && state.searchBusy) {
-            Row(
-                Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin).padding(vertical = UiDimens.spaceXS),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                CircularProgressIndicator(size = UiDimens.indicator)
-            }
+            // 原先这里只有一个无提示的孤立转圈，全项目唯一没有说明文字的加载态
+            LoadingBlock("正在搜索…")
         } else if (state.searchResults.isEmpty() && !state.searchBusy) {
-            val emptyMessage = if (state.searchPage > 0) "没有找到结果。" else "输入关键词开始搜索。"
-            Text(emptyMessage, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f), fontSize = UiDimens.body)
+            if (state.searchPage > 0) {
+                EmptyState(title = "没有找到结果", description = "换个关键词，或去掉作者限定再试一次。")
+            } else {
+                EmptyState(title = "输入关键词开始搜索", description = "支持书名与作者，按书名搜索走本地书目索引，断网也能用。")
+            }
         } else {
             LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
-                items(state.searchResults, key = { it.id }) { result -> SearchResultCard(result, viewModel::openSearchBook, Modifier.animateItem()) }
+                items(state.searchResults, key = { it.id }) { result ->
+                    SearchResultCard(
+                        result,
+                        viewModel::openSearchBook,
+                        Modifier.animateItem(
+                            fadeInSpec = tween(Motion.duration()),
+                            placementSpec = tween(Motion.duration()),
+                            fadeOutSpec = tween(Motion.duration(UiDimens.MOTION_FAST)),
+                        ),
+                    )
+                }
                 item {
                     Column(
                         Modifier.fillMaxWidth().padding(vertical = UiDimens.spaceXS),
@@ -131,7 +142,20 @@ fun SearchScreen(state: StudioUiState, viewModel: StudioViewModel, onLogin: () -
 
 @Composable
 private fun SearchResultCard(result: SearchBook, onOpen: (SearchBook) -> Unit, modifier: Modifier = Modifier) {
-    Card(modifier.fillMaxWidth(), insideMargin = PaddingValues(UiDimens.cardInset)) {
+    val interaction = remember { MutableInteractionSource() }
+    // 整卡可点 + 按压缩放：原先整卡既不可点也无反馈，只有卡内一个按钮，
+    // 点大片留白毫无反应，与书架/探索/设置三张卡的交互语义不一致。
+    Card(
+        modifier
+            .fillMaxWidth()
+            .clickable(
+                interactionSource = interaction,
+                indication = null,
+                onClick = { onOpen(result) },
+            )
+            .pressableScale(interaction),
+        insideMargin = PaddingValues(UiDimens.cardInset),
+    ) {
         Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXS)) {
             Text(result.title, fontSize = UiDimens.section, fontWeight = FontWeight.Bold, maxLines = 2)
             if (result.author.isNotBlank()) Text("作者：${result.author}", fontSize = UiDimens.caption)
@@ -143,7 +167,6 @@ private fun SearchResultCard(result: SearchBook, onOpen: (SearchBook) -> Unit, m
             }
             Text(meta.joinToString(" · "), color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f), fontSize = UiDimens.captionSmall)
             if (result.latestChapter.isNotBlank()) Text("最新：${result.latestChapter}", fontSize = UiDimens.captionSmall, maxLines = 1)
-            TextButton(text = "查看详情与目录", onClick = { onOpen(result) })
         }
     }
 }

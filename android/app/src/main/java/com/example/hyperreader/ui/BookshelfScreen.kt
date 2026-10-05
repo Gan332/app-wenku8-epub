@@ -110,10 +110,15 @@ fun BookshelfScreen(
             onCancel = { jobId -> viewModel.cancel(jobId) },
         )
         HorizontalDivider(Modifier.fillMaxWidth())
-        if (state.bookshelf.isEmpty()) {
-            Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(UiDimens.cardInset)) {
-                Text("书架还是空的。\n可以从“探索”加入 Wenku8 书籍，或导入本地 EPUB。", fontSize = UiDimens.body, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .8f))
-            }
+        // 三态：读 DataStore 中 → 读到了且为空 → 有书。
+        // 少了中间那一态，冷启动会先闪一屏「书架还是空的」再被真实列表替换。
+        if (!state.bookshelfLoaded) {
+            BookshelfSkeleton()
+        } else if (state.bookshelf.isEmpty()) {
+            EmptyState(
+                title = "书架还是空的",
+                description = "可以从「探索」加入 Wenku8 书籍，或导入本地 EPUB。",
+            )
         } else {
             val sections = remember(state.bookshelf) { groupBookshelf(state.bookshelf) }
             // 折叠状态存在这里而非 ViewModel：纯 UI 关注点，不该进业务状态（AGENTS §4.6.1）。
@@ -136,7 +141,16 @@ fun BookshelfScreen(
                                     resume = readingProgress[entry.bookId],
                                     now = now,
                                     // 交错入场：按分组内索引延迟，超过首屏上限后不再累加（AGENTS §4.4）
-                                    modifier = Modifier.animateItem().staggeredEnter(index),
+                                    modifier = Modifier
+                                        // 显式给 spec：不传时 Compose 用默认 spring，
+                                        // 与同一次交互里 alpha/scale 的 tween 手感不一致，
+                                        // 且不响应系统动画缩放。
+                                        .animateItem(
+                                            fadeInSpec = tween(Motion.duration()),
+                                            placementSpec = tween(Motion.duration()),
+                                            fadeOutSpec = tween(Motion.duration(UiDimens.MOTION_FAST)),
+                                        )
+                                        .staggeredEnter(index),
                                     onMore = { menuEntryId = entry.id },
                                     onOpen = {
                                         // 点卡片主体直接读：本地书进阅读器并记阅读，远程书进在线阅读（AGENTS §4.6.1）
@@ -368,6 +382,34 @@ private fun BookEntryMenu(
                 onClick = { act { viewModel.setPinned(entry.id, !entry.isPinned) } },
             )
             BasicComponent(title = "移出书架", onClick = { act { viewModel.removeFromShelf(entry.id) } })
+        }
+    }
+}
+
+/**
+ * 书架首屏骨架：两块与真实卡片同尺寸的占位。
+ *
+ * 尺寸取自 [CardCoverWidth] / [CardCoverHeight]——骨架与真实内容同高，
+ * 数据到达时列表不会整体跳一屏。
+ */
+@Composable
+private fun BookshelfSkeleton() {
+    Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
+        repeat(2) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS),
+            ) {
+                ShimmerBlock(Modifier.size(CardCoverWidth, CardCoverHeight))
+                Column(
+                    Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXS),
+                ) {
+                    ShimmerLine(Modifier.fillMaxWidth(), heightDp = 18)
+                    ShimmerLine(Modifier.fillMaxWidth(), heightDp = 14)
+                    ShimmerLine(Modifier.fillMaxWidth(0.6f), heightDp = 14)
+                }
+            }
         }
     }
 }

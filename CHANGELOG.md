@@ -15,6 +15,59 @@
   末页底部，其余页上下内边距为 0，且位图高度取该页**实际占用**高度，相邻页严丝合缝。
   左右翻页仍是整屏页 + 四边页边距，逐像素不变。
 
+### 界面动效与组件优化
+
+一次面向 MiuiX 界面的专项排查（不引入 material/material3，界面统一 MiuiX 的约定不变）。
+先修掉几处「界面其实和约定说好的不一样」的缺陷，再收敛状态呈现。
+
+**动效失效（原先根本没在动）**
+
+- **交错入场从不出场**：`Motion.staggeredEnter` 用 `animateFloatAsState(targetValue = …)`，
+  而该 API 首次组合时初值就等于 targetValue——书架卡片与详情字段卡的「淡入 + 轻微放大」
+  首帧直接是终值，交错入场等于没做。改用 `Animatable` + `LaunchedEffect` 推到目标值，
+  alpha 与 scale 并行推进。系统「移除动画」时两者同时归零。
+- **按压反馈不响应系统「移除动画」**：`pressableScale` 绕过 `Motion.duration()` 直接用
+  `MOTION_FAST` 常量，是全应用唯一在系统关闭动画后还会动的交互反馈。改走换算。
+- **阅读器是唯一不响应「移除动画」的界面**：工具栏进出写死 250ms、缩放写死 200ms，
+  读者的无障碍开关对阅读器完全无效。新增 `com/xyreader/core/ReaderMotion.kt`
+  （与宿主 `Motion` 同源，独立声明是因为 `com.xyreader` 不得反向依赖宿主，AGENTS §4.8），
+  阅读器 8 处硬编码时长全部改走它。
+- **列表项动画绕过动效基建**：书架与搜索的 `Modifier.animateItem()` 未传 spec，
+  用的是 Compose 默认 spring，与同一次交互里 alpha/scale 的 tween 手感不一致，
+  也不响应系统动画缩放。改为显式传 tween spec。
+
+**界面 bug**
+
+- **阅读统计页内容被挤出屏幕**：外层 `Column` 不可滚、内层 `LazyColumn` 又吃光剩余高度，
+  「清空阅读统计」按钮被推出屏幕底部不可点（热力图 + 四张统计卡之下）。整页改为可滚，
+  书籍排行改用普通 `Column`——嵌套 `LazyColumn` 在可滚容器里本就无法测量高度。
+- **配置备份页内容被裁掉**：`ConfigScaffold` 与 `SettingsScaffold` 近乎逐行重复，
+  唯独少了 `fillMaxSize()` 与 `LazyColumn` 的 `weight(1f)`——而后者注释里明确写着这样写会
+  把内容裁掉。删除重复实现，配置页直接复用 `SettingsScaffold`。
+- **冷启动先闪一屏「书架还是空的」**：`StudioUiState.bookshelf` 初值是空列表，
+  DataStore 首次 emit 前 UI 直接渲染空态卡。新增 `bookshelfLoaded` 标志区分
+  「还没读到」与「确实是空的」，首屏渲染与真实卡片同尺寸的骨架。
+- **搜索结果卡整片留白点不动**：`SearchResultCard` 的 `Card` 整体既不可点也无按压反馈，
+  唯一可点处是卡内一个按钮，与书架/探索/设置三类卡的交互语义不一致。改为整卡可点 +
+  按压缩放。
+
+**状态呈现收敛**
+
+- 新增 `ui/StateBlocks.kt`：`LoadingBlock`（转圈 + 可选说明）与 `EmptyState`
+  （标题 + 可选说明 + 可选动作）。此前同一件事有 4~6 种写法——进度圈有带尺寸的、裸的、
+  圆环加文字并排的；空态文案与字号各不相同，搜索页甚至只有一个无提示的孤立转圈。
+  已替换书架、探索、榜单展开、搜索、书籍详情、导出解析、导出记录、阅读统计共 9 处。
+- 新增 `ShimmerBlock`：骨架尺寸完全由调用方决定。探索页与书架页的骨架原先是固定高度的
+  灰条，与真实卡片（132dp 封面）不匹配，数据到达时内容整体跳一屏；现在按真实尺寸出图。
+- 阅读统计的当日详情卡改用常驻 `AnimatedVisibility`：点/取消热力图某天时下方内容原地延展。
+- `SettingsScaffold` 与 `SectionTitle` 由 `private` 改为 `internal`，配置备份页复用，
+  消掉两份逐字相同的区块标题实现。
+- `UiDimens` 新增 `progressThickness`，替换阅读统计里的裸 `8.dp`。
+
+**未做**（需要真机视觉确认，不在本次范围）：顶栏 `navigationIcon` 化与 9 处自绘返回钮、
+标题去重（三层头部收敛）；阅读器设置弹层与配置页的两套视觉语言合并；导出进度信息的
+三套排版收敛；`ReaderScreen.kt` 里 8 类只有涟漪没有按压缩放的可点元素。
+
 ### 内部
 
 - 新增 `com/xyreader/archive/PageFlowGeometry.kt`：把单页上下内边距、容量行数与位图

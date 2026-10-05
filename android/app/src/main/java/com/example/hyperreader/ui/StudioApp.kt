@@ -54,7 +54,6 @@ import top.yukonga.miuix.kmp.basic.BreadcrumbBar
 import top.yukonga.miuix.kmp.basic.BreadcrumbItem
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Checkbox
-import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.LinearProgressIndicator
 import top.yukonga.miuix.kmp.basic.NavigationBar
@@ -449,14 +448,7 @@ private fun ResolvingScreen(state: StudioUiState, viewModel: StudioViewModel) {
             }
         }
         if (state.detailError == null) {
-            Row(
-                Modifier.fillMaxWidth().padding(vertical = UiDimens.spaceS),
-                horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceM),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                CircularProgressIndicator(size = UiDimens.indicator)
-                Text("正在获取章节列表，请稍候。", fontSize = UiDimens.body, color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.75f))
-            }
+            LoadingBlock("正在获取章节列表，请稍候。")
         }
     }
 }
@@ -603,7 +595,13 @@ private fun ProgressContent(job: ExportJob, viewModel: StudioViewModel) {
 @Composable
 private fun HistoryScreen(jobs: List<ExportJob>, viewModel: StudioViewModel) {
     val context = LocalContext.current
-    if (jobs.isEmpty()) { Text("还没有导出任务。", Modifier.padding(top = UiDimens.spaceXL), color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.72f)); return }
+    if (jobs.isEmpty()) {
+        EmptyState(
+            title = "还没有导出任务",
+            description = "从书架卡片菜单「导出 EPUB」发起，任务进度会同步到这里。",
+        )
+        return
+    }
     LazyColumn(Modifier.fillMaxWidth().padding(top = UiDimens.spaceL), verticalArrangement = Arrangement.spacedBy(UiDimens.spaceM)) {
         items(jobs, key = { it.id }) { job ->
             Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(UiDimens.cardInset)) {

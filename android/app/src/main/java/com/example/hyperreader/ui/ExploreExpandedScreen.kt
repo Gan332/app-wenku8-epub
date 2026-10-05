@@ -26,7 +26,6 @@ import androidx.compose.ui.unit.dp
 import com.example.hyperreader.MessageCard
 import com.example.hyperreader.model.SearchBook
 import com.example.hyperreader.ui.cover.CoverImage
-import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.theme.MiuixTheme
@@ -60,21 +59,9 @@ fun ExploreExpandedScreen(state: StudioUiState, viewModel: StudioViewModel, modi
         }
         state.exploreMessage?.let { message -> MessageCard(message) }
         when {
-            state.exploreBusy && books.isEmpty() -> Row(
-                modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin).padding(top = UiDimens.spaceL),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS),
-            ) {
-                CircularProgressIndicator(size = UiDimens.indicator)
-                Text("正在加载…", fontSize = UiDimens.caption, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f))
-            }
+            state.exploreBusy && books.isEmpty() -> LoadingBlock("正在加载…")
 
-            books.isEmpty() -> Text(
-                "这一榜暂时没有内容。",
-                modifier = Modifier.padding(top = UiDimens.spaceL),
-                fontSize = UiDimens.caption,
-                color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f),
-            )
+            books.isEmpty() -> EmptyState(title = "这一榜暂时没有内容。")
 
             else -> LazyVerticalGrid(
                 columns = GridCells.Adaptive(minSize = EXPANDED_CELL_MIN),

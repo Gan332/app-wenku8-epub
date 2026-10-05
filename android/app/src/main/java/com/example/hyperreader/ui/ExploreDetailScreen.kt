@@ -39,7 +39,6 @@ import com.example.hyperreader.ui.cover.CoverImage
 import com.example.hyperreader.ui.cover.CoverViewerDialog
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.TextField
@@ -141,10 +140,7 @@ fun ExploreDetailScreen(
                     }
                     // 接口回来后给一个「已是最新」的轻提示；加载中显示进度，不阻塞已渲染的内容
                     if (loading) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
-                            CircularProgressIndicator(size = UiDimens.indicator)
-                            Text("正在通过接口刷新详情…", fontSize = UiDimens.captionSmall, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f))
-                        }
+                        LoadingBlock("正在通过接口刷新详情…")
                     }
                 }
             }

@@ -51,6 +51,9 @@ object UiDimens {
 
     val indicator: Dp = 24.dp
 
+    /** 线性进度条厚度（阅读统计按书籍时长共用）。 */
+    val progressThickness: Dp = 8.dp
+
     /** 取色圆点（强调色、背景色板）。 */
     val swatch: Dp = 36.dp
 

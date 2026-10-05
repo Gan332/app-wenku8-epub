@@ -683,7 +683,7 @@ private fun AboutSection(viewModel: StudioViewModel) {
 }
 
 @Composable
-private fun SettingsScaffold(title: String, onBack: () -> Unit, blocks: List<@Composable () -> Unit>) {
+internal fun SettingsScaffold(title: String, onBack: () -> Unit, blocks: List<@Composable () -> Unit>) {
     // 必须 fillMaxSize + LazyColumn 用 weight(1f)：
     // 只写 fillMaxWidth 时 Column 会把剩余高度给最后一个子项但不做滚动预算，
     // 内容一旦超出就被裁掉（真机上「字重以下全部不可达」）。
@@ -701,7 +701,7 @@ private fun SettingsScaffold(title: String, onBack: () -> Unit, blocks: List<@Co
 }
 
 @Composable
-private fun SectionTitle(text: String) {
+internal fun SectionTitle(text: String) {
     Text(text, fontWeight = FontWeight.Bold, fontSize = UiDimens.section)
 }
 

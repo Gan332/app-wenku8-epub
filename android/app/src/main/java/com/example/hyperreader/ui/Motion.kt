@@ -9,6 +9,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
@@ -18,6 +19,9 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.LaunchedEffect
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
@@ -79,28 +83,40 @@ object Motion {
  * 交错入场：按 [index] 延迟淡入 + 轻微放大（0.98 → 1）。
  *
  * 列表里配合 `itemsIndexed` 使用；[visible] 为 false 时反向收起。
+ *
+ * 用 [Animatable] 而非 `animateFloatAsState`：后者首次组合时初值就等于 targetValue，
+ * 淡入与缩放根本不会播放（首帧直接是终值），交错入场等于没做。
  */
 fun Modifier.staggeredEnter(index: Int, visible: Boolean = true): Modifier = composed {
-    val alpha by animateFloatAsState(
-        targetValue = if (visible) 1f else 0f,
-        animationSpec = tween(
-            durationMillis = Motion.duration(),
-            delayMillis = Motion.staggeredDelay(index),
-            easing = FastOutSlowInEasing,
-        ),
-        label = "staggeredAlpha",
-    )
-    val scale by animateFloatAsState(
-        targetValue = if (visible) 1f else 0.98f,
-        animationSpec = tween(
-            durationMillis = Motion.duration(UiDimens.MOTION_SLOW),
-            delayMillis = Motion.staggeredDelay(index),
-            easing = FastOutSlowInEasing,
-        ),
-        label = "staggeredScale",
-    )
-    graphicsLayer { this.alpha = alpha; this.scaleX = scale; this.scaleY = scale }
+    val alpha = remember { Animatable(0f) }
+    val scale = remember { Animatable(ENTER_SCALE_FROM) }
+    LaunchedEffect(visible, index) {
+        val delay = Motion.staggeredDelay(index)
+        coroutineScope {
+            // alpha 与 scale 同时推进：串行 await 会让缩放白白多等一个 alpha 时长
+            launch {
+                alpha.animateTo(
+                    targetValue = if (visible) 1f else 0f,
+                    animationSpec = tween(Motion.duration(), delay, FastOutSlowInEasing),
+                )
+            }
+            launch {
+                scale.animateTo(
+                    targetValue = if (visible) 1f else ENTER_SCALE_FROM,
+                    animationSpec = tween(Motion.duration(UiDimens.MOTION_SLOW), delay, FastOutSlowInEasing),
+                )
+            }
+        }
+    }
+    graphicsLayer {
+        this.alpha = alpha.value
+        this.scaleX = scale.value
+        this.scaleY = scale.value
+    }
 }
+
+/** 交错入场的起始缩放（轻微放大入场，避免整屏元素同时「弹」出来）。 */
+private const val ENTER_SCALE_FROM = 0.98f
 
 /**
  * 按压反馈：按下 0.97 倍缩放，抬起回弹。
@@ -115,28 +131,43 @@ fun Modifier.pressableScale(
     val pressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(
         targetValue = if (pressed) pressedScale else 1f,
-        animationSpec = tween(UiDimens.MOTION_FAST, easing = FastOutSlowInEasing),
+        // 经 Motion.duration 换算：系统「移除动画」时按压缩放也要归零，
+        // 否则它是全应用唯一还会动的交互反馈。
+        animationSpec = tween(Motion.duration(UiDimens.MOTION_FAST), easing = FastOutSlowInEasing),
         label = "pressScale",
     )
     graphicsLayer { scaleX = scale; scaleY = scale }
 }
 
 /**
- * Shimmer 骨架行：加载中的占位条，透明度由 [shimmerAlpha] 循环。
+ * Shimmer 骨架行：加载中的占位条，宽度由调用方决定，高度 [heightDp]。
  *
  * 用 `onSurface` 的低透明度而不是固定灰，得以跟随亮/暗主题。
  */
 @Composable
 fun ShimmerLine(modifier: Modifier = Modifier, heightDp: Int = 16) {
-    val alpha = shimmerAlpha()
-    Box(
-        modifier = modifier
+    ShimmerBlock(
+        modifier
             .fillMaxWidth()
-            .height(heightDp.dp)
-            .clip(RoundedCornerShape(6.dp))
-            .background(MiuixTheme.colorScheme.onSurface.copy(alpha = alpha)),
+            .height(heightDp.dp),
     )
 }
+
+/**
+ * Shimmer 骨架块：尺寸完全由 [modifier] 决定。
+ *
+ * 骨架必须与真实内容同尺寸，否则数据到达时列表整体跳一屏——封面占位、
+ * 方块这类非「整行」的骨架只能用这个。
+ */
+@Composable
+fun ShimmerBlock(modifier: Modifier = Modifier) {
+    Box(
+        modifier
+            .clip(RoundedCornerShape(6.dp))
+            .background(MiuixTheme.colorScheme.onSurface.copy(alpha = shimmerAlpha())),
+    )
+}
+
 /**
  * Shimmer 骨架：加载中占位块的微光扫过（alpha 0.35 ↔ 0.7 往返）。
  *
