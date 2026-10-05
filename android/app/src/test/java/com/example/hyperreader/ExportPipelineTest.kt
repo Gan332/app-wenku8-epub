@@ -247,7 +247,7 @@ class ExportPipelineTest {
                 title = "彩页",
                 volume = "彩页",
                 order = 1,
-                url = "https://www.wenku8.net/novel/2/1/1.html",
+                sourceUrl = "https://www.wenku8.net/novel/2/1/1.html",
                 blocks = listOf(
                     ContentBlock.Text("图前正文。"),
                     ContentBlock.Image(0),
