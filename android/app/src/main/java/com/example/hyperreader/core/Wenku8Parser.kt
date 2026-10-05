@@ -125,7 +125,10 @@ object Wenku8Parser {
         val blocks = if (preserveInlineFormat) {
             normalizeRichLines(extractRichLines(root), imageUrls.size)
         } else {
-            normalizeBlocks(root.text(), imageUrls.size)
+            // wholeText 而非 text()：Jsoup 的 text() 会折叠空白（含换行），
+            // 插图标记因此不再独占一行，`ContentBlock.Image` 一块都产不出来。
+            // 这里必须保留原始换行；段内换行由 normalizeBlocks 的 flush 压成空格。
+            normalizeBlocks(root.wholeText(), imageUrls.size)
         }
         val plain = blocks.filterIsInstance<ContentBlock.Text>().joinToString("") { it.value } +
             blocks.filterIsInstance<ContentBlock.Rich>().joinToString("") { stripRichHtml(it.html) }
@@ -157,7 +160,10 @@ object Wenku8Parser {
     /**
      * 把清理后的正文 DOM 提取为「`\n` 分隔的行，行内为转义文本 + 白名单强调标签」。
      *
-     * - 文本节点：空白折叠 + `&<>` 转义（后续原样写入 XHTML，安全）
+     * - 文本节点：折叠**非换行**空白 + `&<>` 转义（后续原样写入 XHTML，安全）；
+     *   换行必须保留 —— 插图标记 `@@WENKU8_IMAGE_n@@` 靠「独占一行」被还原成
+     *   `ContentBlock.Image`，一旦把 `\s+` 整个压成空格，标记就不成行，
+     *   **导出与在线两条链路的插图会全部丢失**
      * - 强调标签（b/i/…）与带强调 style 的元素（`font-weight:bold→b` 等）保留
      * - 其余元素一律**展开**（a/span/font 等只留内容，属性全部丢弃）
      * - 块级（p/div/li/标题）展开内容并断行，还原网页段落结构
@@ -165,7 +171,10 @@ object Wenku8Parser {
     private fun extractRichLines(root: Element): String {
         val builder = StringBuilder()
         fun appendText(text: String) {
-            builder.append(text.replace(Regex("\\s+"), " ").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"))
+            builder.append(
+                text.replace(Regex("[^\\S\\n]+"), " ")
+                    .replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"),
+            )
         }
         fun walk(node: org.jsoup.nodes.Node) {
             when (node) {
@@ -217,7 +226,8 @@ object Wenku8Parser {
         val blocks = mutableListOf<ContentBlock>()
         val paragraph = StringBuilder()
         fun flush() {
-            val value = paragraph.toString().trim()
+            // 段内换行压成空格（标记行在此之前已单独 flush，不会被波及）
+            val value = paragraph.toString().replace(Regex("\\s+"), " ").trim()
             if (value.isNotEmpty()) {
                 blocks += if ('<' in value) ContentBlock.Rich(value) else ContentBlock.Text(value)
             }

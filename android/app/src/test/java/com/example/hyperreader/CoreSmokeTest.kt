@@ -360,10 +360,10 @@ class CoreSmokeTest {
         )
         // 测试工作目录可能是 android/app 或 android，向上找 src/main/java，
         // 同时考虑中间隔一层 app/ 的情况。
-        val sourceRoot = generateSequence(File(System.getProperty("user.dir"))) { it.parentFile }
+        val sourceRoot = generateSequence(File(requireNotNull(System.getProperty("user.dir")))) { it.parentFile }
             .flatMap { dir -> sequenceOf(File(dir, "src/main/java"), File(dir, "app/src/main/java")) }
             .firstOrNull { it.isDirectory }
-        requireNotNull(sourceRoot) { "未找到 src/main/java（user.dir=${System.getProperty("user.dir")}）" }
+        requireNotNull(sourceRoot) { "未找到 src/main/java（user.dir=${requireNotNull(System.getProperty("user.dir"))}）" }
         val offenders = mutableListOf<String>()
         sourceRoot.walkTopDown()
             .filter { it.isFile && it.extension == "kt" }
@@ -382,7 +382,7 @@ class CoreSmokeTest {
 
     @Test
     fun epubStartsWithUncompressedMimetype() {
-        val directory = File(System.getProperty("java.io.tmpdir"), "wenku8-epub-test-${System.nanoTime()}").apply { mkdirs() }
+        val directory = File(requireNotNull(System.getProperty("java.io.tmpdir")), "wenku8-epub-test-${System.nanoTime()}").apply { mkdirs() }
         try {
             val output = File(directory, "book.epub")
             val builder = EpubBuilder()

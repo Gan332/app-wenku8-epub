@@ -17,11 +17,21 @@
 
 ### 插图修复
 
-插图链路的四处缺陷。一次专项排查覆盖「源站解析 → 下载 → 打包 → 回读」四段，
-确认**解析期的标记法、下载期的对齐键与失败占位本来就是正确的**（下载失败不会让后续
-图片错位，两引擎过滤条件逐字一致），真实缺陷集中在两端。
+插图链路的五处缺陷。一次专项排查覆盖「源站解析 → 下载 → 打包 → 回读」四段，
+确认**下载期的对齐键与失败占位本来就是正确的**（下载失败不会让后续图片错位，两引擎
+过滤条件逐字一致），真实缺陷集中在解析期与回读期两端。
 
-- **自产 EPUB 回读时插图全部消失、正文塌成一大段**（最严重，两引擎通杀）：
+- **插图块从来没被解析出来过，导出的 EPUB 里一张图都没有**（根本原因，最严重）：
+  图片在 DOM 里被替换成 `\n@@WENKU8_IMAGE_n@@\n`，靠「独占一行」被还原成
+  `ContentBlock.Image`；但两条链路的取文本方式都会把空白折叠掉——富文本路径
+  `extractRichLines.appendText` 的 `replace("\\s+", " ")`、纯文本路径 `root.text()` 的
+  空白规范化——标记因此永远不成行，`matchEntire` 必然落空。于是导出时
+  `EpubBuilder.resolveChapters` 把每个 `ContentBlock.Image` 都 `mapNotNull` 丢掉：
+  下载阶段一切正常、图片都进了缓存、告警也报「无缺图」，但成品里一张都没有。
+  改为富文本路径只折叠**非换行**空白、段内换行在 flush 时压成空格，纯文本路径改用
+  `root.wholeText()` 保留原始换行。回归见新增的 `resolvesLazyImageAgainstDataBase`
+  与 `selfProducedEpubKeepsParagraphsAndImagesOnReadback`。
+- **自产 EPUB 回读时插图全部消失、正文塌成一大段**（两引擎通杀）：
   `EpubReaderRepository.parseBlocks` 只遍历 `body.children()` **一层**且只认**裸** `img`，
   而 EpubBuilder 产出的章节是 `<body><section epub:type="chapter">`、图片包一层
   `<figure>`，POTATO 侧是 `<div id="content">` + `<div class="div_image">`。
@@ -30,8 +40,8 @@
   把散落在子元素之间的文本按顺序攒成段落（不丢也不乱序），其余行内元素并入当前段落。
   Rust 快路径与 legacy 共用该函数，一处改动两条路径同时生效。顺带支持懒加载
   `data-src` / `data-original` 作为图片地址回退（外部 EPUB 常用）。
-- **部分彩页在导出期就少图**：Kotlin 侧解析图片一律以章节 URL 为基准，缺了源站给懒加载图
-  的 `data-base` 基准。`data-base="/image-root/" data-src="cover/a.jpg"` 这类写法整章解析不出图，
+- **部分彩页解析不出图**：Kotlin 侧一律以章节 URL 为基准，缺了源站给懒加载图的
+  `data-base` 基准。`data-base="/image-root/" data-src="cover/a.jpg"` 这类写法整章解析不出图，
   而告警只含糊地说「未能下载」，用户无法判断是源站问题还是解析错了。
   改为先算 `data-base` 再按原优先级解析，与 Web 版 `src/wenku8.js` 的 `imageSource` 同源
   （此前只有 JS 侧有对等测试，Kotlin 侧完全没有）。

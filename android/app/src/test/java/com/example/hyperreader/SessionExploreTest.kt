@@ -117,7 +117,7 @@ class SessionExploreTest {
 
     @Test
     fun searchProviderRejectsRequestBeforeLoginWithoutHttpClient() {
-        val provider = Wenku8SearchProvider(Wenku8HttpClient(File(System.getProperty("java.io.tmpdir"))), FakeSessionGate(loggedIn = false))
+        val provider = Wenku8SearchProvider(Wenku8HttpClient(File(requireNotNull(System.getProperty("java.io.tmpdir")))), FakeSessionGate(loggedIn = false))
         val error = runCatching {
             kotlinx.coroutines.runBlocking { provider.search("测试", SearchField.TITLE, 2) }
         }.exceptionOrNull()
@@ -129,7 +129,7 @@ class SessionExploreTest {
     fun searchProviderShortCircuitsBlankKeywordAndRejectsZeroPage() {
         var cleared = false
         val provider = Wenku8SearchProvider(
-            Wenku8HttpClient(File(System.getProperty("java.io.tmpdir"))),
+            Wenku8HttpClient(File(requireNotNull(System.getProperty("java.io.tmpdir")))),
             FakeSessionGate(loggedIn = true) { cleared = true },
         )
         kotlinx.coroutines.runBlocking {

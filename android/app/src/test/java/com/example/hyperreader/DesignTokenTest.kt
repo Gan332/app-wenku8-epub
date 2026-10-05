@@ -35,10 +35,10 @@ class DesignTokenTest {
     fun readerUiHasNoHardcodedSizes() {
         // 阅读器界面只允许通过 ReaderDimens 表达尺寸；裸 `12.dp` 一律视为回归。
         // 唯一豁免是 `0.dp`（页与页零间距，表达「不要间距」而非某个设计值）。
-        val sourceRoot = generateSequence(File(System.getProperty("user.dir"))) { it.parentFile }
+        val sourceRoot = generateSequence(File(requireNotNull(System.getProperty("user.dir")))) { it.parentFile }
             .flatMap { dir -> sequenceOf(File(dir, "src/main/java"), File(dir, "app/src/main/java")) }
             .firstOrNull { it.isDirectory }
-        requireNotNull(sourceRoot) { "未找到 src/main/java（user.dir=${System.getProperty("user.dir")}）" }
+        requireNotNull(sourceRoot) { "未找到 src/main/java（user.dir=${requireNotNull(System.getProperty("user.dir"))}）" }
 
         val readerRoot = File(sourceRoot, "com/xyreader")
         assertTrue("未找到 com/xyreader 源码目录", readerRoot.isDirectory)
