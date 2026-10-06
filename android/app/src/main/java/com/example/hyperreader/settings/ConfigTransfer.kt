@@ -368,8 +368,9 @@ object ConfigTransfer {
             skipped += "$label（缺失）"
             return
         }
-        val normalized = raw.trim().uppercase()
-        val match = values.firstOrNull { it.name == normalized }
+        // 枚举值大小写不敏感地匹配（序列化写出的是 name 原样，如 `RecentRead`；
+        // 旧实现先uppercase 再与 name 精确比较，恰好只对全大写的枚举（CLASSIC）有效）
+        val match = values.firstOrNull { it.name.equals(raw.trim(), ignoreCase = true) }
         if (match == null) {
             skipped += "$label 取值无效：$raw"
             return

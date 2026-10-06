@@ -183,7 +183,7 @@ class ConfigTransferTest {
         }
         // 根对象只有 5 个标量字段 + 2 个 DTO，没有任何集合型字段
         val root = Json.parseToJsonElement(export()).jsonObject
-        assertEquals(5, root.size)
+        assertEquals(6, root.size)
     }
 
     @Test
@@ -308,8 +308,8 @@ class ConfigTransferTest {
     fun entirelyMissingSectionsAreReportedNotIgnored() {
         val plan = ConfigTransfer.plan(ConfigTransfer.ConfigDocument(schemaVersion = 1))
         assertEquals(0, plan.appliedCount)
-        // 整段缺失按「一段一条」计数，而不是把 14 个字段逐条摊开
-        assertEquals(2, plan.skippedCount)
+        // 整段缺失按「一段一条」计数，而不是把字段逐条摊开（theme/reader/shelf 三段）
+        assertEquals(3, plan.skippedCount)
         assertTrue(plan.isEmpty)
         assertTrue(plan.summary().contains("导入成功 0 项"))
         assertTrue(plan.details().contains("主题设置"))
