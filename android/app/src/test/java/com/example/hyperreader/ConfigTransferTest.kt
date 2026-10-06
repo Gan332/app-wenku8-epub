@@ -160,6 +160,8 @@ class ConfigTransferTest {
             // 根对象只允许挂这两个纯标量 DTO
             ConfigTransfer.ConfigTheme::class.java.name,
             ConfigTransfer.ConfigReader::class.java.name,
+            // 0.19.0-alpha04：schema v2 新增，同样是纯标量 DTO（两个 String?）
+            ConfigTransfer.ConfigShelf::class.java.name,
         )
         val dtoTypes = listOf(
             ConfigTransfer.ConfigDocument::class.java,
@@ -295,9 +297,10 @@ class ConfigTransferTest {
         assertTrue(decoded is ConfigTransfer.DecodeResult.Success)
         val plan = ConfigTransfer.plan((decoded as ConfigTransfer.DecodeResult.Success).document)
         assertEquals(3, plan.appliedCount)
-        assertEquals(11, plan.skippedCount)
+        // schema v1 文件没有 shelf 节点 → 按「缺失」计一条（与 theme/reader 的缺失一致）
+        assertEquals(12, plan.skippedCount)
         assertTrue(plan.summary().contains("导入成功 3 项"))
-        assertTrue(plan.summary().contains("跳过 11 项"))
+        assertTrue(plan.summary().contains("跳过 12 项"))
         assertTrue(plan.details().isNotBlank())
     }
 
@@ -337,13 +340,15 @@ class ConfigTransferTest {
         val decoded = ConfigTransfer.decode(export())
         assertTrue(decoded is ConfigTransfer.DecodeResult.Success)
         val plan = ConfigTransfer.plan((decoded as ConfigTransfer.DecodeResult.Success).document)
-        assertEquals(0, plan.skippedCount)
+        assertEquals("skipped:\n${plan.details()}", 0, plan.skippedCount)
         assertEquals(
             setOf(
                 "主题模式", "使用动态色", "强调色",
                 "字号", "字重", "行高", "段距", "左右边距",
                 "阅读背景", "自定义背景色", "文字颜色", "翻页方式",
                 "保持屏幕常亮", "沉浸模式",
+                // 0.19.0-alpha04：导出引擎与书架排序
+                "导出引擎", "书架排序",
             ),
             plan.changes.map { it.label }.toSet(),
         )
@@ -370,7 +375,7 @@ class ConfigTransferTest {
             assertTrue(decoded is ConfigTransfer.DecodeResult.Success)
             val plan = ConfigTransfer.plan((decoded as ConfigTransfer.DecodeResult.Success).document)
             assertEquals(mode, (plan.changes.first { it is ConfigChange.SetThemeMode } as ConfigChange.SetThemeMode).value)
-            assertEquals(0, plan.skippedCount)
+            assertEquals("skipped:\n${plan.details()}", 0, plan.skippedCount)
         }
         ReaderBackground.entries.forEach { background ->
             ReaderPageTurnMode.entries.forEach { turn ->
