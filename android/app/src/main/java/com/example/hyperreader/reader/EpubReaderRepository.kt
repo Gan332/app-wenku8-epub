@@ -147,7 +147,9 @@ class EpubReaderRepository(private val context: Context? = null) {
         val pending = StringBuilder()
 
         fun flush() {
-            val text = pending.toString().replace(WHITESPACE_RUN, " ").trim()
+            // CJK_GAP：夹在两个中日韩字符之间的空格是序列化/标签边界带来的排版产物，
+            // 中文正文里不该出现（英文单词间距不受影响，因为两侧不是 CJK）。
+            val text = pending.toString().replace(WHITESPACE_RUN, " ").replace(CJK_GAP, "").trim()
             pending.setLength(0)
             if (text.isNotEmpty()) out += ReaderBlock.Paragraph(text)
         }
@@ -179,6 +181,12 @@ class EpubReaderRepository(private val context: Context? = null) {
         }
         flush()
     }
+
+    /**
+     * CJK 之间的多余空格：序列化缩进或行内标签边界会在「强调</b>与<i>斜体」这种
+     * 位置留下空格，中文排版里它是噪声。两侧都是 CJK 才删，英文词间空格保留。
+     */
+    private val CJK_GAP = Regex("(?<=[\\u3040-\\u30FF\\u3400-\\u4DBF\\u4E00-\\u9FFF\\uF900-\\uFAFF\\uFF00-\\uFFEF]) +(?=[\\u3040-\\u30FF\\u3400-\\u4DBF\\u4E00-\\u9FFF\\uF900-\\uFAFF\\uFF00-\\uFFEF])")
 
     /** 行内元素的纯文本：递归拼接子节点，不做任何空白规范化。 */
     private fun inlineText(node: Element): String = buildString {
