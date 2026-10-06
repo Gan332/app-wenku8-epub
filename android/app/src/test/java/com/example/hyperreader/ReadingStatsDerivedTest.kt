@@ -122,7 +122,8 @@ class ReadingStatsDerivedTest {
     // ---- 不触碰其它字段 ----
 
     @Test
-    fun otherFieldsAreLeftAlone() {        val stored = ReadingStats(
+    fun otherFieldsAreLeftAlone() {
+        val stored = ReadingStats(
             totalSeconds = 12345L,
             totalSessions = 7,
             lastReadAt = 999L,

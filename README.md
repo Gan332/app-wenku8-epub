@@ -186,6 +186,8 @@ npm run release:package
 - [`docs/USER_SOP.md`](docs/USER_SOP.md)：用户操作流程
 - [`docs/ENGINEERING_SOP.md`](docs/ENGINEERING_SOP.md)：Git、开发、测试和发布流程
 - [`docs/RELEASE_CHECKLIST.md`](docs/RELEASE_CHECKLIST.md)：发布验收清单
+- [`docs/RELEASE_NOTES_v0.19.0-alpha03.md`](docs/RELEASE_NOTES_v0.19.0-alpha03.md)：v0.19.0-alpha03 预发布（书架排序、阅读统计按日重算）
+- [`docs/RELEASE_NOTES_v0.19.0-alpha02.md`](docs/RELEASE_NOTES_v0.19.0-alpha02.md)：v0.19.0-alpha02 预发布（页内搜索、热力图动态范围、清理旧渲染层）
 - [`docs/RELEASE_NOTES_v0.19.0-alpha01.md`](docs/RELEASE_NOTES_v0.19.0-alpha01.md)：v0.19.0-alpha01 预发布（热力图、书架分组、探索 Tab、全局排版放宽）
 - [`docs/RELEASE_NOTES_v0.18.0-alpha01.md`](docs/RELEASE_NOTES_v0.18.0-alpha01.md)：v0.18.0-alpha01 预发布（尺寸令牌、目录、动画、设置重构、自建中继）
 - [`docs/RELEASE_NOTES_v0.17.0.md`](docs/RELEASE_NOTES_v0.17.0.md)：v0.17.0 阅读优先的信息架构重构

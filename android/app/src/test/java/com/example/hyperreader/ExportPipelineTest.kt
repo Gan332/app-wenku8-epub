@@ -2,6 +2,7 @@ package com.example.hyperreader
 
 import com.example.hyperreader.core.Wenku8Parser
 import com.example.hyperreader.epub.EpubBuilder
+import com.example.hyperreader.epub.PotatoEpubBuilder
 import com.example.hyperreader.model.Book
 import com.example.hyperreader.model.Chapter
 import com.example.hyperreader.model.ContentBlock
@@ -335,5 +336,117 @@ class ExportPipelineTest {
         assertTrue(stored.delete())
         File(stored.parentFile, "${stored.name}.tmp").writeBytes(byteArrayOf(0x89.toByte(), 0x50))
         assertNull("`.tmp` 残留不得被当成缓存命中，否则 EPUB 里会少一张图且无告警", cache.image(url))
+    }
+
+    /**
+     * POTATO 引擎的正文必须有 `<p>` 段落结构，且 `ContentBlock.Rich` 的行内强调
+     * 必须是**真标签**而不是被转义成字面量 `&lt;b&gt;`。
+     *
+     * 旧实现两处都错：`SimpleContentBuilder.text()` 走 dom4j `addText`，
+     * 正文裸挂在 `<div id="content">` 里没有段落边界（回读时整章塌成一个大段落），
+     * `Rich` 的 HTML 也被当纯文本转义，读者看到的是字面量 `<b>`。
+     */
+    @Test
+    fun potatoEngineWritesRealParagraphsAndEmphasis() {
+        val dir = Files.createTempDirectory("epub-potato-paragraph").toFile()
+        val output = File(dir, "book.epub")
+        val book = Book(
+            title = "POTATO 段落测试",
+            author = "作者",
+            sourceUrl = "https://www.wenku8.net/book/3.htm",
+            bookUrl = "https://www.wenku8.net/book/3.htm",
+        )
+        val chapters = listOf(
+            ParsedChapter(
+                id = "c1",
+                title = "第一章",
+                volume = "正文",
+                order = 1,
+                sourceUrl = "https://www.wenku8.net/novel/2/1/1.html",
+                blocks = listOf(
+                    ContentBlock.Text("第一段正文。"),
+                    ContentBlock.Rich("<b>强调</b>与<i>斜体</i>"),
+                    ContentBlock.Text("第二段正文。"),
+                ),
+            ),
+        )
+        PotatoEpubBuilder().build(book, chapters, emptyList(), null, output)
+
+        // 直接看 XHTML 源码：段落边界与强调标签都必须以真标签形式出现
+        val chapterXml = ZipFile(output).use { zip ->
+            zip.entries().asSequence()
+                .first { it.name.endsWith(".xhtml") && it.name.contains("chapter") }
+                .let { entry -> zip.getInputStream(entry).readBytes().toString(Charsets.UTF_8) }
+        }
+        assertTrue("正文缺少 <p> 段落结构：\n$chapterXml", chapterXml.contains("<p>"))
+        assertTrue("强调标签被转义成了字面量：\n$chapterXml", chapterXml.contains("<b>强调</b>"))
+        assertTrue("斜体标签被转义成了字面量：\n$chapterXml", chapterXml.contains("<i>斜体</i>"))
+        assertFalse("不得出现字面量转义标签：\n$chapterXml", chapterXml.contains("&lt;b&gt;"))
+
+        // 回读端同样要能切出三段
+        val parsed = EpubReaderRepository().parseArchive("local:potato", output)
+        val paragraphs = parsed.chapters.single().blocks.filterIsInstance<ReaderBlock.Paragraph>().map { it.text }
+        assertEquals("POTATO 产出回读后应按 <p> 切成三段，实际：$paragraphs", 3, paragraphs.size)
+        assertEquals("第一段正文。", paragraphs[0])
+        assertEquals("强调与斜体", paragraphs[1])
+        assertEquals("第二段正文。", paragraphs[2])
+    }
+
+    /**
+     * 标题与内容**完全相同**的两个章节必须各自出现在成品里。
+     *
+     * potatoepub 默认按「内容 + 标题」的 hash 派生章节 id，撞 id 时 manifest 与 spine
+     * 出现重复条目、`documents` map 后写覆盖先写，成品直接少一章。改用按序号指定的
+     * 唯一 id 后不再依赖 hash。
+     */
+    @Test
+    fun potatoEngineKeepsDuplicateTitledChapters() {
+        val dir = Files.createTempDirectory("epub-potato-dup").toFile()
+        val output = File(dir, "book.epub")
+        val book = Book(
+            title = "重复章节测试",
+            author = "作者",
+            sourceUrl = "https://www.wenku8.net/book/4.htm",
+            bookUrl = "https://www.wenku8.net/book/4.htm",
+        )
+        val repeated = listOf(
+            ParsedChapter(
+                id = "c1",
+                title = "同名章节",
+                volume = "正文",
+                order = 1,
+                sourceUrl = "https://www.wenku8.net/novel/2/1/1.html",
+                blocks = listOf(ContentBlock.Text("完全相同的正文。")),
+            ),
+            ParsedChapter(
+                id = "c2",
+                title = "同名章节",
+                volume = "正文",
+                order = 2,
+                sourceUrl = "https://www.wenku8.net/novel/2/1/2.html",
+                blocks = listOf(ContentBlock.Text("完全相同的正文。")),
+            ),
+        )
+        PotatoEpubBuilder().build(book, repeated, emptyList(), null, output)
+
+        val nav = ZipFile(output).use { zip ->
+            zip.entries().asSequence()
+                .first { it.name.endsWith("nav.xhtml") }
+                .let { entry -> zip.getInputStream(entry).readBytes().toString(Charsets.UTF_8) }
+        }
+        val hrefs = Regex("""href="(chapter_[^"]+\.xhtml)"""").findAll(nav).map { it.groupValues[1] }.toList()
+        assertEquals("目录里必须有两个指向不同文件的条目，实际：$nav", 2, hrefs.size)
+        assertEquals("两个章节 href 必须不同：$hrefs", 2, hrefs.toSet().size)
+
+        // 两章正文都必须在 zip 里，且回读端能各自拿到
+        ZipFile(output).use { zip ->
+            val chapterEntries = zip.entries().asSequence()
+                .map { it.name }
+                .filter { it.endsWith(".xhtml") && it.contains("chapter_") }
+                .toList()
+            assertEquals("成品里必须有两个章节文件，实际：$chapterEntries", 2, chapterEntries.size)
+        }
+        val parsed = EpubReaderRepository().parseArchive("local:potato-dup", output)
+        assertEquals("回读必须得到两章，实际：${parsed.chapters.size}", 2, parsed.chapters.size)
     }
 }

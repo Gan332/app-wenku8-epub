@@ -46,13 +46,42 @@ class SimpleContentBuilder {
     }
 
     fun text(content: String) {
+        contentElement.addText(cleanNumericEntities(content))
+    }
+
+    /**
+     * 插入一个正文段落（`<p>` 包裹）。
+     *
+     * 新增方法：上游只有 [text]，正文全部裸挂在 `<div id="content">` 里、没有段落边界，
+     * 任何按 `<p>` 切段的回读端都会把整章塌成一个大段落。新增本方法后段落结构才成立。
+     * 未显式调用本方法时行为与上游逐字一致。
+     */
+    fun paragraph(content: String) {
+        contentElement.addElement("p").addText(cleanNumericEntities(content))
+    }
+
+    /**
+     * 插入一个正文段落并返回该元素，供调用方自行填充行内结构。
+     *
+     * 新增方法，与 [paragraph] 同源；用于「段落内含强调标签」的场合——
+     * 调用方需要往返回的 `<p>` 里追加子元素，而不是整段当纯文本写。
+     */
+    fun paragraphElement(): Element = contentElement.addElement("p")
+
+    /**
+     * 剥掉十进制与十六进制数字字符引用。
+     *
+     * 这些引用会被 dom4j 的 `addText` 二次转义成字面量（`&#38;` 变成 `&amp;#38;`），
+     * 正文里就冒出 `&#38;` 这种可见的垃圾字符。此处先剥掉，让 dom4j 处理真正的文本。
+     */
+    private fun cleanNumericEntities(content: String): String {
         var result = Regex("&#([0-8]|1[1-2]|1[4-9]|2[0-9]|3[0-1]);").replace(content, "")
         result = Regex(
             "&#x(0[0-8BCEF]|1[0-9A-F]|7F|8[0-9A-F]|9[0-9A-F]|A[0-9A-F]|B[0-9A-F]|C[0-9A-F]|D[0-9A-F]|E[0-9A-F]|F[0-9A-F]);",
             RegexOption.IGNORE_CASE
         )
             .replace(result, "")
-        contentElement.addText(result)
+        return result
     }
 
     /**

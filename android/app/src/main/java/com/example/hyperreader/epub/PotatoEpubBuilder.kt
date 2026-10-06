@@ -18,10 +18,12 @@ import java.util.Locale
  * 见 [com.example.hyperreader.settings.EpubEngine]。
  *
  * == 与自研引擎的差异 ==
- * - 本引擎正文按**段落纯文本**写入，不保留行内强调（`ContentBlock.Rich` 的 HTML 会被
- *   当作文本处理）；自研引擎会原样写入已 sanitize 的内联标签。需要保留强调时用自研引擎。
  * - 目录用 `toc.ncx` + `nav.xhtml` 双份（与自研引擎一致），但层级结构由 potatoepub 生成。
  * - 封面必须是 jpg；封面是其它格式时跳过封面图（不阻断导出）。
+ * - 章节 id 由本工程按序号指定（`chapter_1`、`chapter_2`…），不沿用 potatoepub 的
+ *   hash 派生公式 —— 后者会让标题与内容都相同的章节撞 id，成品里少一章（见 [Chapter.idOverride]）。
+ * - 正文结构与自研引擎一致：段落按 `<p>` 切分，`ContentBlock.Rich` 的行内强调
+ *   （`b` / `i` / `u` / `sup` / `sub`）写成真标签而不是被转义成字面量。
  */
 class PotatoEpubBuilder {
 
@@ -63,17 +65,24 @@ class PotatoEpubBuilder {
         }
 
         var imageSeq = 0
-        chapters.forEach { chapter ->
+        chapters.forEachIndexed { index, chapter ->
             // 与自研引擎同一套匹配规则：插图按「所属章节 + 章内序号」对齐
             val byChapter = images.filter { it.sourceId == chapter.id }
             builder.chapter {
                 title(chapter.title)
+                // 显式 id：potatoepub 默认按「内容 + 标题」的 hash 派生，
+                // 标题与内容都相同的章节会撞同一个 id —— manifest 与 spine 出现重复条目，
+                // `documents` map 后写覆盖先写，成品里直接少一章。按序号指定即彻底避免。
+                id("chapter_${index + 1}")
                 content {
                     title(chapter.title)
                     chapter.blocks.forEach { block ->
                         when (block) {
-                            is ContentBlock.Text -> text(block.value)
-                            is ContentBlock.Rich -> text(block.html)
+                            // 段落必须落在 <p> 里：potatoepub 的 text() 只是往
+                            // <div id="content"> 追加裸文本，整章会塌成一个大段落。
+                            is ContentBlock.Text -> paragraph(block.value)
+                            // 已 sanitize 的行内强调写成真标签，转换逻辑见 RichParagraphs
+                            is ContentBlock.Rich -> RichParagraphs.append(paragraphElement(), block.html)
                             is ContentBlock.Image ->
                                 byChapter.firstOrNull { it.chapterIndex == block.index }?.let { image ->
                                     image(

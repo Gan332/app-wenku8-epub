@@ -355,6 +355,26 @@ private fun NetworkSection(state: StudioUiState, viewModel: StudioViewModel, onO
     SettingsScaffold("网络", viewModel::backSettings, listOf(
         { RelaySettings(viewModel) },
         {
+            // 直连入口状态：403 时会自动轮换 .net → .cc → .com，这里显示当前用的那个
+            Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(UiDimens.cardInset)) {
+                Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS), modifier = Modifier.padding(UiDimens.cardInset)) {
+                    Text("直连入口", fontWeight = FontWeight.Bold, fontSize = UiDimens.section)
+                    var shownBase by remember { mutableStateOf(com.example.hyperreader.core.Wenku8Endpoint.activeDirectBase()) }
+                    FieldCard(label = "当前入口", value = shownBase)
+                    Text(
+                        "遇到 Cloudflare 拦截会自动换一个入口重试一次（.net → .cc → .com）；三个都试过则不再换，避免全部镜像被打进风控。",
+                        fontSize = UiDimens.captionSmall,
+                        color = MiuixTheme.colorScheme.onSurface.copy(alpha = .7f),
+                    )
+                    TextButton(
+                        text = "刷新入口状态",
+                        onClick = { shownBase = com.example.hyperreader.core.Wenku8Endpoint.activeDirectBase() },
+                        modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
+                    )
+                }
+            }
+        },
+        {
             // Cloudflare 验证状态：有没有浏览器验证凭证（cf_clearance）
             Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(UiDimens.cardInset)) {
                 Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS), modifier = Modifier.padding(UiDimens.cardInset)) {

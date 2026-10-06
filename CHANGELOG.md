@@ -133,7 +133,7 @@
 - `seamlessFlow` 与 `pageMode` 一并进入 `ReaderViewModel.styleKey`：两种翻页模式是两种
   版面，切换模式必须重排。阅读位置由既有的字符偏移锚点（`pageForCharOffset`）恢复。
 - `drawImagePage` 接收页高参数，图片页在无缝流下与文字页同高，整列不再忽长忽短。
-- 新增 `SeamlessFlowTest`（7 例）：整屏页高度不变、页边距只落首页/末页、中间页两两
+- 新增 `SeamlessFlowTest`（8 例）：整屏页高度不变、页边距只落首页/末页、中间页两两
   零空白、中间页高度唯一、首页/末页与中间页的高度关系、旧公式 177px 死区的对照、
   零边距与极小屏边界。
 
@@ -165,7 +165,7 @@
   `today` 可注入。`ReadingStatsRepository.stats` 在**读取时**调用它，
   `recordSession` 不再预存 `todaySeconds` / `currentStreak`
   （它们退化为无意义的缓存值，真值来源永远是 `dailySeconds`）。
-- `ReadingStatsDerivedTest`（12 例）：跨天后「今日」归零、今天没读不清零连续、
+- `ReadingStatsDerivedTest`（15 例）：跨天后「今日」归零、今天没读不清零连续、
   断两天归零、陈旧连续值在读取时被纠正、跨年、闰日（2024-02-29）、
   最长连续只增不减、其它字段不被触碰。
 - 排序从 `BookshelfRepository.entries` 移除，改由展示层纯函数 `ui/sortBookshelf` 应用。

@@ -63,9 +63,20 @@
   - `builder/`：`EpubBuilder`、`ChapterBuilder`、`SimpleContentBuilder`
   - `otf/`：`OpfPackage`、`Metadata`、`Nav`、`TocNcx`、`Spine`、`EpubManifest`、`Container`
   - `xml/`：`XmlBuilder`、`Attributes`、`XmlFormat` 等
-- **用途**：作为**第二种 EPUB 导出引擎**，在设置 → EPUB 导出引擎里与自研  
-  `epub/EpubBuilder` 二选一（见 `EpubEngine`）。两者产出同样的 EPUB 3.3 结构、  
-  调用契约一致；区别是 potatoepub 正文按段落纯文本写入，不保留行内强调标签。
+- **用途**：作为**第二种 EPUB 导出引擎**，在设置 → EPUB 导出引擎里与自研
+  `epub/EpubBuilder` 二选一（见 `EpubEngine`）。两者产出同样的 EPUB 3.3 结构、
+  调用契约一致。
+- **本项目的改动**（0.19.0-alpha04 起；均为**向后兼容**的可选参数，不传即与上游逐字一致）：
+  - `SimpleContentBuilder.image` / `EpubBuilder.imgRes` 新增 `mime` 参数——上游写死
+    `image/jpeg`，png/webp 会被 OPF 谎报，部分阅读器据此判定资源损坏并丢图。
+  - `SimpleContentBuilder` 新增 `paragraph` / `paragraphElement`：上游只有 `text`，
+    正文裸挂在 `<div id="content">` 里没有段落边界，回读时整章塌成一个大段落。
+    行内强调的 HTML 解析**不在本模块**做（保持「只依赖 dom4j」），由本工程的
+    `com.example.hyperreader.epub.RichParagraphs` 负责。
+  - `Chapter` 新增 `idOverride` 参数、`ChapterBuilder` 新增 `id`：上游按
+    「内容 + 标题」的 hash 派生 id，标题与内容都相同的章节会撞 id，成品里少一章。
+  - `EpubBuilder.cover()` 的调用方在非 jpg 封面时会撤掉 manifest 里的 `cover.jpg`
+    条目（上游无条件声明，epubcheck 会报「manifest 引用不存在的资源」）。
 - **说明**：Apache-2.0 与本项目的 MIT 许可证兼容；源文件保留原始版权与许可证声明。
 
 ## LightNovelReader 书源体系（0.14.0 起）

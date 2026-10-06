@@ -4,20 +4,30 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
 /**
- * 设置配置的导入导出（schemaVersion 1）。
+ * 设置配置的导入导出（schemaVersion 2）。
  *
  * ## 安全边界
  *
- * 导出内容**只有**主题与阅读器设置。以下内容永远不会出现在配置文件里，
- * 并且这一点由类型层面保证——本文件的 DTO 中根本不存在能承载它们的字段：
+ * 导出内容**只有**环境配置（主题 + 阅读器 + 导出偏好）。以下内容永远不会出现在
+ * 配置文件里，并且这一点由类型层面保证——本文件的 DTO 中根本不存在能承载它们的字段：
  *
  * - Wenku8 登录 Cookie（`PHPSESSID` / `jieqiUserInfo` 等，保存在 `Wenku8SessionStore`）
  * - 任何密码、Token、账号标识
  * - 书架条目、阅读记录、阅读统计（属用户内容，走独立的数据迁移流程）
  * - EPUB 文件本体与字体文件本体
+ * - **第三方中继端点**（`relay_base` / `relay_enabled`）：那是用户自建服务的地址，
+ *   换设备后那个端点对用户未必还有意义（可能换域名、换账号、已下线），
+ *   属部署配置而不是环境配置，导入一个失效端点只会让公开页抓取莫名失败。
  *
- * 主题属于「环境配置」，跨设备迁移合理；书架属于「内容与阅读历史」，
+ * 主题与阅读器属「环境配置」，跨设备迁移合理；书架属于「内容与阅读历史」，
  * 不应混进设置同步。
+ *
+ * ## 版本演进
+ *
+ * schemaVersion 1 只有 `theme` + `reader`；2 增加 `shelf`（导出引擎与书架排序）。
+ * 导入端接受**所有不大于当前版本**的旧版本：缺失的新节点按「字段缺失」处理，
+ * 只跳过该节点，其余照常导入。**高于**当前版本的文件一律拒绝——那是本应用
+ * 尚不认识的未来格式，静默降级会把新字段悄悄丢掉，比直接报错更糟。
  *
  * ## 复用范围钳制
  *
@@ -26,8 +36,11 @@ import kotlinx.serialization.json.Json
  */
 object ConfigTransfer {
 
-    /** 当前支持的配置格式版本。未知版本一律拒绝，不做静默降级。 */
-    const val SCHEMA_VERSION = 1
+    /** 当前支持的配置格式版本。高于此版本的文件一律拒绝，不做静默降级。 */
+    const val SCHEMA_VERSION = 2
+
+    /** 仍可导入的最旧版本；低于此值说明文件不是本应用的配置。 */
+    private const val MIN_SCHEMA_VERSION = 1
 
     private const val MIN_FONT_WEIGHT = 100
     private const val MAX_FONT_WEIGHT = 900
@@ -62,6 +75,8 @@ object ConfigTransfer {
         val exportedAt: Long = 0L,
         val theme: ConfigTheme? = null,
         val reader: ConfigReader? = null,
+        /** 0.19.0-alpha04 新增；v1 文件没有这个节点，导入时整节点按缺失跳过。 */
+        val shelf: ConfigShelf? = null,
     )
 
     /**
@@ -96,6 +111,18 @@ object ConfigTransfer {
         val immersiveMode: Boolean? = null,
     )
 
+    /**
+     * 导出与书架展示偏好（0.19.0-alpha04 新增）。
+     *
+     * 两者都是纯展示/产出偏好，不含任何内容本身，因此适合跨设备迁移：
+     * 换手机后不必重新挑一次导出引擎，也不必重新排一次书架。
+     */
+    @Serializable
+    data class ConfigShelf(
+        val exportEngine: String? = null,
+        val bookshelfSort: String? = null,
+    )
+
     /** 导入一条配置后的结果文案，例如「导入成功 14 项，跳过 0 项」。 */
     data class ImportPlan(
         val changes: List<ConfigChange>,
@@ -127,6 +154,8 @@ object ConfigTransfer {
         reader: ReaderSettings,
         appVersion: String,
         exportedAt: Long,
+        exportEngine: EpubEngine = EpubEngine.CLASSIC,
+        bookshelfSort: BookshelfSort = BookshelfSort.RecentRead,
     ): ConfigDocument = ConfigDocument(
         schemaVersion = SCHEMA_VERSION,
         appVersion = appVersion,
@@ -150,14 +179,27 @@ object ConfigTransfer {
             immersiveMode = reader.immersiveMode,
             // fontUri 是设备本地地址，不导出
         ),
+        shelf = ConfigShelf(
+            exportEngine = exportEngine.name,
+            bookshelfSort = bookshelfSort.name,
+        ),
     )
 
     /**
      * 编码为格式化 JSON。[exportedAt] 可注入，便于测试。
      * 生产代码用 [System.currentTimeMillis]。
      */
-    fun encode(theme: AppThemeSettings, reader: ReaderSettings, appVersion: String, exportedAt: Long): String =
-        encodeJson.encodeToString(ConfigDocument.serializer(), documentOf(theme, reader, appVersion, exportedAt))
+    fun encode(
+        theme: AppThemeSettings,
+        reader: ReaderSettings,
+        appVersion: String,
+        exportedAt: Long,
+        exportEngine: EpubEngine = EpubEngine.CLASSIC,
+        bookshelfSort: BookshelfSort = BookshelfSort.RecentRead,
+    ): String = encodeJson.encodeToString(
+        ConfigDocument.serializer(),
+        documentOf(theme, reader, appVersion, exportedAt, exportEngine, bookshelfSort),
+    )
 
     /** 直接编码一个已构造好的文档（测试与「导出前预览」用）。 */
     fun encodeDocument(document: ConfigDocument): String =
@@ -170,7 +212,12 @@ object ConfigTransfer {
     /**
      * 解析配置文件文本。
      *
-     * - 非法 JSON、缺 `schemaVersion`、未知 `schemaVersion` 一律 [DecodeResult.Rejected]
+     * - 非法 JSON、缺 `schemaVersion` 一律 [DecodeResult.Rejected]
+     * - `schemaVersion` 高于 [SCHEMA_VERSION] 一律拒绝：那是我们尚不认识的未来格式，
+     *   静默降级会把它新增的字段悄悄丢掉，比直接报错更糟
+     * - 低于当前版本（>= [MIN_SCHEMA_VERSION]）的旧文件**照常接受**：当时还没有的
+     *   节点按「字段缺失」处理，只跳过该节点，其余（主题、阅读器）照常导入。
+     *   换句话说，向后兼容换来的是「老配置不丢设置」，代价只是老配置拿不到新字段。
      * - 单个字段的非法取值**不会**导致整体失败，交由 [plan] 逐字段跳过
      */
     fun decode(text: String): DecodeResult {
@@ -181,7 +228,10 @@ object ConfigTransfer {
         if (version <= 0) {
             return DecodeResult.Rejected("缺少 schemaVersion，无法确认配置格式")
         }
-        if (version != SCHEMA_VERSION) {
+        if (version < MIN_SCHEMA_VERSION) {
+            return DecodeResult.Rejected("配置版本 $version 过旧，无法识别")
+        }
+        if (version > SCHEMA_VERSION) {
             return DecodeResult.Rejected("不支持的配置版本 $version，本应用支持 $SCHEMA_VERSION，请升级应用后重试")
         }
         return DecodeResult.Success(document)
@@ -261,6 +311,19 @@ object ConfigTransfer {
                 skipped += "沉浸模式（缺失）"
             } else {
                 changes += ConfigChange.SetReaderImmersive(immersive)
+            }
+        }
+
+        // v1 文件没有这个节点：整节点按「缺失」计一条，其余照常导入
+        val shelf = document.shelf
+        if (shelf == null) {
+            skipped += "导出引擎与书架排序（缺失）"
+        } else {
+            planEnum("导出引擎", shelf.exportEngine, EpubEngine.entries, changes, skipped) { engine ->
+                ConfigChange.SetExportEngine(engine)
+            }
+            planEnum("书架排序", shelf.bookshelfSort, BookshelfSort.entries, changes, skipped) { sort ->
+                ConfigChange.SetBookshelfSort(sort)
             }
         }
 
