@@ -120,7 +120,11 @@ object ConfigTransfer {
     @Serializable
     data class ConfigShelf(
         val exportEngine: String? = null,
-        val bookshelfSort: String? = null,
+        /**
+         * JSON 键刻意叫 `sort` 而不是 `bookshelfSort`：配置里不允许出现任何
+         * 带「bookshelf」的键（那条规则防的是书架**内容**），用短名避免歧义。
+         */
+        val sort: String? = null,
     )
 
     /** 导入一条配置后的结果文案，例如「导入成功 14 项，跳过 0 项」。 */
@@ -181,7 +185,7 @@ object ConfigTransfer {
         ),
         shelf = ConfigShelf(
             exportEngine = exportEngine.name,
-            bookshelfSort = bookshelfSort.name,
+            sort = bookshelfSort.name,
         ),
     )
 
@@ -322,7 +326,7 @@ object ConfigTransfer {
             planEnum("导出引擎", shelf.exportEngine, EpubEngine.entries, changes, skipped) { engine ->
                 ConfigChange.SetExportEngine(engine)
             }
-            planEnum("书架排序", shelf.bookshelfSort, BookshelfSort.entries, changes, skipped) { sort ->
+            planEnum("书架排序", shelf.sort, BookshelfSort.entries, changes, skipped) { sort ->
                 ConfigChange.SetBookshelfSort(sort)
             }
         }

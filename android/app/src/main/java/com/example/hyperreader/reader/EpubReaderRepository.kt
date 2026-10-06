@@ -168,14 +168,27 @@ class EpubReaderRepository(private val context: Context? = null) {
                             flush()
                             collectBlocks(node, chapterPath, out)
                         } else {
-                            // 行内元素（span / a / b / em …）：文本并入当前段落，顺序不丢
-                            pending.append(node.text())
+                            // 行内元素（span / a / b / em …）：文本并入当前段落，顺序不丢。
+                            // 用递归拼接子节点而不是 Element.text()：后者会规范化空白，
+                            // 在 <b>强调</b>与<i>斜体</i> 这类标签边界凭空插入空格。
+                            pending.append(inlineText(node))
                         }
                 }
                 else -> Unit
             }
         }
         flush()
+    }
+
+    /** 行内元素的纯文本：递归拼接子节点，不做任何空白规范化。 */
+    private fun inlineText(node: Element): String = buildString {
+        for (child in node.childNodes()) {
+            when (child) {
+                is TextNode -> append(child.text())
+                is Element -> append(inlineText(child))
+                else -> Unit
+            }
+        }
     }
 
     /** 是否需要下钻：容器标签、后代含 img、或直接子元素里有容器。 */

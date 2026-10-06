@@ -125,7 +125,7 @@ class ConfigTransferTest {
         )
         // 0.19.0-alpha04：schema v2 新增的 shelf 节点
         assertEquals(
-            setOf("exportEngine", "bookshelfSort"),
+            setOf("exportEngine", "sort"),
             root.getValue("shelf").jsonObject.keys,
         )
     }
