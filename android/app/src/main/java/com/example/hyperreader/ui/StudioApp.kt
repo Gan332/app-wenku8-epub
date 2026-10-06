@@ -84,6 +84,7 @@ import com.example.hyperreader.auth.LoginActivity
 import com.example.hyperreader.reader.XyReaderActivity
 import com.example.hyperreader.reader.onlineReaderIntent
 import com.example.hyperreader.ui.AppMiuixTheme
+import com.example.hyperreader.ui.BookmarkCenterScreen
 import com.example.hyperreader.ui.BookshelfScreen
 import com.example.hyperreader.ui.EmptyState
 import com.example.hyperreader.ui.ExploreDetailScreen
@@ -205,6 +206,8 @@ private fun StudioApp(
     val state by viewModel.state.collectAsStateWithLifecycle()
     // 阅读首页的「继续阅读 / 最近在读」需要断点数据；与书架卡片取同一份 ViewModel 状态，不另存一份真相。
     val readingProgress by viewModel.readingProgress.collectAsStateWithLifecycle(initialValue = emptyMap())
+    // 书签中心按书聚合的分组；随两个阅读器 Bridge 的写入实时更新。
+    val bookmarkGroups by viewModel.bookmarkGroups.collectAsStateWithLifecycle(initialValue = emptyList())
     val context = LocalContext.current
     val settingsTitle = when (state.settingsSection) {
         SettingsSection.OVERVIEW -> "设置"
@@ -252,7 +255,7 @@ private fun StudioApp(
         },
         bottomBar = {
             // 全屏覆盖页（探索详情、导出记录、榜单展开、搜索）不显示底部导航
-            if (state.exploreDetailId == null && !state.showJobHistory && !state.exploreExpanded && !state.searchPageOpen) {
+            if (state.exploreDetailId == null && !state.showJobHistory && !state.exploreExpanded && !state.searchPageOpen && !state.bookmarkCenterOpen) {
                 NavigationBar {
                     // 0.19.0 起四项，对齐 LNR `MainDestination`（阅读/书架/探索/设置，顺序一致）。
                     // 图标取 LNR 同款 Material 图标；MiuiX 图标集没有 Book/Bookshelf/Explore，
@@ -278,6 +281,7 @@ private fun StudioApp(
                 state.showJobHistory -> "history"
                 state.exploreExpanded -> "expanded"
                 state.searchPageOpen -> "search"
+                state.bookmarkCenterOpen -> "bookmarks"
                 state.exportStep != null -> "export"
                 else -> "tabs"
             }
@@ -338,6 +342,40 @@ private fun StudioApp(
                     "history" -> JobHistoryScreen(state, viewModel)
                     "expanded" -> ExploreExpandedScreen(state, viewModel)
                     "search" -> SearchScreen(state = state, viewModel = viewModel, onLogin = onLogin, onClose = viewModel::closeSearchPage)
+                    "bookmarks" -> BookmarkCenterScreen(
+                        groups = bookmarkGroups,
+                        bookshelf = state.bookshelf,
+                        onOpenBookmark = { group, bookmark ->
+                            // 本地 EPUB：URI 只存在书架条目上，书不在架上就跳不了（界面已禁用）。
+                            // 在线书：页进度与页轴配对（AGENTS §4.8），因此只交给在线阅读器续读，
+                            // 不在这里伪造「跳到第 N 页」。
+                            if (group.isLocal) {
+                                val entry = state.bookshelf.firstOrNull { it.bookId == group.hostBookId }
+                                val uri = entry?.localUri
+                                if (uri != null) {
+                                    context.startActivity(
+                                        XyReaderActivity.intent(context, uri, group.hostBookId, group.displayTitle)
+                                    )
+                                }
+                            } else if (group.hostBookId.isNotBlank()) {
+                                context.startActivity(
+                                    onlineReaderIntent(
+                                        context = context,
+                                        bookId = group.hostBookId,
+                                        title = group.displayTitle,
+                                        author = state.bookshelf
+                                            .firstOrNull { it.bookId == group.hostBookId }?.author.orEmpty(),
+                                        bookshelfId = state.bookshelf
+                                            .firstOrNull { it.bookId == group.hostBookId }?.id
+                                            ?: "wenku8:${group.hostBookId}",
+                                    ),
+                                )
+                            }
+                        },
+                        onRemoveBookmark = viewModel::removeBookmark,
+                        onClearBook = viewModel::clearBookBookmarks,
+                        onBack = viewModel::closeBookmarkCenter,
+                    )
                     "export" -> ExportWizardScreen(state, viewModel)
                     else -> {
                         val pageKey = state.tab.name.lowercase()
@@ -375,6 +413,7 @@ private fun StudioApp(
                     },
                     onOpenBookshelf = { viewModel.setTab(StudioTab.BOOKSHELF) },
                     onOpenExplore = { viewModel.setTab(StudioTab.EXPLORE) },
+                    onOpenBookmarks = viewModel::openBookmarkCenter,
                 )
                 state.tab == StudioTab.BOOKSHELF -> BookshelfScreen(
                     state = state,

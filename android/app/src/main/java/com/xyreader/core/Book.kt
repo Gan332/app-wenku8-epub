@@ -34,11 +34,28 @@ data class BookEntity(
     val localRepoId: Long? = null,
 )
 
-/** 阅读器内添加的书签 */
+/**
+ * 阅读器内添加的书签。
+ *
+ * [bookId] 是阅读器视角的 Long id（`xyBookIdOf` 的 32 位哈希）。**它不可逆**，
+ * 因此跨书的书签中心页无法反查宿主书，靠下面三个冗余字段还原归属：
+ * [hostBookId]（本工程书 id）、[bookTitle] 与 [bookSource]。
+ *
+ * 冗余是有意的取舍：书名/来源在书签产生时冻结，之后即使书被移出书架，
+ * 书签列表仍能显示可读的条目，而不是变成一堆指向不存在书籍的孤儿。
+ */
 @Serializable
 data class BookmarkEntity(
     val id: Long = 0,
     val bookId: Long,
     val pageIndex: Int,
     val createdAt: Long = 0,
+    /** 加书签时所在页的正文摘录，供跨书列表显示内容而非只有页码。 */
+    val snippet: String = "",
+    /** 本工程的字符串 bookId（书架条目 id / wenku8 书籍编号），跨书跳转用。 */
+    val hostBookId: String = "",
+    /** 书名快照。 */
+    val bookTitle: String = "",
+    /** 来源标记（本地 EPUB / wenku8 在线），决定点击书签时开哪个阅读器。 */
+    val bookSource: String = "",
 )

@@ -749,10 +749,19 @@ class ReaderViewModel(
         }
     }
 
-    /** 添加书签并发一次性提示 */
+    /**
+     * 添加书签并发一次性提示。
+     *
+     * 摘录取当前页正文（[bookmarkSnippet] 压掉空白并截断）。取页文本要进
+     * `renderMutex`，因此这段可能与一次翻页渲染排队；图片页取不到文本时
+     * 存空摘录，书签依然可用，只是不带内容预览。
+     */
     fun addBookmark(page: Int) {
         viewModelScope.launch {
-            val result = runCatching { repository.addBookmark(bookId, page) }
+            val snippet = withContext(Dispatchers.IO) {
+                runCatching { pageText(page) }.getOrNull().let { bookmarkSnippet(it) }
+            }.orEmpty()
+            val result = runCatching { repository.addBookmark(bookId, page, snippet) }
             _events.emit(if (result.isSuccess) "已添加书签" else "添加书签失败")
         }
     }

@@ -53,6 +53,7 @@ fun ReadingHomeScreen(
     onOpenRemote: (BookshelfEntry) -> Unit,
     onOpenBookshelf: () -> Unit,
     onOpenExplore: () -> Unit,
+    onOpenBookmarks: () -> Unit,
 ) {
     val now = remember(bookshelf, progress) { System.currentTimeMillis() }
     val withProgress = remember(bookshelf, progress) {
@@ -74,7 +75,20 @@ fun ReadingHomeScreen(
         verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS),
     ) {
         item(key = "title") {
-            Text("阅读", fontSize = UiDimens.display, fontWeight = FontWeight.Bold)
+            // 标题与书签入口同排（对齐 LNR `TopBar` 的大标题 + 图标槽位形状）。
+            // 书签中心是全屏页而非新的一级导航（AGENTS §4.6.1 第 1 条）。
+            Row(
+                modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("阅读", fontSize = UiDimens.display, fontWeight = FontWeight.Bold)
+                TextButton(
+                    text = "书签",
+                    onClick = onOpenBookmarks,
+                    modifier = Modifier.heightIn(min = UiDimens.touchMin),
+                )
+            }
         }
 
         if (continueEntry == null) {

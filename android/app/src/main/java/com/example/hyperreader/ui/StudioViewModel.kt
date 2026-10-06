@@ -31,9 +31,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import java.io.File
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.flow.first
 import com.example.hyperreader.BuildConfig
 import com.example.hyperreader.settings.ConfigTransfer
 import com.example.hyperreader.ui.ConfigTransferFile
@@ -250,6 +250,8 @@ data class StudioUiState(
     val exploreDetailSeed: com.example.hyperreader.core.ExploreBookSeed? = null,
     val exploreDetailLoading: Boolean = false,
     val exploreDetailError: String? = null,
+    /** 0.19.0：跨书书签中心是否打开（全屏页，不占一级导航，AGENTS §4.6.1）。 */
+    val bookmarkCenterOpen: Boolean = false,
 )
 
 class StudioViewModel(application: Application) : AndroidViewModel(application) {
@@ -263,6 +265,8 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     private val catalogRepository = app.catalogRepository
     /** 探索详情专用：只走公开 API，不经过解析管线。 */
     private val exploreDetailRepository = app.exploreDetailRepository
+    /** 跨书书签中心（0.19.0）：读两个阅读器 Bridge 共用的 `xy_reader_bookmarks` 键。 */
+    private val bookmarkCenterRepository = app.bookmarkCenterRepository
     /**
      * 搜索请求的单调序号：只有与当前值一致的那个响应能写状态，
      * 用户中途改关键词/切字段/连点「加载更多」时，旧响应直接丢弃。
@@ -747,8 +751,28 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    fun removeFromShelf(id: String) { viewModelScope.launch { bookshelfRepository.remove(id) } }
-    fun setPinned(id: String, pinned: Boolean) { viewModelScope.launch { bookshelfRepository.setPinned(id, pinned) } }
+        // ---- 跨书书签中心（0.19.0）----
+
+    /**
+     * 按书分组的书签；每次书签增删都会随 DataStore 流重算。
+     *
+     * 分组是纯函数（[com.example.hyperreader.reader.groupBookmarks]），
+     * 这样排序与展示规则可以脱离 DataStore 单测。
+     */
+    val bookmarkGroups: kotlinx.coroutines.flow.Flow<List<com.example.hyperreader.reader.BookmarkGroup>> =
+        bookmarkCenterRepository.bookmarks.map { com.example.hyperreader.reader.groupBookmarks(it) }
+
+    fun openBookmarkCenter() = mutable.update { it.copy(bookmarkCenterOpen = true) }
+
+    fun closeBookmarkCenter() = mutable.update { it.copy(bookmarkCenterOpen = false) }
+
+    fun removeBookmark(id: Long) { viewModelScope.launch { bookmarkCenterRepository.remove(id) } }
+
+    fun clearBookBookmarks(hostBookId: String) {
+        viewModelScope.launch { bookmarkCenterRepository.removeAllForBook(hostBookId) }
+    }
+
+    fun removeFromShelf(id: String) { viewModelScope.launch { bookshelfRepository.remove(id) } }    fun setPinned(id: String, pinned: Boolean) { viewModelScope.launch { bookshelfRepository.setPinned(id, pinned) } }
     fun markShelfRead(id: String) { viewModelScope.launch { bookshelfRepository.recordRead(id) } }
 
     /** 切换书架排序；只改展示顺序，下次启动仍生效（DataStore）。 */

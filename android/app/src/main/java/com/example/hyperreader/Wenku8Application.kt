@@ -46,6 +46,10 @@ class Wenku8Application : Application() {
     val jobManager: ExportJobManager by lazy { ExportJobManager(this, sessionStore) }
     val searchProvider: Wenku8SearchProvider by lazy { Wenku8SearchProvider(jobManager.httpClient(), sessionStore) }
     val bookshelfRepository: BookshelfRepository by lazy { BookshelfRepository(this) }
+    /** 跨书书签中心（0.19.0）；只读两个阅读器 Bridge 共用的 `xy_reader_bookmarks` 键。 */
+    val bookmarkCenterRepository: com.example.hyperreader.reader.BookmarkCenterRepository by lazy {
+        com.example.hyperreader.reader.BookmarkCenterRepository(this)
+    }
     val readingStatsRepository: ReadingStatsRepository by lazy { ReadingStatsRepository(this) }
     val exploreRepository: ExploreRepository by lazy { ExploreRepository(Wenku8DataSource(jobManager.httpClient(), sessionStore)) }
 

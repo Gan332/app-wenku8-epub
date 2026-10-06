@@ -81,3 +81,25 @@ fun searchResultPages(pages: Map<Int, String?>, query: String, radius: Int = SNI
         SearchHit(page, snippet)
     }
 }
+
+/** 书签摘录的默认长度（字）。够看清「大概在哪一段」，又不至于把整页塞进列表行。 */
+const val BOOKMARK_SNIPPET_LENGTH = 60
+
+/**
+ * 从一页正文里取书签摘录：压掉换行与多余空白后截取开头 [limit] 个字。
+ *
+ * 摘录**不是**搜索命中片段（那需要 query），而是「加书签时这页在讲什么」，
+ * 因此固定取页首而非命中位置附近——命中位置此时未知。
+ *
+ * 纯函数（便于单测）：空白折叠后为空则返回 null，调用方据此存空摘录而不是空白符。
+ */
+fun bookmarkSnippet(text: String?, limit: Int = BOOKMARK_SNIPPET_LENGTH): String? {
+    if (text.isNullOrBlank()) return null
+    val flat = text.replace(WHITESPACE_RUN, " ").trim()
+    if (flat.isEmpty()) return null
+    val safeLimit = limit.coerceAtLeast(0)
+    return if (flat.length <= safeLimit) flat else flat.take(safeLimit).trimEnd() + "…"
+}
+
+/** 连续空白（含换行、段落缩进）折叠为一个空格。 */
+private val WHITESPACE_RUN = Regex("\\s+")

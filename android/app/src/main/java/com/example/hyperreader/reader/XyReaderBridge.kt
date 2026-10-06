@@ -89,6 +89,15 @@ class XyReaderPrefsStore(private val data: DataStore<Preferences>) {
 private val KEY_BOOKMARKS = stringPreferencesKey("xy_reader_bookmarks")
 private val KEY_FAVORITES = stringPreferencesKey("xy_reader_favorites")
 
+/**
+ * 书签上的来源标记（[BookmarkEntity.bookSource]）。
+ *
+ * 阅读器侧的书 id 是不可逆哈希，跨书书签中心页要靠这个标记决定点击书签时
+ * 开本地阅读器还是在线阅读器。新增来源时在两处同步。
+ */
+const val BOOK_SOURCE_LOCAL = "local"
+const val BOOK_SOURCE_ONLINE = "wenku8"
+
 /** 页进度键：`xy_reader_page_<本工程 bookId>`，值形如 `"当前页/总页数"`。 */
 private fun pageKey(hostBookId: String) = stringPreferencesKey("xy_reader_page_$hostBookId")
 
@@ -160,7 +169,7 @@ class XyReaderRepository(
         }
     }
 
-    override suspend fun addBookmark(bookId: Long, pageIndex: Int) {
+    override suspend fun addBookmark(bookId: Long, pageIndex: Int, snippet: String) {
         data.edit { p ->
             val current = decodeBookmarks(p[KEY_BOOKMARKS])
             val nextId = (current.maxOfOrNull { it.id } ?: 0L) + 1L
@@ -169,6 +178,11 @@ class XyReaderRepository(
                 bookId = book.id,
                 pageIndex = pageIndex,
                 createdAt = System.currentTimeMillis(),
+                snippet = snippet,
+                // 阅读器侧的 bookId 是不可逆哈希，跨书书签中心页要靠这三项还原归属。
+                hostBookId = hostBookId,
+                bookTitle = book.title,
+                bookSource = BOOK_SOURCE_LOCAL,
             )
             p[KEY_BOOKMARKS] = xyJson.encodeToString(ListSerializer(BookmarkEntity.serializer()), next)
         }

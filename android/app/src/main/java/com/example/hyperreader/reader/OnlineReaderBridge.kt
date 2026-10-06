@@ -136,11 +136,21 @@ class OnlineReaderRepository(
         }
     }
 
-    override suspend fun addBookmark(bookId: Long, pageIndex: Int) {
+    override suspend fun addBookmark(bookId: Long, pageIndex: Int, snippet: String) {
         data.edit { prefs ->
             val current = decodeBookmarks(prefs[KEY_BOOKMARKS])
             val nextId = (current.maxOfOrNull { it.id } ?: 0L) + 1L
-            val next = current + BookmarkEntity(nextId, book.id, pageIndex, System.currentTimeMillis())
+            val next = current + BookmarkEntity(
+                id = nextId,
+                bookId = book.id,
+                pageIndex = pageIndex,
+                createdAt = System.currentTimeMillis(),
+                snippet = snippet,
+                // ,0 Bridge 7»ÓR^áo(¿f„ hostBookId s wenku8 fM÷
+                hostBookId = hostBookId,
+                bookTitle = book.title,
+                bookSource = BOOK_SOURCE_ONLINE,
+            )
             prefs[KEY_BOOKMARKS] =
                 onlineProgressJson.encodeToString(ListSerializer(BookmarkEntity.serializer()), next)
         }

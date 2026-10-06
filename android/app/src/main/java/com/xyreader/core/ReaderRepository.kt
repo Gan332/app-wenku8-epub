@@ -33,7 +33,13 @@ interface ReaderRepository {
 
     suspend fun toggleFavorite(bookId: Long)
 
-    suspend fun addBookmark(bookId: Long, pageIndex: Int)
+    /**
+     * 添加书签。
+     *
+     * [snippet] 是加书签时所在页的正文摘录（可为空，如图片页），
+     * 让跨书的书签列表能显示内容而不只是「第 N 页」。
+     */
+    suspend fun addBookmark(bookId: Long, pageIndex: Int, snippet: String = "")
 
     suspend fun removeBookmark(bookmarkId: Long)
 }
