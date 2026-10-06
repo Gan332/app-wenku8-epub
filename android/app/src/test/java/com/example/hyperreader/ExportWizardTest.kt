@@ -45,7 +45,9 @@ class ExportWizardTest {
 
     @Test
     fun navigationHasNoCreateTabAndWizardHasFourSteps() {
-        assertEquals(listOf(StudioTab.BOOKSHELF, StudioTab.EXPLORE, StudioTab.SETTINGS), StudioTab.entries.toList())
+        // 一级导航没有「创建/导出」tab（AGENTS §4.6.1 第 1 条）；0.19.0 起对齐 LNR 变为四项，
+        // 「阅读」是新增的首屏，导出仍然只在书籍菜单与探索详情里。
+        assertEquals(listOf(StudioTab.READING, StudioTab.BOOKSHELF, StudioTab.EXPLORE, StudioTab.SETTINGS), StudioTab.entries.toList())
         assertEquals(
             listOf(ExportStep.RESOLVING, ExportStep.CHAPTERS, ExportStep.PACKAGING, ExportStep.PROGRESS),
             ExportStep.entries.toList(),

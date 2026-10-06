@@ -23,13 +23,18 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.unit.dp
 import com.example.hyperreader.MessageCard
 import com.example.hyperreader.core.ExploreBooksRow
 import com.example.hyperreader.model.SearchBook
 import com.example.hyperreader.ui.cover.CoverImage
+import top.yukonga.miuix.kmp.basic.IconButton
+import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.PullToRefresh
 import top.yukonga.miuix.kmp.basic.Text
@@ -72,14 +77,43 @@ fun ExploreScreen(
             verticalArrangement = Arrangement.spacedBy(UiDimens.spaceM),
         ) {
         item(key = "header") {
-            Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXS)) {
-                Text("探索", fontSize = UiDimens.display, fontWeight = FontWeight.Bold)
-                Text(
-                    "Wenku8 轻小说文库 · 年度/月度榜单无需登录",
-                    fontSize = UiDimens.caption,
-                    color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f),
-                )
-                TextButton(text = "搜索书名 / 作者", onClick = onOpenSearch, modifier = Modifier.heightIn(min = UiDimens.touchMin))
+            // LNR `TopBar`：48dp 导航图标槽位 + displayLarge 标题 + 右侧搜索图标按钮。
+            // 本项目顶栏由 Scaffold 的 TopAppBar 提供（没有 navigationIcon 槽位），
+            // 所以在页内复刻同一形状：图标槽与大标题同一行，搜索是图标按钮而非文字按钮。
+            Row(
+                modifier = Modifier.fillMaxWidth().heightIn(min = LnrDimens.topBarIconSlot),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
+                    modifier = Modifier.size(LnrDimens.topBarIconSlot),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = ImageVector.vectorResource(com.example.hyperreader.R.drawable.outline_explore_24px),
+                        contentDescription = null,
+                        tint = MiuixTheme.colorScheme.onSurface,
+                    )
+                }
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXXS),
+                ) {
+                    Text("探索", fontSize = UiDimens.display, fontWeight = FontWeight.Bold, maxLines = 1)
+                    Text(
+                        "Wenku8 轻小说文库 · 年度/月度榜单无需登录",
+                        fontSize = UiDimens.captionSmall,
+                        color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                IconButton(onClick = onOpenSearch, modifier = Modifier.size(UiDimens.touchMin)) {
+                    Icon(
+                        imageVector = ImageVector.vectorResource(com.example.hyperreader.R.drawable.search_24px),
+                        contentDescription = "搜索",
+                        tint = MiuixTheme.colorScheme.onSurface,
+                    )
+                }
             }
         }
 
@@ -257,7 +291,7 @@ private fun BookPosterCard(book: SearchBook, onClick: () -> Unit, modifier: Modi
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(POSTER_RATIO)
-                .clip(RoundedCornerShape(UiDimens.cardCorner)),
+                .clip(RoundedCornerShape(LnrDimens.posterCardCorner)),
         ) {
             CoverImage(
                 url = book.coverUrl,
@@ -289,7 +323,11 @@ private fun ExploreEmptyState(title: String, description: String, actionText: St
     }
 }
 
-private val POSTER_WIDTH = 132.dp
+private val POSTER_WIDTH = LnrDimens.posterCardWidth
 
 /** 竖版封面比例 3:4。 */
-private const val POSTER_RATIO = 3f / 4f
+private val POSTER_RATIO = LnrDimens.POSTER_ASPECT
+
+
+
+

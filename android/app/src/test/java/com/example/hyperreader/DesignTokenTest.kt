@@ -1,5 +1,9 @@
 package com.example.hyperreader
 
+import androidx.compose.ui.unit.dp
+import com.example.hyperreader.ui.LnrDimens
+import com.example.hyperreader.ui.StudioTab
+import com.example.hyperreader.ui.StudioUiState
 import com.example.hyperreader.ui.UiDimens
 import com.xyreader.core.ReaderDimens
 import java.io.File
@@ -61,4 +65,66 @@ class DesignTokenTest {
             offenders.isEmpty(),
         )
     }
+
+    /**
+     * LNR 排版规格的回归守卫（0.19.0）。
+     *
+     * `LnrDimens` 里的数字全部来自 LNR 上游源码的字面值（`BookCardContent` /
+     * `SettingsScreen.SettingsCategory` / `TagChip` / `MediumTopAppBar`），
+     * 目的是让主界面排版与上游一致。它们很容易在「顺手改成 8dp」时被无声改掉，
+     * 因此在这里逐项钉死。
+     */
+    @Test
+    fun lnrLayoutSpecsAreLocked() {
+        assertEquals("卡片高度", 146.dp, LnrDimens.cardHeight)
+        assertEquals("卡片内边距", 4.dp, LnrDimens.cardPadding)
+        assertEquals("卡片圆角", 12.dp, LnrDimens.cardCorner)
+        assertEquals("封面圆角", 8.dp, LnrDimens.coverCorner)
+        assertEquals("封面宽", 94.dp, LnrDimens.coverWidth)
+        assertEquals("封面高", 144.dp, LnrDimens.coverHeight)
+        assertEquals("文字栏左内边距", 12.dp, LnrDimens.textGutter)
+        assertEquals("作者行间距", 8.dp, LnrDimens.authorGap)
+        assertEquals("元信息行间距", 6.dp, LnrDimens.metaGap)
+        assertEquals("元信息底板圆角", 4.dp, LnrDimens.metaChipCorner)
+        assertEquals("元信息图标尺寸", 15.dp, LnrDimens.metaChipIcon)
+        assertEquals("设置组卡圆角", 16.dp, LnrDimens.settingsGroupCorner)
+        assertEquals("设置组卡外边距", 16.dp, LnrDimens.settingsGroupMargin)
+        assertEquals("设置组卡下外边距", 16.dp, LnrDimens.settingsGroupBottom)
+        assertEquals("设置组内条目间距", 2.dp, LnrDimens.settingsItemGap)
+        assertEquals("设置分组标题左右外边距", 24.dp, LnrDimens.settingsHeaderMarginH)
+        assertEquals("设置分组标题上下外边距", 10.dp, LnrDimens.settingsHeaderMarginV)
+        assertEquals("标签指示器高度", 4.dp, LnrDimens.tabIndicatorHeight)
+        assertEquals("标签指示器圆角", 3.dp, LnrDimens.tabIndicatorCorner)
+        assertEquals("顶栏图标槽位", 48.dp, LnrDimens.topBarIconSlot)
+    }
+
+    /**
+     * 封面比例必须与 LNR 书架卡一致（94:144 ≈ 0.6528，LNR 探索页另用近似 3:4）。
+     *
+     * 这里钉的是本工程内部一致性：书架卡、探索海报卡、阅读首页小卡共用同一个
+     * [LnrDimens.POSTER_ASPECT]，避免三处各写一个比例。
+     */
+    @Test
+    fun posterAspectIsShared() {
+        assertEquals("封面比例", 3f / 4f, LnrDimens.POSTER_ASPECT, 0f)
+        assertEquals("探索页标题高度系数", 2.2f, LnrDimens.EXPLORE_TITLE_HEIGHT_FACTOR, 0f)
+    }
+
+    /**
+     * 主导航必须保持四项且顺序与 LNR `MainDestination` 一致（AGENTS §4.6.1）。
+     *
+     * 0.19.0 之前是三项（书架/探索/设置），对齐上游后加入「阅读」并置为默认首屏。
+     * 这里用名字比对而不是只比 `size`，避免顺序被无意调换。
+     */
+    @Test
+    fun mainNavigationMatchesLnrOrder() {
+        val expected = listOf("READING", "BOOKSHELF", "EXPLORE", "SETTINGS")
+        assertEquals(
+            "一级导航必须是阅读/书架/探索/设置四项且顺序固定（AGENTS §4.6.1）",
+            expected,
+            StudioTab.entries.map { it.name },
+        )
+        assertEquals("默认首屏必须是「阅读」（LNR MainDestination.Reading 是 entries[0]）", StudioTab.READING, StudioUiState().tab)
+    }
 }
+

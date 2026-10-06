@@ -38,7 +38,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
@@ -87,6 +89,7 @@ import com.example.hyperreader.ui.EmptyState
 import com.example.hyperreader.ui.ExploreDetailScreen
 import com.example.hyperreader.ui.ExploreScreen
 import com.example.hyperreader.ui.LoadingBlock
+import com.example.hyperreader.ui.ReadingHomeScreen
 import com.example.hyperreader.ui.ReadingStatsScreen
 import com.example.hyperreader.ui.SearchScreen
 import com.example.hyperreader.ui.SettingsSection
@@ -200,6 +203,8 @@ private fun StudioApp(
     onOpenChallenge: (String) -> Unit,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    // 阅读首页的「继续阅读 / 最近在读」需要断点数据；与书架卡片取同一份 ViewModel 状态，不另存一份真相。
+    val readingProgress by viewModel.readingProgress.collectAsStateWithLifecycle(initialValue = emptyMap())
     val context = LocalContext.current
     val settingsTitle = when (state.settingsSection) {
         SettingsSection.OVERVIEW -> "设置"
@@ -236,6 +241,7 @@ private fun StudioApp(
                     state.exportStep == ExportStep.CHAPTERS -> "选择章节"
                     state.exportStep == ExportStep.PACKAGING -> "导出设置"
                     state.exportStep == ExportStep.PROGRESS -> "导出进度"
+                    state.tab == StudioTab.READING -> "阅读"
                     state.tab == StudioTab.BOOKSHELF -> "我的书架"
                     state.tab == StudioTab.EXPLORE -> "探索"
                     else -> settingsTitle
@@ -248,8 +254,13 @@ private fun StudioApp(
             // 全屏覆盖页（探索详情、导出记录、榜单展开、搜索）不显示底部导航
             if (state.exploreDetailId == null && !state.showJobHistory && !state.exploreExpanded && !state.searchPageOpen) {
                 NavigationBar {
+                    // 0.19.0 起四项，对齐 LNR `MainDestination`（阅读/书架/探索/设置，顺序一致）。
+                    // 图标取 LNR 同款 Material 图标；MiuiX 图标集没有 Book/Bookshelf/Explore，
+                    // 硬套 Recent/Search 会让四个 tab 语义混淆。
+                    // AGENTS §4.6.1 第 1 条仍成立：导出继续留在书籍菜单，不占一级导航。
+                    NavigationBarItem(selected = state.tab == StudioTab.READING, onClick = { viewModel.setTab(StudioTab.READING) }, icon = ImageVector.vectorResource(R.drawable.outline_book_24px), label = "阅读")
                     NavigationBarItem(selected = state.tab == StudioTab.BOOKSHELF, onClick = { viewModel.setTab(StudioTab.BOOKSHELF) }, icon = MiuixIcons.Recent, label = "书架")
-                    NavigationBarItem(selected = state.tab == StudioTab.EXPLORE, onClick = { viewModel.setTab(StudioTab.EXPLORE) }, icon = MiuixIcons.Search, label = "探索")
+                    NavigationBarItem(selected = state.tab == StudioTab.EXPLORE, onClick = { viewModel.setTab(StudioTab.EXPLORE) }, icon = ImageVector.vectorResource(R.drawable.outline_explore_24px), label = "探索")
                     NavigationBarItem(selected = state.tab == StudioTab.SETTINGS, onClick = { viewModel.setTab(StudioTab.SETTINGS) }, icon = MiuixIcons.Settings, label = "设置")
                 }
             }
@@ -341,6 +352,30 @@ private fun StudioApp(
                             label = "pageTransition",
                         ) { _ ->
                             when {
+                state.tab == StudioTab.READING -> ReadingHomeScreen(
+                    bookshelf = state.bookshelf,
+                    progress = readingProgress,
+                    onOpenLocal = { entry ->
+                        entry.localUri?.let { uri ->
+                            context.startActivity(XyReaderActivity.intent(context, uri, entry.bookId, entry.title))
+                        }
+                    },
+                    // 与书架卡片「点书即读」同一通路（AGENTS §4.6.1 第 2 条）
+                    onOpenRemote = { entry ->
+                        viewModel.markShelfRead(entry.id)
+                        context.startActivity(
+                            onlineReaderIntent(
+                                context = context,
+                                bookId = entry.bookId,
+                                title = entry.title,
+                                author = entry.author,
+                                bookshelfId = entry.id,
+                            ),
+                        )
+                    },
+                    onOpenBookshelf = { viewModel.setTab(StudioTab.BOOKSHELF) },
+                    onOpenExplore = { viewModel.setTab(StudioTab.EXPLORE) },
+                )
                 state.tab == StudioTab.BOOKSHELF -> BookshelfScreen(
                     state = state,
                     viewModel = viewModel,
@@ -666,3 +701,4 @@ private fun statusText(job: ExportJob): String = when (job.status) {
     JobStatus.failed -> job.error?.message ?: "失败"
     JobStatus.canceled -> "已取消"
 }
+

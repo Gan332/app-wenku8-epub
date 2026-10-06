@@ -54,8 +54,17 @@ internal fun CatalogEntry.toSearchBook(): SearchBook = SearchBook(
     sourceUrl = sourceUrl,
 )
 
-/** 底部主导航（0.17.0 起只有三项，导出入口下沉到书籍菜单）。 */
-enum class StudioTab { BOOKSHELF, EXPLORE, SETTINGS }
+/**
+ * 底部主导航（0.19.0 起四项，对齐 LNR `MainDestination`）。
+ *
+ * 顺序与上游一致：阅读(0) / 书架(1) / 探索(2) / 设置(3)，**阅读是默认首屏**
+ * ——`MainDestination.Reading(0, Route.Main.Reading.Home)` 就是 `entries[0]`，
+ * LNR 的 `NavHost` 以它作为起始目的。
+ *
+ * 「导出」**不在**一级导航里：它是书架卡片菜单与探索详情页里的次级动作
+ * （AGENTS §4.6.1 第 1 条的立法意图是防止导出占一级入口，本条保留该意图）。
+ */
+enum class StudioTab { READING, BOOKSHELF, EXPLORE, SETTINGS }
 
 /**
  * 导出向导的步骤。
@@ -163,7 +172,7 @@ data class EndpointProbe(val label: String, val clientKind: String, val url: Str
 enum class SettingsSection { OVERVIEW, ACCOUNT, APPEARANCE, READER, NETWORK, STATISTICS, CATALOG, CONFIG, ABOUT }
 
 data class StudioUiState(
-    val tab: StudioTab = StudioTab.BOOKSHELF,
+    val tab: StudioTab = StudioTab.READING,
     val exportStep: ExportStep? = null,
     val sourceUrl: String = "https://www.wenku8.net/novel/2/2835/index.htm",
     val book: Book? = null,

@@ -1,5 +1,6 @@
 package com.example.hyperreader.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -38,6 +39,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -270,6 +272,21 @@ private fun BookshelfGroupHeader(section: BookshelfSection, expanded: Boolean, o
  * 书架卡片，尺寸与排版对齐 LNR `BookCardContent`：94×144 封面、146dp 卡高、
  * 作者用强调色、简介两行。断点行保留本工程特有的「读到第 x 章」（AGENTS §4.8）。
  */
+/**
+ * 书架卡片，1:1 对齐 LNR `BookCardContent` 的排版规格（0.19.0）。
+ *
+ * 逐项对应上游：
+ * - 卡片 `146dp` 高、圆角 `12dp`、内边距 `4dp` → [LnrDimens]
+ * - 封面 `94×144dp`、圆角 `8dp`；封面与文字栏之间留 `12dp`
+ * - 文字栏用 `Arrangement.SpaceBetween` 把四行**顶到底**（LNR 原样），
+ *   本工程此前用 `spacedBy(spaceXS)`，行距被压缩后底部留白，与上游不一致
+ * - 作者用 `W600` + `primary` 色；元信息行是「图标 + 文字」两组（`TagChip`），
+ *   本工程此前是纯文本 `·` 拼接
+ * - 断点行（「读到第 x 章」）是本工程特有，保留在文字栏最后一行（AGENTS §4.8）
+ *
+ * 「更多」菜单按钮仍在本工程这一侧：LNR 用长按进选择模式，本工程 0.17.0 起
+ * 点卡片即读、菜单挂在行尾（AGENTS §4.6.1 第 2 条），两者交互模型不同，此处不迁就上游。
+ */
 @Composable
 private fun BookshelfCard(
     entry: BookshelfEntry,
@@ -283,43 +300,108 @@ private fun BookshelfCard(
     Card(
         modifier = modifier
             .fillMaxWidth()
+            .height(LnrDimens.cardHeight)
             .clickable(interactionSource = interaction, indication = null) { onOpen(entry) }
             .pressableScale(interaction),
-        insideMargin = PaddingValues(UiDimens.cardInset),
+        insideMargin = PaddingValues(LnrDimens.cardPadding),
     ) {
         Row(verticalAlignment = Alignment.Top) {
             CoverImage(
                 url = entry.coverUrl,
                 contentDescription = entry.title,
-                modifier = Modifier.size(CardCoverWidth, CardCoverHeight).clip(RoundedCornerShape(UiDimens.cardCorner)),
+                modifier = Modifier
+                    .size(LnrDimens.coverWidth, LnrDimens.coverHeight)
+                    .clip(RoundedCornerShape(LnrDimens.coverCorner)),
                 targetWidthDp = 282,
             )
             Column(
-                modifier = Modifier.weight(1f).padding(start = UiDimens.spaceS),
-                verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXS),
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .weight(1f)
+                    .padding(start = LnrDimens.textGutter),
+                // LNR 用 SpaceBetween 顶到底；换成 Top 会让末行与底边留空。
+                verticalArrangement = Arrangement.SpaceBetween,
             ) {
-                Text(entry.title, fontSize = UiDimens.section, fontWeight = FontWeight.Bold, maxLines = 2)
-                // 作者用强调色：与 LNR BookCardContent 一致，也让「谁写的」在长列表里一眼可辨。
-                Text(entry.author, fontSize = UiDimens.caption, color = MiuixTheme.colorScheme.primary, fontWeight = FontWeight.Bold, maxLines = 1)
-                val meta = buildList {
-                    add(if (entry.source == BookshelfSource.LOCAL_EPUB) "本地 EPUB" else "Wenku8")
-                    entry.wordCount?.let { add("${formatWordCount(it)} 字") }
-                    if (entry.chapterCount > 0) add("${entry.chapterCount} 章")
-                }
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
-                    Text(meta.joinToString(" · "), fontSize = UiDimens.captionSmall, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .6f), maxLines = 1)
+                Text(
+                    entry.title,
+                    fontSize = UiDimens.bodyStrong,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                // 作者行：W600 + primary（与 LNR 一致），右侧可接连载状态角标。
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(LnrDimens.authorGap),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        entry.author,
+                        fontSize = UiDimens.caption,
+                        color = MiuixTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                     if (entry.isPinned) {
-                        Badge(containerColor = MiuixTheme.colorScheme.primary) { Text("置顶", fontSize = UiDimens.badge) }
+                        Badge(containerColor = MiuixTheme.colorScheme.primary) {
+                            Text("置顶", fontSize = UiDimens.badge)
+                        }
                     }
                 }
-                // 上次阅读时间 + 断点：未读过的书（lastReadAt=0）整行不显示
-                if (entry.lastReadAt > 0L) {
-                    val resumeText = resume?.let { " · 读到 第${it.chapterIndex + 1}章 · 第${it.paragraphIndex + 1}段" }.orEmpty()
+                // 元信息行：LNR 是「图标 + 文字」两组（更新日期 / 字数），本工程对应
+                // 来源与规模（章节数 / 字数）。图标底板尺寸与圆角照 LNR `TagChip`。
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(LnrDimens.metaGap),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    TagChip(painter = ImageVector.vectorResource(com.example.hyperreader.R.drawable.lnr_toolbar_24px))
                     Text(
-                        "上次阅读：${formatRelativeReadTime(now, entry.lastReadAt)}$resumeText",
+                        entry.source.displayLabel(),
                         fontSize = UiDimens.captionSmall,
-                        color = MiuixTheme.colorScheme.primary.copy(alpha = .9f),
+                        color = MiuixTheme.colorScheme.onSurface.copy(alpha = .6f),
                         maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    TagChip(painter = ImageVector.vectorResource(com.example.hyperreader.R.drawable.lnr_read_more_24px))
+                    Text(
+                        buildString {
+                            if (entry.chapterCount > 0) append("${entry.chapterCount} 章")
+                            entry.wordCount?.let { append(" · ${formatWordCount(it)} 字") }
+                        }.ifBlank { "章节未知" },
+                        fontSize = UiDimens.captionSmall,
+                        color = MiuixTheme.colorScheme.onSurface.copy(alpha = .6f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                // 末行：LNR 放简介或最新章节；本工程放「上次读到哪儿」，这是差异里
+                // 唯一必须保留的本工程语义（AGENTS §4.8 页进度是续读唯一依据）。
+                if (entry.lastReadAt > 0L) {
+                    Column {
+                        Text(
+                            "上次阅读：${formatRelativeReadTime(now, entry.lastReadAt)}",
+                            fontSize = UiDimens.captionSmall,
+                            color = MiuixTheme.colorScheme.onSurface.copy(alpha = .6f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        resume?.let {
+                            Text(
+                                "读到第${it.chapterIndex + 1}章 · 第${it.paragraphIndex + 1}段",
+                                fontSize = UiDimens.captionSmall,
+                                color = MiuixTheme.colorScheme.primary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                } else {
+                    Text(
+                        "尚未开始阅读",
+                        fontSize = UiDimens.captionSmall,
+                        color = MiuixTheme.colorScheme.onSurface.copy(alpha = .6f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
             }
@@ -328,6 +410,32 @@ private fun BookshelfCard(
             }
         }
     }
+}
+
+/**
+ * 元信息图标底板（1:1 照搬 LNR `TagChip`：`4dp` 圆角 + `4dp/2dp` 内边距 + `15dp` 图标）。
+ */
+@Composable
+private fun TagChip(painter: ImageVector) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(LnrDimens.metaChipCorner))
+            .background(MiuixTheme.colorScheme.background.copy(alpha = .55f))
+            .padding(horizontal = LnrDimens.metaChipPadding, vertical = UiDimens.spaceXXS),
+    ) {
+        Icon(
+            imageVector = painter,
+            contentDescription = null,
+            tint = MiuixTheme.colorScheme.onSurface.copy(alpha = .6f),
+            modifier = Modifier.size(LnrDimens.metaChipIcon),
+        )
+    }
+}
+
+/** 书架来源的显示名（「本地 EPUB」/「Wenku8」），用于卡片元信息行。 */
+private fun BookshelfSource.displayLabel(): String = when (this) {
+    BookshelfSource.LOCAL_EPUB -> "本地 EPUB"
+    BookshelfSource.WENKU8 -> "Wenku8"
 }
 
 /** 触摸目标下限（与阅读器约定一致）。 */
@@ -387,35 +495,43 @@ private fun BookEntryMenu(
 }
 
 /**
- * 书架首屏骨架：两块与真实卡片同尺寸的占位。
+ * 书架首屏骨架，1:1 照搬 LNR `BookCardContentSkeleton` 的尺寸构成。
  *
- * 尺寸取自 [CardCoverWidth] / [CardCoverHeight]——骨架与真实内容同高，
- * 数据到达时列表不会整体跳一屏。
+ * LNR 的骨架与真实卡片严格同构：`146dp` 卡高、`4dp` 内边距、`94×144` 封面，
+ * 文字栏四条占位依次是 `40dp`（标题 90% 宽）、`20dp`（作者 43% 宽）、
+ * `32dp`（简介）——本工程第四行是「上次阅读」，故沿用同高度。
+ *
+ * 骨架与内容同尺寸是硬要求（AGENTS §4.4）：否则数据到达时整屏跳位。
  */
 @Composable
 private fun BookshelfSkeleton() {
     Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
         repeat(2) {
             Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS),
+                Modifier
+                    .fillMaxWidth()
+                    .height(LnrDimens.cardHeight)
+                    .padding(LnrDimens.cardPadding),
             ) {
-                ShimmerBlock(Modifier.size(CardCoverWidth, CardCoverHeight))
+                ShimmerBlock(
+                    Modifier
+                        .size(LnrDimens.coverWidth, LnrDimens.coverHeight)
+                        .clip(RoundedCornerShape(LnrDimens.coverCorner)),
+                )
                 Column(
-                    Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXS),
+                    Modifier
+                        .fillMaxHeight()
+                        .weight(1f)
+                        .padding(start = LnrDimens.textGutter),
+                    verticalArrangement = Arrangement.SpaceBetween,
                 ) {
-                    ShimmerLine(Modifier.fillMaxWidth(), heightDp = 18)
-                    ShimmerLine(Modifier.fillMaxWidth(), heightDp = 14)
-                    ShimmerLine(Modifier.fillMaxWidth(0.6f), heightDp = 14)
+                    ShimmerLine(Modifier.fillMaxWidth(0.9f), heightDp = 40)
+                    ShimmerLine(Modifier.fillMaxWidth(0.43f), heightDp = 20)
+                    ShimmerLine(Modifier.fillMaxWidth(), heightDp = 32)
+                    ShimmerLine(Modifier.fillMaxWidth(0.7f), heightDp = 32)
                 }
             }
         }
     }
 }
 
-// —— 卡片尺寸 ——
-// 封面比例取 LNR BookCardContent 的 94:144（2:3），高度放大后一行能放下两行简介。
-// 属装饰性布局尺寸，与控件最小触控区无关，故不走 UiDimens 令牌（AGENTS §4.4）。
-private val CardCoverWidth = 94.dp
-private val CardCoverHeight = 144.dp

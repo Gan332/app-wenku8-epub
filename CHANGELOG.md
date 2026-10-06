@@ -2,6 +2,34 @@
 
 本项目遵循语义化版本。
 
+
+## [未发布] — 主界面排版对齐 LNR
+
+### 界面
+
+- **底部导航变四项**：阅读 / 书架 / 探索 / 设置，顺序与 LNR `MainDestination` 一致，
+  **「阅读」成为默认首屏**。新增的阅读首页是「继续阅读」大卡 + 「最近在读」横向流 +
+  「最近更新」，空态给出去书架/探索的出口。导出入口**没有**回到一级导航，它仍在书架卡片
+  菜单与探索详情里（AGENTS §4.6.1 的立法意图保留）。
+- **书架卡片重排**：卡高 146dp、圆角 12dp、内边距 4dp、封面 94×144dp、封面与正文间 12dp、
+  正文栏用 `SpaceBetween` 顶到底——全部对齐 LNR `BookCardContent` 的字面规格。
+  元信息行改成 LNR `TagChip` 的「图标 + 文字」形状（原先是纯文本 `·` 拼接）。
+  骨架改用 LNR `BookCardContentSkeleton` 的尺寸构成（40/20/32dp 占位）。
+- **设置页改成分组卡**：不再是「每分类一张卡」，改为 LNR `SettingsCategory` 的形状——
+  分组标题（24dp 左右外边距）+ 一张 16dp 圆角组卡，组内 2dp 行距的扁平行。
+- **探索页顶栏**：补上 LNR `TopBar` 的 48dp 导航图标槽位与右侧搜索图标按钮，
+  大标题与图标同排。
+- **新增 `LnrDimens`**：所有上述 LNR 字面规格收进 `ui/UiDimens.kt` 的单一来源，
+  由 `DesignTokenTest.lnrLayoutSpecsAreLocked` 逐项钉死。
+
+### 内部
+
+- `StudioTab` 增加 `READING`；默认首屏由书架改为阅读。
+- 从 LNR 复制 `outline_book` / `outline_explore` / `outline_settings` / `search`
+  四个导航图标（Apache-2.0）；MiuiX 图标集没有 Book/Bookshelf/Explore，
+  沿用 `Recent`/`Search` 会让四个 tab 语义混淆。
+- 守卫测试新增 `lnrLayoutSpecsAreLocked` / `posterAspectIsShared` /
+  `mainNavigationMatchesLnrOrder`。
 ## [0.19.0-alpha04] - 2026-10-07（预发布）
 
 收尾 alpha03 遗留的半成品提交，并修掉本轮暴露的四个真实缺陷。

@@ -30,8 +30,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -44,6 +47,7 @@ import com.example.hyperreader.settings.ReaderPageTurnMode
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.ColorPicker
+import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.HorizontalDivider
 import top.yukonga.miuix.kmp.basic.Slider
 import top.yukonga.miuix.kmp.basic.Switch
@@ -52,6 +56,8 @@ import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.overlay.OverlayBottomSheet
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
+import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.ChevronForward
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 
@@ -141,70 +147,100 @@ private fun SettingsOverview(state: StudioUiState, viewModel: StudioViewModel) {
             }
             LazyColumn(
                 modifier = Modifier.weight(1f),
-                contentPadding = PaddingValues(horizontal = UiDimens.pagePadding, vertical = UiDimens.spaceL),
-                verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS),
+                contentPadding = PaddingValues(vertical = UiDimens.spaceL),
+                verticalArrangement = Arrangement.spacedBy(UiDimens.spaceM),
             ) {
                 item(key = "title") {
                     Row(
-                        modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = LnrDimens.settingsGroupMargin)
+                            .heightIn(min = UiDimens.touchMin),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text("设置", modifier = Modifier.weight(1f), fontSize = UiDimens.display, fontWeight = FontWeight.Bold)
+                        // LNR 顶栏在标题左侧放一个 48dp 的页面图标（`navigationIcon` 槽位），
+                        // 本项目顶栏没有这个槽位，改在页内标题行复刻同一视觉关系。
+                        Box(
+                            modifier = Modifier.size(LnrDimens.topBarIconSlot),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                imageVector = ImageVector.vectorResource(com.example.hyperreader.R.drawable.outline_settings_24px),
+                                contentDescription = null,
+                                tint = MiuixTheme.colorScheme.onSurface,
+                            )
+                        }
+                        Text("设置", fontSize = UiDimens.display, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                         if (!wide) {
                             TextButton(text = "分类", onClick = { railOpen = true }, modifier = Modifier.heightIn(min = UiDimens.touchMin))
                         }
                     }
                 }
                 SETTINGS_GROUPS.forEach { (groupTitle, categories) ->
+                    // 分组标题：LNR `SectionHeader` 用 24dp 左右外边距、10dp 上下外边距。
                     item(key = "group-$groupTitle") {
                         Text(
                             groupTitle,
-                            modifier = Modifier.padding(top = UiDimens.spaceS),
+                            modifier = Modifier.padding(
+                                horizontal = LnrDimens.settingsHeaderMarginH,
+                                vertical = LnrDimens.settingsHeaderMarginV,
+                            ),
                             fontSize = UiDimens.caption,
+                            fontWeight = FontWeight.Bold,
                             color = MiuixTheme.colorScheme.onSurface.copy(alpha = .6f),
                         )
                     }
-                    items(categories, key = { it.name }) { category ->
-                        CategoryCard(
-                            title = category.title,
-                            summary = category.summary,
-                            onClick = { viewModel.openSettingsSection(category.section) },
-                        )
+                    // 一个分组 = **一张**圆角组卡，组内多行（不是每分类一张卡）：
+                    // LNR `SettingsCategory` 就是这个形状 —— 16dp 圆角容器 + 2dp 行距。
+                    item(key = "groupcard-$groupTitle") {
+                        Card(
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = LnrDimens.settingsGroupMargin)
+                                .padding(bottom = LnrDimens.settingsGroupBottom),
+                            insideMargin = PaddingValues(UiDimens.spaceXXS),
+                        ) {
+                            Column(verticalArrangement = Arrangement.spacedBy(LnrDimens.settingsItemGap)) {
+                                categories.forEach { category ->
+                                    SettingsEntryRow(
+                                        title = category.title,
+                                        summary = category.summary,
+                                        onClick = { viewModel.openSettingsSection(category.section) },
+                                    )
+                                }
+                                // 组内追加的直达成项（LNR 把这类编辑项放在 `DisplaySettingsList` 等列表里，同属组内一行）：
+                                // 用「是否包含某分类」判断而非分组名字符串比较——改 SETTINGS_GROUPS 的分组名时不会静默失效。
+                                if (categories.any { it == SettingsCategory.ABOUT }) {
+                                    SettingsEntryRow(
+                                        title = "配置备份",
+                                        summary = "主题与阅读器设置的备份与迁移。",
+                                        onClick = { viewModel.openSettingsSection(SettingsSection.CONFIG) },
+                                    )
+                                    SettingsEntryRow(
+                                        title = "阅读统计",
+                                        summary = "阅读时长、连续天数与每本书排行。",
+                                        onClick = { viewModel.openSettingsSection(SettingsSection.STATISTICS) },
+                                    )
+                                }
+                                if (categories.any { it == SettingsCategory.DATA }) {
+                                    HorizontalDivider(Modifier.fillMaxWidth())
+                                    val engine by viewModel.exportEngine.collectAsStateWithLifecycle(
+                                        initialValue = com.example.hyperreader.settings.EpubEngine.CLASSIC,
+                                    )
+                                    SettingsEntryRow(
+                                        title = "EPUB 导出引擎",
+                                        summary = "${engine.label} · ${engine.summary}",
+                                        onClick = { engineSheet = true },
+                                    )
+                                    SettingsEntryRow(
+                                        title = "导出记录",
+                                        summary = "历史导出任务，可保存或分享已生成的 EPUB。",
+                                        onClick = { viewModel.setShowJobHistory(true) },
+                                    )
+                                }
+                            }
+                        }
                     }
-                }
-                // —— EPUB 导出引擎：轻量编辑走Sheet（Kazumi 的 proxy / danmaku 编辑器等价物）——
-                item(key = "engine") {
-                    val engine by viewModel.exportEngine.collectAsStateWithLifecycle(
-                        initialValue = com.example.hyperreader.settings.EpubEngine.CLASSIC,
-                    )
-                    CategoryCard(
-                        title = "EPUB 导出引擎",
-                        summary = "${engine.label} · ${engine.summary}",
-                        onClick = { engineSheet = true },
-                    )
-                }
-                // —— 导出记录（0.17.0）——
-                item(key = "job-history") {
-                    CategoryCard(
-                        title = "导出记录",
-                        summary = "历史导出任务，可保存或分享已生成的 EPUB。",
-                        onClick = { viewModel.setShowJobHistory(true) },
-                    )
-                }
-                // —— 配置导入导出（Kazumi 的 sync 分类入口）——
-                item(key = "config") {
-                    CategoryCard(
-                        title = "配置备份",
-                        summary = "主题与阅读器设置的备份与迁移。",
-                        onClick = { viewModel.openSettingsSection(SettingsSection.CONFIG) },
-                    )
-                }
-                item(key = "statistics") {
-                    CategoryCard(
-                        title = "阅读统计",
-                        summary = "阅读时长、连续天数与每本书排行。",
-                        onClick = { viewModel.openSettingsSection(SettingsSection.STATISTICS) },
-                    )
                 }
             }
         }
@@ -249,27 +285,48 @@ private fun SettingsOverview(state: StudioUiState, viewModel: StudioViewModel) {
     }
 }
 
-/** 分类卡片（Kazumi `SettingsCategoryTile`）：标题 + 摘要 + `›`。 */
+/**
+ * 设置组内的一行（1:1 对齐 LNR `SettingsClickableEntry`）。
+ *
+ * LNR 的设置页没有「每项一张卡」，而是：分组标题（`SectionHeader`，24dp 外边距）
+ * + 一个 `16dp` 圆角容器，容器内每行 `2dp` 间距、行高按内容自适应。
+ * 本工程此前是每分类一张 MiuiX `Card`（16dp 内边距），行与行之间有卡片间隙，
+ * 视觉密度与 LNR 不同；此处改为组内扁平行。
+ *
+ * 行高不写死 48dp：LNR 的行是内容自适应（标题 + 描述两行），
+ * 用 [UiDimens.touchMin] 只作下限，保证触摸目标不小于 48dp（AGENTS §4.4）。
+ */
 @Composable
-private fun CategoryCard(title: String, summary: String, onClick: () -> Unit) {
+private fun SettingsEntryRow(title: String, summary: String, onClick: () -> Unit) {
     val interaction = remember { MutableInteractionSource() }
-    Card(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
+            .heightIn(min = UiDimens.touchMin)
+            .clip(RoundedCornerShape(LnrDimens.settingsGroupCorner))
             .clickable(interactionSource = interaction, indication = null, onClick = onClick)
-            .pressableScale(interaction),
-        insideMargin = PaddingValues(UiDimens.cardInset),
+            .pressableScale(interaction)
+            .padding(horizontal = UiDimens.spaceS, vertical = UiDimens.spaceXS),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text(title, fontWeight = FontWeight.Bold, fontSize = UiDimens.section)
-                Text(summary, fontSize = UiDimens.captionSmall, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .7f))
-            }
-            Text("›", color = MiuixTheme.colorScheme.onSurface.copy(alpha = .5f), fontSize = UiDimens.title)
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXXS)) {
+            Text(title, fontWeight = FontWeight.Medium, fontSize = UiDimens.bodyStrong, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(
+                summary,
+                fontSize = UiDimens.captionSmall,
+                color = MiuixTheme.colorScheme.onSurface.copy(alpha = .7f),
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
+        Icon(
+            imageVector = MiuixIcons.ChevronForward,
+            contentDescription = null,
+            tint = MiuixTheme.colorScheme.onSurface.copy(alpha = .5f),
+            modifier = Modifier.size(UiDimens.spaceL),
+        )
     }
 }
-
 /** 分类侧栏（Kazumi `_RailDestination`）：宽屏常驻左侧，窄屏在 Sheet 里。 */
 @Composable
 private fun SettingsRail(current: SettingsCategory?, onSelect: (SettingsCategory) -> Unit, modifier: Modifier = Modifier) {
@@ -760,3 +817,7 @@ private fun ColorSwatchRow(onPicked: (Int) -> Unit) {
         }
     }
 }
+
+
+
+
