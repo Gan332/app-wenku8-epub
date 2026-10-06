@@ -2,9 +2,33 @@
 
 本项目遵循语义化版本。
 
-## [Unreleased]
+## [0.19.0-alpha04] - 2026-10-07（预发布）
+
+收尾 alpha03 遗留的半成品提交，并修掉本轮暴露的四个真实缺陷。
 
 ### 修复
+
+- **中文正文里的多余空格**：行内强调标签（`<b>强调</b>与<i>斜体</i>`）在导出后回读时
+  会变成「强调与斜体」——序列化缩进与标签边界在 CJK 之间留下空格。新增 `CJK_GAP`
+  只删除两侧均为中日韩字符的空格，英文词间间距不受影响；行内元素改用递归拼接子节点，
+  不再调用会规范化空白的 `Element.text()`。
+- **配置导入的枚举匹配**：`planEnum` 先把取值转大写再与枚举 `name` 精确比较，
+  只对全大写的枚举（`CLASSIC`/`POTATO`）生效，像 `BookshelfSort.RecentRead` 这样的驼峰名
+  会被判为「取值无效」而跳过。改为大小写不敏感匹配。
+- **配置导出不得含书架内容**这条硬规则与新加入的排序偏好撞名：shelf 节点的键从
+  `bookshelfSort` 改为 `sort`，避开「bookshelf」禁词而不放宽规则。
+- **插图链路与同名章节**：图片标记在解析期独立成行、potatoepub 回读不再丢图；目录里
+  标题相同但 href 不同的两个章节不再互相覆盖（成品含两个章节文件）。
+
+### 内部
+
+- 补齐上一批遗漏的三个编译断点：`ConfigChange` 的 `SetExportEngine` / `SetBookshelfSort`
+  子类、`ChapterBuilder` 传 `idOverride` 的构造调用、`parseBodyFragment` 的可用重载。
+- `ExportPipelineTest` 新增两个端到端用例（POTATO 真实段落与强调不转义、同名章节保留）。
+- 设置 → 网络新增「直连入口」显示：403 时会自动轮换 `.net → .cc → .com`。
+
+
+### 前序修复（alpha03 之后的遗留工作）
 
 - **上下滚动不再页间断开**：`NovelPageSource` 过去给每页都出一张**整屏高**位图，
   而页容量按 `floor((屏高 - 上边距 - 下边距) / 行高)` 计算——取整剩下的死区连同页边距
@@ -123,7 +147,7 @@
 标题去重（三层头部收敛）；阅读器设置弹层与配置页的两套视觉语言合并；导出进度信息的
 三套排版收敛；`ReaderScreen.kt` 里 8 类只有涟漪没有按压缩放的可点元素。
 
-### 内部
+### 前序内部改动
 
 - 新增 `com/xyreader/archive/PageFlowGeometry.kt`：把单页上下内边距、容量行数与位图
   高度抽成纯函数（`pageTop` / `pageBottom` / `linesOnPage` / `fullPageHeight` /
