@@ -4,7 +4,6 @@ import org.dom4j.Element
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element as JsoupElement
 import org.jsoup.nodes.TextNode
-import org.jsoup.parser.Parser
 
 /**
  * 把 [com.example.hyperreader.model.ContentBlock.Rich] 的行内 HTML 片段
@@ -44,7 +43,7 @@ internal object RichParagraphs {
      */
     fun append(target: Element, html: String) {
         if (html.isBlank()) return
-        val fragment = Jsoup.parseBodyFragment(html, "", Parser.htmlParser())
+        val fragment = Jsoup.parseBodyFragment(html)
         appendChildren(fragment.body(), target)
     }
 

@@ -54,6 +54,6 @@ class ChapterBuilder {
         title ?: throw Error("Missing 'title'")
         if (content == null && chapters.isEmpty()) throw Error("Missing 'content' or 'chapters'")
         return content?.let { Chapter(title!!, it, chapters = null, idOverride = id) }
-            ?: Chapter(title!!, chapters, idOverride = id)
+            ?: Chapter(title!!, null, chapters, idOverride = id)
     }
 }

@@ -461,6 +461,10 @@ sealed class ConfigChange(val label: String) {
     class SetReaderKeepScreenOn(val value: Boolean) : ConfigChange("保持屏幕常亮")
     class SetReaderImmersive(val value: Boolean) : ConfigChange("沉浸模式")
 
+    /** 0.19.0-alpha04：导出引擎与书架排序（schema v2 新增的 shelf 节点）。 */
+    class SetExportEngine(val value: EpubEngine) : ConfigChange("导出引擎")
+    class SetBookshelfSort(val value: BookshelfSort) : ConfigChange("书架排序")
+
     internal suspend fun writeTo(repository: SettingsRepository) {
         when (this) {
             is SetThemeMode -> repository.setThemeMode(value)
@@ -477,6 +481,8 @@ sealed class ConfigChange(val label: String) {
             is SetReaderPageTurn -> repository.setReaderPageTurn(value)
             is SetReaderKeepScreenOn -> repository.setReaderKeepScreenOn(value)
             is SetReaderImmersive -> repository.setReaderImmersive(value)
+            is SetExportEngine -> repository.setExportEngine(value)
+            is SetBookshelfSort -> repository.setBookshelfSort(value)
         }
     }
 }
