@@ -566,6 +566,7 @@ private fun AppearanceSection(viewModel: StudioViewModel) {
 @Composable
 private fun ReaderSection(state: StudioUiState, viewModel: StudioViewModel, onImportFont: () -> Unit) {
     val settings = state.readerSettings
+    val stripGaps by viewModel.stripCjkGaps.collectAsStateWithLifecycle(initialValue = true)
     SettingsScaffold("阅读器设置", viewModel::backSettings, listOf(
         { SectionTitle("背景") },
         {
@@ -613,6 +614,19 @@ private fun ReaderSection(state: StudioUiState, viewModel: StudioViewModel, onIm
         },
         {
             ToggleRow("沉浸模式", settings.immersiveMode, viewModel::setReaderImmersive)
+        },
+        { SectionTitle("正文清洗") },
+        {
+            Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(UiDimens.cardInset)) {
+                Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXS), modifier = Modifier.padding(UiDimens.cardInset)) {
+                    ToggleRow("移除汉字间多余空格", stripGaps, viewModel::setStripCjkGaps)
+                    Text(
+                        "EPUB 里因序列化缩进与行内标签边界产生的汉字间空格会被抹掉。若你的书（诗歌、手稿）本就要靠汉字间距排版，关掉即可保留。",
+                        fontSize = UiDimens.captionSmall,
+                        color = MiuixTheme.colorScheme.onSurface.copy(alpha = .7f),
+                    )
+                }
+            }
         },
         { SectionTitle("字体") },
         {

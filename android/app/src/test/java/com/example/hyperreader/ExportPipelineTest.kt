@@ -393,6 +393,54 @@ class ExportPipelineTest {
     }
 
     /**
+     * 「移除汉字间多余空格」必须可关：某些书（诗歌、手稿）的汉字间距是作者本意。
+     *
+     * 开启时 `</b>与<i>` 边界产生的空格被抹掉；关闭时原样保留。
+     */
+    @Test
+    fun cjkGapStrippingCanBeTurnedOff() {
+        val dir = Files.createTempDirectory("epub-cjk-gap").toFile()
+        val output = File(dir, "book.epub")
+        val book = Book(
+            title = "汉字间距测试",
+            author = "作者",
+            sourceUrl = "https://www.wenku8.net/book/5.htm",
+            bookUrl = "https://www.wenku8.net/book/5.htm",
+        )
+        PotatoEpubBuilder().build(
+            book,
+            listOf(
+                ParsedChapter(
+                    id = "c1",
+                    title = "第一章",
+                    volume = "正文",
+                    order = 1,
+                    sourceUrl = "https://www.wenku8.net/novel/2/5/1.html",
+                    blocks = listOf(ContentBlock.Rich("<b>强调</b>与<i>斜体</i>")),
+                ),
+            ),
+            emptyList(),
+            null,
+            output,
+        )
+
+        fun paragraphText(strip: Boolean): String =
+            EpubReaderRepository(null, stripCjkGapsOverride = strip)
+                .parseArchive("local:cjk", output)
+                .chapters
+                .single()
+                .blocks
+                .filterIsInstance<ReaderBlock.Paragraph>()
+                .map { it.text }
+                .single()
+
+        val stripped = paragraphText(strip = true)
+        val kept = paragraphText(strip = false)
+        assertEquals("强调与斜体", stripped)
+        assertTrue("关闭开关后应保留汉字间的空格，实际：$kept", kept.contains(' '))
+    }
+
+    /**
      * 标题与内容**完全相同**的两个章节必须各自出现在成品里。
      *
      * potatoepub 默认按「内容 + 标题」的 hash 派生章节 id，撞 id 时 manifest 与 spine

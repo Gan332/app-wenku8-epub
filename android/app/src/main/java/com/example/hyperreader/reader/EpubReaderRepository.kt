@@ -8,12 +8,19 @@ import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 import org.jsoup.nodes.TextNode
 import org.jsoup.parser.Parser
+import kotlinx.coroutines.flow.first
 import java.io.File
 import java.io.FileInputStream
 import java.io.InputStream
 import java.util.zip.ZipFile
 
-class EpubReaderRepository(private val context: Context? = null) {
+/**
+ * EPUB 解析与回读。
+ *
+ * @param stripCjkGapsOverride 汉字间多余空格的清理开关；`null` 时读设置（默认开）。
+ *   生产代码走设置，测试可直接注入确定值。
+ */
+class EpubReaderRepository(private val context: Context? = null, private val stripCjkGapsOverride: Boolean? = null) {
     fun open(bookId: String, uri: Uri): ReaderBook {
         val appContext = context?.applicationContext ?: throw Wenku8Exception("阅读器上下文不可用。", "EPUB_CONTEXT_MISSING")
         val file = copyToCache(appContext, uri)
@@ -134,7 +141,7 @@ class EpubReaderRepository(private val context: Context? = null) {
         document.select("script,style,noscript,iframe,object,embed").remove()
         val body = document.body() ?: return emptyList()
         val blocks = mutableListOf<ReaderBlock>()
-        collectBlocks(body, chapterPath, blocks)
+        collectBlocks(body, chapterPath, blocks, stripCjkGaps())
         if (blocks.isEmpty()) {
             // 结构化解析一无所获（纯文本章节）：退回整体文本，至少正文可读
             val text = body.text().trim()
@@ -143,13 +150,15 @@ class EpubReaderRepository(private val context: Context? = null) {
         return blocks.filter { it !is ReaderBlock.Paragraph || it.text.isNotBlank() }
     }
 
-    private fun collectBlocks(parent: Element, chapterPath: String, out: MutableList<ReaderBlock>) {
+    private fun collectBlocks(parent: Element, chapterPath: String, out: MutableList<ReaderBlock>, stripCjkGaps: Boolean) {
         val pending = StringBuilder()
 
         fun flush() {
             // CJK_GAP：夹在两个中日韩字符之间的空格是序列化/标签边界带来的排版产物，
             // 中文正文里不该出现（英文单词间距不受影响，因为两侧不是 CJK）。
-            val text = pending.toString().replace(WHITESPACE_RUN, " ").replace(CJK_GAP, "").trim()
+            // 某些书（诗歌、手稿）确实靠汉字间距排版，可在设置里关掉。
+            val raw = pending.toString().replace(WHITESPACE_RUN, " ")
+            val text = (if (stripCjkGaps) raw.replace(CJK_GAP, "") else raw).trim()
             pending.setLength(0)
             if (text.isNotEmpty()) out += ReaderBlock.Paragraph(text)
         }
@@ -168,7 +177,7 @@ class EpubReaderRepository(private val context: Context? = null) {
                     else ->
                         if (needsRecursion(node)) {
                             flush()
-                            collectBlocks(node, chapterPath, out)
+                            collectBlocks(node, chapterPath, out, stripCjkGaps)
                         } else {
                             // 行内元素（span / a / b / em …）：文本并入当前段落，顺序不丢。
                             // 用递归拼接子节点而不是 Element.text()：后者会规范化空白，
@@ -181,6 +190,15 @@ class EpubReaderRepository(private val context: Context? = null) {
         }
         flush()
     }
+
+    /**
+     * 是否抹掉汉字之间的多余空格：测试用 [stripCjkGapsOverride] 注入确定值，
+     * 生产读设置（解析发生在 IO 上下文，一次性读取可接受）。
+     */
+    private fun stripCjkGaps(): Boolean = stripCjkGapsOverride ?: runCatching {
+        val app = context?.applicationContext as? com.example.hyperreader.Wenku8Application ?: return@runCatching true
+        kotlinx.coroutines.runBlocking { app.settingsRepository.stripCjkGaps.first() }
+    }.getOrDefault(true)
 
     /**
      * CJK 之间的多余空格：序列化缩进或行内标签边界会在「强调</b>与<i>斜体」这种

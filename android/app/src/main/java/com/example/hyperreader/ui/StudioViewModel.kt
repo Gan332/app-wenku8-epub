@@ -267,6 +267,11 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     val exportEngine: kotlinx.coroutines.flow.Flow<com.example.hyperreader.settings.EpubEngine> =
         settingsRepository.exportEngine
 
+    /** 是否抹掉汉字之间的多余空格（0.19.0-alpha05；解析 EPUB 时读取）。 */
+    val stripCjkGaps: kotlinx.coroutines.flow.Flow<Boolean> = settingsRepository.stripCjkGaps
+
+    fun setStripCjkGaps(value: Boolean) = viewModelScope.launch { runCatching { settingsRepository.setStripCjkGaps(value) } }
+
     /** 第三方中继开关（仅公开页，AGENTS §4.11）。 */
     val relayEnabled: kotlinx.coroutines.flow.Flow<Boolean> = settingsRepository.relayEnabled
 

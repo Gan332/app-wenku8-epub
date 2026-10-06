@@ -69,6 +69,16 @@ class SettingsRepository(private val context: Context) {
         )
     }
 
+    /**
+     * 是否抹掉汉字之间的多余空格（0.19.0-alpha05）。
+     *
+     * 序列化缩进与行内标签边界会在 CJK 之间留下空格，默认清理；某些书（诗歌、手稿）
+     * 的汉字间距是作者本意，关闭即可保留。
+     */
+    val stripCjkGaps: Flow<Boolean> = data.safeData().map { it[STRIP_CJK_GAPS] ?: true }
+
+    suspend fun setStripCjkGaps(value: Boolean) = edit { it[STRIP_CJK_GAPS] = value }
+
     val searchHistory: Flow<List<String>> = data.safeData().map { prefs ->
         runCatching { json.decodeFromString(ListSerializer(String.serializer()), prefs[SEARCH_HISTORY].orEmpty()) }.getOrDefault(emptyList())
     }
@@ -160,6 +170,8 @@ class SettingsRepository(private val context: Context) {
         val READER_PAGE_TURN = stringPreferencesKey("reader_page_turn")
         val READER_KEEP_SCREEN_ON = booleanPreferencesKey("reader_keep_screen_on")
         val READER_IMMERSIVE = booleanPreferencesKey("reader_immersive")
+        /** 抹掉 CJK 之间的多余空格（见 [stripCjkGaps]），默认 true。 */
+        val STRIP_CJK_GAPS = booleanPreferencesKey("strip_cjk_gaps")
         val READER_FONT_URI = stringPreferencesKey("reader_font_uri")
         val SEARCH_HISTORY = stringPreferencesKey("search_history")
     }
