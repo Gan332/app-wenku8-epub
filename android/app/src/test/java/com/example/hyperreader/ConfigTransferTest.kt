@@ -103,7 +103,7 @@ class ConfigTransferTest {
     @Test
     fun topLevelKeysAreExactlyTheDocumentedSet() {
         assertEquals(
-            setOf("schemaVersion", "appVersion", "exportedAt", "theme", "reader"),
+            setOf("schemaVersion", "appVersion", "exportedAt", "theme", "reader", "shelf"),
             keysOf(export()),
         )
     }
@@ -123,14 +123,19 @@ class ConfigTransferTest {
             ),
             root.getValue("reader").jsonObject.keys,
         )
+        // 0.19.0-alpha04：schema v2 新增的 shelf 节点
+        assertEquals(
+            setOf("exportEngine", "bookshelfSort"),
+            root.getValue("shelf").jsonObject.keys,
+        )
     }
 
     @Test
     fun exportedDocumentCarriesSchemaAndInjectedMetadata() {
         val text = export(appVersion = "0.8.0", exportedAt = 1_730_000_000_000L)
         val root = Json.parseToJsonElement(text).jsonObject
-        assertEquals(1, root.getValue("schemaVersion").jsonPrimitive.content.toInt())
-        assertEquals(1, ConfigTransfer.SCHEMA_VERSION)
+        assertEquals(2, root.getValue("schemaVersion").jsonPrimitive.content.toInt())
+        assertEquals(2, ConfigTransfer.SCHEMA_VERSION)
         assertEquals("0.8.0", root.getValue("appVersion").jsonPrimitive.content)
         assertEquals(1_730_000_000_000L, root.getValue("exportedAt").jsonPrimitive.content.toLong())
     }
@@ -190,7 +195,8 @@ class ConfigTransferTest {
     fun everyWritableChangeTargetsASingleSettingsField() {
         // 导入计划的每一条都只能改一个具体设置项，无法整体替换设置对象
         val plan = ConfigTransfer.plan(ConfigTransfer.documentOf(theme, reader, "0.8.0", 0L))
-        assertEquals(14, plan.appliedCount)
+        // 14 项 theme+reader + 2 项 shelf（导出引擎、书架排序）
+        assertEquals(16, plan.appliedCount)
         assertTrue(plan.changes.all { it.label.isNotBlank() })
         assertEquals(plan.changes.size, plan.changes.map { it.label }.toSet().size)
     }
@@ -248,7 +254,8 @@ class ConfigTransferTest {
         val result = ConfigTransfer.decode(ConfigTransfer.encodeDocument(document))
         assertTrue(result is ConfigTransfer.DecodeResult.Success)
         val plan = ConfigTransfer.plan((result as ConfigTransfer.DecodeResult.Success).document)
-        assertEquals(0, plan.skippedCount)
+        // 0.19.0-alpha04：这份手构文档没有 shelf 节点 → 缺失计一条（skipped），theme+reader 共 14 项
+        assertEquals(1, plan.skippedCount)
         assertEquals(14, plan.appliedCount)
 
         fun change(label: String) = plan.changes.first { it.label == label }
@@ -276,7 +283,7 @@ class ConfigTransferTest {
         // 合法项照常导入
         assertTrue(plan.changes.any { it is ConfigChange.SetDynamicColor })
         // 非法项只跳过自身：主题 2 项 + 阅读器 11 项全部不可用，其余不受影响
-        assertEquals(13, plan.skippedCount)
+        assertEquals(14, plan.skippedCount)
         assertEquals(1, plan.appliedCount)
         assertTrue(plan.skipped.any { it.contains("SEPIA") })
         assertTrue(plan.skipped.any { it.contains("NEON") })
