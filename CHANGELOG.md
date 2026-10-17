@@ -44,7 +44,8 @@
 
 - **底部导航变四项**：阅读 / 书架 / 探索 / 设置，顺序与 LNR `MainDestination` 一致，
   **「阅读」成为默认首屏**。新增的阅读首页是「继续阅读」大卡 + 「最近在读」横向流 +
-  「最近更新」，空态给出去书架/探索的出口。导出入口**没有**回到一级导航，它仍在书架卡片
+  整架最近阅读过的一栏，空态给出去书架/探索的出口。导出入口**没有**回到一级导航，
+  它仍在书架卡片
   菜单与探索详情里（AGENTS §4.6.1 的立法意图保留）。
 - **书架卡片重排**：卡高 146dp、圆角 12dp、内边距 4dp、封面 94×144dp、封面与正文间 12dp、
   正文栏用 `SpaceBetween` 顶到底——全部对齐 LNR `BookCardContent` 的字面规格。
@@ -69,6 +70,30 @@
   两个无法落地的值已移除；补上探索书卡的 6 个新规格并在 `DesignTokenTest` 里逐项钉死。
 - **新增 `LnrDimens`**：所有上述 LNR 字面规格收进 `ui/UiDimens.kt` 的单一来源，
   由 `DesignTokenTest.lnrLayoutSpecsAreLocked` 逐项钉死。
+
+### 界面重构（交互与共用件）
+
+- **书籍操作菜单从 `Popup` 改为轻量 Sheet**：菜单过去锚在卡片行尾、偏移写死
+  `120.dp`，且随列表项一起进出组合——换字号或换机型后位置就不对，滚动时还会被卡片裁掉。
+  现在与「书架排序」「EPUB 导出引擎」共用同一套 `OverlayBottomSheet` 范式
+  （AGENTS §4.12），由根 Scaffold 的弹层承载，条目滚出视口也不会留下悬空的菜单；
+  「移出书架」用 `error` 色区分破坏性操作。
+- **切 tab 不再丢滚动位置**：`AnimatedContent` 切页时旧页会离开组合，页内 `remember`
+  的 `LazyListState` 随之丢失，回到书架/探索总是跳回顶部。现在两级列表的滚动状态
+  由 `StudioApp` 按 tab 持有并下发，页面只渲染。
+- **书架分组头不再叠一层 `Surface`**：分组头只需要一块不透明底色挡住滚过去的卡片，
+  直接给 `Column` 上 `background`，少一层合成。
+- **共用件收敛**：新增 `ui/SectionHeader.kt`，把探索页 `SectionHeader`、阅读首页
+  `SectionHeaderText`、设置页 `SectionTitle` 三份同义实现合成一份（字号/字重早已相同，
+  行高与是否支持行尾操作不一致）；副文本颜色从 `onSurface.copy(alpha = 0.6f / 0.68f /
+  0.7f / 0.72f / 0.75f / 0.8f)` 六种写法收成 `secondaryTextColor()` /
+  `tertiaryTextColor()` 两档语义。
+- **对照标题与内容**：阅读首页第三栏取的是 `lastReadAt` 降序（最近**读过**的书），
+  标题却写成「最近更新」，现改为「最近阅读」。
+- 顺手清掉死代码与陈旧 import：`StudioApp` 里无人使用的 `MiSansFont`、
+  `ExploreDetailScreen` 的孤立 KDoc、`ConfigSection`/`ExportProgressRow`/`CoverImage`
+  的未用 import；
+  探索详情封面的 `0.75f` 改用 `LnrDimens.POSTER_ASPECT`。
 
 ### 内部
 

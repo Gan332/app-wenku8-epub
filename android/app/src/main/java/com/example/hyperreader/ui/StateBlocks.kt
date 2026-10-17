@@ -22,7 +22,6 @@ import androidx.compose.ui.text.style.TextAlign
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
 import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 /**
  * 共用状态呈现：加载中 / 空态 / 出错。
@@ -51,7 +50,7 @@ fun LoadingBlock(text: String? = null, modifier: Modifier = Modifier) {
                 text,
                 modifier = Modifier.padding(start = UiDimens.spaceS),
                 fontSize = UiDimens.caption,
-                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                color = tertiaryTextColor(),
             )
         }
     }
@@ -95,7 +94,7 @@ fun EmptyState(
                 Text(
                     description,
                     fontSize = UiDimens.caption,
-                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                    color = tertiaryTextColor(),
                     textAlign = TextAlign.Center,
                 )
             }

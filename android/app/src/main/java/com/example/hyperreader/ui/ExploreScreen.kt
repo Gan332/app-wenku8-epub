@@ -18,9 +18,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -75,8 +75,12 @@ fun ExploreScreen(
     onLogin: () -> Unit,
     onGoToCatalog: () -> Unit,
     onOpenSearch: () -> Unit,
+    /**
+     * 探索页滚动位置由宿主持有（`StudioApp` 按 tab 缓存），
+     * 避免切走 tab 再回来时列表跳回顶部。
+     */
+    listState: LazyListState,
 ) {
-    val listState = rememberLazyListState()
     // 换页时回到顶部：否则从「今日更新」切到「新书一览」还停在上一个榜单的滚动位置。
     val activePageId = state.activeExplorePage?.id
     LaunchedEffect(activePageId) { listState.scrollToItem(0) }
@@ -194,7 +198,7 @@ private fun ExploreTitleRow(onOpenSearch: () -> Unit) {
             Text(
                 "Wenku8 轻小说文库 · 年度/月度榜单无需登录",
                 fontSize = UiDimens.captionSmall,
-                color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f),
+                color = secondaryTextColor(),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -222,7 +226,7 @@ private fun LoginHintCard(onLogin: () -> Unit) {
                 "排行榜、站内搜索与官方标签需要登录",
                 modifier = Modifier.weight(1f),
                 fontSize = UiDimens.caption,
-                color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f),
+                color = secondaryTextColor(),
             )
             TextButton(text = "登录", onClick = onLogin, modifier = Modifier.heightIn(min = UiDimens.touchMin))
         }
@@ -252,7 +256,7 @@ private fun CatalogSectionCard(state: StudioUiState, onGoToCatalog: () -> Unit) 
         Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXS)) {
             SectionHeader("本地书目", trailing = { if (state.catalogSize == 0) TextButton(text = "更新缓存", onClick = onGoToCatalog) })
             Text("共 ${state.catalogSize} 本 · $updated", fontSize = UiDimens.body, fontWeight = FontWeight.Bold)
-            Text("搜索与浏览基于本地缓存，断网也能用。", fontSize = UiDimens.captionSmall, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f))
+            Text("搜索与浏览基于本地缓存，断网也能用。", fontSize = UiDimens.captionSmall, color = secondaryTextColor())
             state.catalogProgress?.let { (done, total) ->
                 Text("正在抓取 $done / $total", fontSize = UiDimens.captionSmall, color = MiuixTheme.colorScheme.primary)
             }
@@ -365,7 +369,7 @@ private fun ExploreBookCard(book: SearchBook, onClick: () -> Unit) {
                 Text(
                     book.author,
                     fontSize = UiDimens.captionSmall,
-                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                    color = tertiaryTextColor(),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -387,18 +391,6 @@ private fun TagSection(tags: List<String>, activeTag: String?, onSelect: (String
                 TextButton(text = if (tag == activeTag) "✓ $tag" else tag, onClick = { onSelect(tag) })
             }
         }
-    }
-}
-
-/** 分区标题行：左侧标题，右侧可选操作（LNR 分区标题字号与字重）。 */
-@Composable
-private fun SectionHeader(title: String, trailing: (@Composable () -> Unit)? = null) {
-    Row(
-        modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(title, modifier = Modifier.weight(1f), fontSize = UiDimens.section, fontWeight = FontWeight.Bold)
-        trailing?.invoke()
     }
 }
 

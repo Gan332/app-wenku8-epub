@@ -817,9 +817,7 @@ internal fun SettingsScaffold(title: String, onBack: () -> Unit, blocks: List<@C
 }
 
 @Composable
-internal fun SectionTitle(text: String) {
-    Text(text, fontWeight = FontWeight.Bold, fontSize = UiDimens.section)
-}
+internal fun SectionTitle(text: String) = SectionHeader(text, minRowHeight = false)
 
 @Composable
 private fun ToggleRow(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {

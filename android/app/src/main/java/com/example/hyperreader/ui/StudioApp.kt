@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -42,13 +43,10 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.state.ToggleableState
-import androidx.compose.ui.text.font.Font
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import top.yukonga.miuix.kmp.anim.DecelerateEasing
 import top.yukonga.miuix.kmp.basic.Button
@@ -75,11 +73,8 @@ import top.yukonga.miuix.kmp.icon.extended.Search
 import top.yukonga.miuix.kmp.icon.extended.Settings
 import top.yukonga.miuix.kmp.icon.extended.Share
 import top.yukonga.miuix.kmp.basic.TopAppBar
-import top.yukonga.miuix.kmp.theme.ColorSchemeMode
 import top.yukonga.miuix.kmp.theme.MiuixTheme
-import top.yukonga.miuix.kmp.theme.ThemeController
 import com.example.hyperreader.R
-import com.example.hyperreader.Wenku8Application
 import com.example.hyperreader.auth.LoginActivity
 import com.example.hyperreader.reader.XyReaderActivity
 import com.example.hyperreader.reader.onlineReaderIntent
@@ -91,13 +86,11 @@ import com.example.hyperreader.ui.ExploreDetailScreen
 import com.example.hyperreader.ui.ExploreScreen
 import com.example.hyperreader.ui.LoadingBlock
 import com.example.hyperreader.ui.ReadingHomeScreen
-import com.example.hyperreader.ui.ReadingStatsScreen
 import com.example.hyperreader.ui.SearchScreen
 import com.example.hyperreader.ui.SettingsSection
 import com.example.hyperreader.ui.SettingsScreen
 import com.example.hyperreader.ui.formatEta
 import com.example.hyperreader.ui.phaseLabel
-import com.example.hyperreader.settings.AppThemeMode
 import com.example.hyperreader.model.Chapter
 import com.example.hyperreader.model.ExportJob
 import com.example.hyperreader.model.JobStatus
@@ -109,8 +102,6 @@ import com.example.hyperreader.ui.UiDimens
 import com.example.hyperreader.ui.StudioTab
 import com.example.hyperreader.ui.StudioUiState
 import com.example.hyperreader.ui.StudioViewModel
-
-private val MiSansFont = FontFamily(Font(R.font.misansvf))
 
 class MainActivity : ComponentActivity() {
     private val notificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
@@ -222,6 +213,16 @@ private fun StudioApp(
     }
     // 根消息走 Snackbar（可滑走、自动消失），替代源站页的内联错误卡
     val snackbarHostState = remember { SnackbarHostState() }
+    // 一级导航各页的滚动位置。状态必须挂在页面上层：`AnimatedContent` 切 tab 时
+    // 旧页会离开组合，页内 `remember` 的 LazyListState 随之下线，回到该页就跳回顶部。
+    // 键是 tab，页面自身只负责渲染、不持有位置。
+    //
+    // 注意 `LazyListState()` 与页内的 `rememberLazyListState()` 之间只差
+    // `rememberSaveable`：这里不需要进程重建后的恢复（数据本身要先从 DataStore
+    // 冷读回来），而要的是跨 tab 的同一实例，故直接构造。
+    val tabListStates = remember { mutableMapOf<StudioTab, LazyListState>() }
+    fun tabListState(tab: StudioTab): LazyListState =
+        tabListStates.getOrPut(tab) { LazyListState() }
 
     // Cloudflare 拦截时自动弹验证窗口（用户亲手完成交互，通过后自动关闭并重试）
     LaunchedEffect(state.message) {
@@ -419,6 +420,7 @@ private fun StudioApp(
                     state = state,
                     viewModel = viewModel,
                     onImportEpub = onImportEpub,
+                    listState = tabListState(StudioTab.BOOKSHELF),
                     onOpenLocal = { entry ->
                         entry.localUri?.let { uri ->
                             context.startActivity(XyReaderActivity.intent(context, uri, entry.bookId, entry.title))
@@ -442,6 +444,7 @@ private fun StudioApp(
                 state.tab == StudioTab.EXPLORE -> ExploreScreen(
                     state = state,
                     viewModel = viewModel,
+                    listState = tabListState(StudioTab.EXPLORE),
                     onLogin = onLogin,
                     onGoToCatalog = {
                         viewModel.setTab(StudioTab.SETTINGS)

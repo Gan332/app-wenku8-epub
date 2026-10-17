@@ -11,8 +11,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.example.hyperreader.model.ExportJob
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.LinearProgressIndicator
@@ -102,7 +100,7 @@ fun ExportProgressRow(
                     Text(
                         "剩余约 ${formatEta(progress.etaSeconds)}",
                         fontSize = UiDimens.captionSmall,
-                        color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                        color = tertiaryTextColor(),
                     )
                 }
             }
@@ -111,7 +109,7 @@ fun ExportProgressRow(
                     progress.message,
                     fontSize = UiDimens.captionSmall,
                     maxLines = 2,
-                    color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.72f),
+                    color = secondaryTextColor(),
                 )
             }
             Row(
@@ -138,7 +136,7 @@ fun ExportProgressRow(
                         }
                     },
                     fontSize = UiDimens.captionSmall,
-                    color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                    color = tertiaryTextColor(),
                 )
                 TextButton(text = "取消", onClick = { onCancel(job.id) })
             }
@@ -147,7 +145,7 @@ fun ExportProgressRow(
                     "当前：${progress.currentTitle}",
                     fontSize = UiDimens.captionSmall,
                     maxLines = 1,
-                    color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                    color = tertiaryTextColor(),
                 )
             }
         }

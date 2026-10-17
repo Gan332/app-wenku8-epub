@@ -44,8 +44,6 @@ import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
-/** 元数据行最小高度，符合 48dp 触摸目标约定。 */
-
 /**
  * 探索页书籍详情：**全屏独立页面**，与创建导出流程彻底分开。
  *
@@ -107,7 +105,7 @@ fun ExploreDetailScreen(
                     ShimmerLine(heightDp = 22)
                     ShimmerLine(heightDp = 16)
                     ShimmerLine(heightDp = 120)
-                    Text("正在获取书籍信息…", fontSize = UiDimens.caption, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .75f))
+                    Text("正在获取书籍信息…", fontSize = UiDimens.caption, color = secondaryTextColor())
                 }
             }
         }
@@ -118,14 +116,14 @@ fun ExploreDetailScreen(
                     Box(
                         modifier = Modifier
                             .width(UiDimens.coverWidth)
-                            .aspectRatio(0.75f)
+                            .aspectRatio(LnrDimens.POSTER_ASPECT)
                             .clip(RoundedCornerShape(UiDimens.cardCorner))
                             .clickable(enabled = coverUrl != null) { showCover = true },
                     ) {
                         CoverImage(
                             url = coverUrl,
                             contentDescription = title,
-                            modifier = Modifier.fillMaxWidth().aspectRatio(0.75f),
+                            modifier = Modifier.fillMaxWidth().aspectRatio(LnrDimens.POSTER_ASPECT),
                             targetWidthDp = 480,
                         )
                     }
@@ -202,7 +200,7 @@ fun ExploreDetailScreen(
                         Text("内容简介", fontWeight = FontWeight.Bold)
                         Text(
                             text = summary.ifBlank { if (loading) "正在获取简介…" else "源站没有提供简介。" },
-                            color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.8f),
+                            color = secondaryTextColor(),
                             fontSize = UiDimens.body,
                         )
                     }
@@ -260,7 +258,7 @@ fun ExploreDetailScreen(
                         Text(
                             "本页面只读取源站公开信息，不经过导出解析流程。",
                             fontSize = UiDimens.captionSmall,
-                            color = MiuixTheme.colorScheme.onSurface.copy(alpha = .6f),
+                            color = tertiaryTextColor(),
                         )
                     }
                 }
@@ -288,7 +286,7 @@ internal fun FieldCard(label: String, value: String, index: Int = 0) {
                 .padding(horizontal = UiDimens.cardInset, vertical = UiDimens.spaceS),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(label, color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.68f), fontSize = UiDimens.body)
+            Text(label, color = tertiaryTextColor(), fontSize = UiDimens.body)
             Text(
                 value,
                 modifier = Modifier.weight(1f).padding(start = UiDimens.spaceM),
@@ -324,7 +322,7 @@ private fun ChapterTocCard(
                 chapters.isEmpty() -> Text(
                     if (loading) "正在获取目录…" else "目录尚未就绪。",
                     fontSize = UiDimens.body,
-                    color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f),
+                    color = secondaryTextColor(),
                 )
                 else -> {
                     if (chapters.size > ChapterPreview.PREVIEW_LIMIT) {
@@ -366,7 +364,7 @@ private fun ChapterTocCard(
                             else -> "仅显示前 ${visible.size} / $filteredCount 章。"
                         },
                         fontSize = UiDimens.captionSmall,
-                        color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f),
+                        color = secondaryTextColor(),
                     )
                     if (ChapterPreview.canExpand(chapters, query, expanded)) {
                         TextButton(
@@ -399,6 +397,6 @@ private fun ChapterTocRow(chapter: com.example.hyperreader.model.Chapter, onClic
             fontSize = UiDimens.body,
             maxLines = 1,
         )
-        if (chapter.isIllustration) Text("插图", fontSize = UiDimens.badge, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .6f))
+        if (chapter.isIllustration) Text("插图", fontSize = UiDimens.badge, color = tertiaryTextColor())
     }
 }

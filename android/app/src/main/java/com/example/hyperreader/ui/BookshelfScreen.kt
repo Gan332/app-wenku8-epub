@@ -6,7 +6,6 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -16,11 +15,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -28,23 +24,15 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Popup
 import com.example.hyperreader.model.BookshelfEntry
 import com.example.hyperreader.model.BookshelfSource
 import com.example.hyperreader.reader.onlineReaderIntent
@@ -52,12 +40,11 @@ import com.example.hyperreader.settings.BookshelfSort
 import com.example.hyperreader.settings.ReadingProgress
 import com.example.hyperreader.ui.cover.CoverImage
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.Button
+import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Badge
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.HorizontalDivider
-import top.yukonga.miuix.kmp.basic.Surface
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.Text
@@ -81,9 +68,15 @@ fun BookshelfScreen(
     onOpenRemote: (BookshelfEntry) -> Unit,
     /** 远程书的详情：复用探索详情那条公开数据通路（0.17.0 起菜单项「查看详情」）。 */
     onOpenDetail: (BookshelfEntry) -> Unit,
+    /**
+     * 书架滚动位置由宿主持有（`StudioApp` 按 tab 缓存）。
+     * 在本屏内 `remember` 的话，切走 tab 时列表会离开组合、位置被丢弃，
+     * 回到书架就总是跳回顶部。
+     */
+    listState: LazyListState,
 ) {
-    // 「更多」弹出菜单的锚定条目 id（null = 关闭）。
-    // 交互：点卡片主体直接打开书，行尾 More 弹操作菜单（替换旧的全屏操作弹窗）。
+    // 「更多」操作菜单对应的条目 id（null = 关闭）。
+    // 交互：点卡片主体直接打开书，行尾 More 打开操作 Sheet。
     var menuEntryId by remember { mutableStateOf<String?>(null) }
     // 排序选择 Sheet（0.19.0-alpha03）：编辑型设置用轻量 Sheet，不占二级页（AGENTS §4.12）
     var sortSheet by remember { mutableStateOf(false) }
@@ -91,53 +84,79 @@ fun BookshelfScreen(
     val readingProgress by viewModel.readingProgress.collectAsStateWithLifecycle(initialValue = emptyMap())
     // 数据变化时刷新「N 分钟前」的基准时刻，避免长开应用后相对时间停在启动瞬间
     val now = remember(state.bookshelf, readingProgress) { System.currentTimeMillis() }
-    Column(Modifier.fillMaxWidth().padding(top = UiDimens.spaceL), verticalArrangement = Arrangement.spacedBy(UiDimens.spaceM)) {
-        // 0.17.0：导出记录已独立成页（入口在设置 → 概览与通知栏路由），书架只留进行中的任务概览
-        Text("书架", fontSize = UiDimens.display, fontWeight = FontWeight.Bold)
-        Text("在线书籍和本地 EPUB 都可以在这里继续阅读。", color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f), fontSize = UiDimens.caption)
-        Row(horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
-            Button(onClick = onImportEpub, modifier = Modifier.weight(1f)) { Text("导入 EPUB") }
-            // 排序入口只在有书时出现：空书架没有可排的东西
-            if (state.bookshelf.isNotEmpty()) {
-                TextButton(
-                    text = "排序：${state.bookshelfSort.label}",
-                    onClick = { sortSheet = true },
-                    modifier = Modifier.heightIn(min = UiDimens.touchMin),
-                )
+    // 菜单目标从列表状态反查：sheet 挂在页面层，条目被滚出视口或书架变化时不会悬空。
+    val menuEntry = state.bookshelf.firstOrNull { it.id == menuEntryId }
+    // 折叠状态是纯 UI 关注点，不进 ViewModel（AGENTS §4.6.1）。
+    var collapsed by remember { mutableStateOf(emptySet<BookshelfGroup>()) }
+    // 单滚动容器：页头（标题 / 说明 / 导入 / 导出 / 分割线）与书籍列表放在同一个
+    // LazyColumn 里。此前页头在 Column 中常驻、列表是内层 LazyColumn，导致
+    // stickyHeader 只能钉在内层列表顶部——分组头会停在页头下方约 200dp 处不滚，
+    // 视觉上与页头割裂。合并后分组头真正钉到视口顶，页头也随滚动离开
+    // （insets 仍由 Scaffold 在 StudioApp 消费一次，这里只管页内间距）。
+    LazyColumn(
+        state = listState,
+        modifier = Modifier.fillMaxWidth(),
+        contentPadding = PaddingValues(top = UiDimens.spaceL, bottom = UiDimens.spaceL),
+        verticalArrangement = Arrangement.spacedBy(UiDimens.spaceM),
+    ) {
+        item(key = "page-title") {
+            Text("书架", fontSize = UiDimens.display, fontWeight = FontWeight.Bold)
+        }
+        item(key = "page-caption") {
+            Text("在线书籍和本地 EPUB 都可以在这里继续阅读。", color = secondaryTextColor(), fontSize = UiDimens.caption)
+        }
+        item(key = "page-actions") {
+            Row(horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
+                Button(onClick = onImportEpub, modifier = Modifier.weight(1f)) { Text("导入 EPUB") }
+                // 排序入口只在有书时出现：空书架没有可排的东西
+                if (state.bookshelf.isNotEmpty()) {
+                    TextButton(
+                        text = "排序：${state.bookshelfSort.label}",
+                        onClick = { sortSheet = true },
+                        modifier = Modifier.heightIn(min = UiDimens.touchMin),
+                    )
+                }
             }
         }
-        ActiveExportSection(
-            jobs = state.jobs,
-            onOpen = { jobId -> viewModel.route(StudioViewModel.ROUTE_EXPORT_PROGRESS, jobId) },
-            onCancel = { jobId -> viewModel.cancel(jobId) },
-        )
-        HorizontalDivider(Modifier.fillMaxWidth())
+        item(key = "export-section") {
+            ActiveExportSection(
+                jobs = state.jobs,
+                onOpen = { jobId -> viewModel.route(StudioViewModel.ROUTE_EXPORT_PROGRESS, jobId) },
+                onCancel = { jobId -> viewModel.cancel(jobId) },
+            )
+        }
+        item(key = "page-divider") {
+            HorizontalDivider(Modifier.fillMaxWidth())
+        }
         // 三态：读 DataStore 中 → 读到了且为空 → 有书。
         // 少了中间那一态，冷启动会先闪一屏「书架还是空的」再被真实列表替换。
         if (!state.bookshelfLoaded) {
-            BookshelfSkeleton()
+            item(key = "bookshelf-skeleton") { BookshelfSkeleton() }
         } else if (state.bookshelf.isEmpty()) {
-            EmptyState(
-                title = "书架还是空的",
-                description = "可以从「探索」加入 Wenku8 书籍，或导入本地 EPUB。",
-            )
+            item(key = "bookshelf-empty") {
+                EmptyState(
+                    title = "书架还是空的",
+                    description = "可以从「探索」加入 Wenku8 书籍，或导入本地 EPUB。",
+                )
+            }
         } else {
             val sections = remember(state.bookshelf) { groupBookshelf(state.bookshelf) }
-            // 折叠状态存在这里而非 ViewModel：纯 UI 关注点，不该进业务状态（AGENTS §4.6.1）。
-            var collapsed by remember { mutableStateOf(emptySet<BookshelfGroup>()) }
-            val listState = rememberLazyListState()
-            Box(Modifier.fillMaxWidth()) {
-                LazyColumn(state = listState, verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
-                    sections.forEach { section ->
-                        stickyHeader(key = "header-${section.group}") {
-                            BookshelfGroupHeader(
-                                section = section,
-                                expanded = section.group !in collapsed,
-                                onToggle = { collapsed = if (section.group in collapsed) collapsed - section.group else collapsed + section.group },
-                            )
-                        }
-                        if (section.group !in collapsed) {
-                            itemsIndexed(section.entries, key = { _, entry -> entry.id }) { index, entry ->
+            sections.forEach { section ->
+                stickyHeader(key = "header-${section.group}") {
+                    BookshelfGroupHeader(
+                        section = section,
+                        expanded = section.group !in collapsed,
+                        onToggle = { collapsed = if (section.group in collapsed) collapsed - section.group else collapsed + section.group },
+                    )
+                }
+                if (section.group !in collapsed) {
+                    // 一个分组是一个 item：分组头以外的卡片共用同一个 LazyColumn 项，
+                    // 于是 `Column` 里的 `Modifier.animateItem()` 依然生效（0.19.0 起），
+                    // 又不必为每张卡单独建项——后者会让 stickyHeader 与卡片之间
+                    // 多出一个可滚动的项边界，分组头会把上一组的最后一张卡盖住。
+                    item(key = "section-${section.group}") {
+                        Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
+                            section.entries.forEachIndexed { index, entry ->
                                 BookshelfCard(
                                     entry = entry,
                                     resume = readingProgress[entry.bookId],
@@ -164,35 +183,17 @@ fun BookshelfScreen(
                                         }
                                     },
                                 )
-                                if (menuEntryId == entry.id) {
-                                    // Popup(alignment, offset) 的 offset 是 IntOffset（像素），需按 density 换算
-                                    val menuOffset = with(LocalDensity.current) { IntOffset(0, 120.dp.roundToPx()) }
-                                    Popup(
-                                        onDismissRequest = { menuEntryId = null },
-                                        alignment = Alignment.TopEnd,
-                                        offset = menuOffset,
-                                    ) {
-                                        BookEntryMenu(
-                                            entry = entry,
-                                            viewModel = viewModel,
-                                            onOpenLocal = { onOpenLocal(it); menuEntryId = null },
-                                            onOpenRemote = { onOpenRemote(it); menuEntryId = null },
-                                            onOpenDetail = { onOpenDetail(it); menuEntryId = null },
-                                            onDismiss = { menuEntryId = null },
-                                        )
-                                    }
-                                }
                             }
                         }
                     }
                 }
-                VerticalScrollBar(
-                    rememberScrollBarAdapter(listState),
-                    Modifier.align(Alignment.TopEnd).fillMaxHeight(),
-                )
             }
         }
     }
+    VerticalScrollBar(
+        rememberScrollBarAdapter(listState),
+        Modifier.fillMaxHeight(),
+    )
     // 排序选择：与设置页「EPUB 导出引擎」同一套轻量 Sheet 范式（AGENTS §4.12）
     if (sortSheet) {
         OverlayBottomSheet(show = true, onDismissRequest = { sortSheet = false }) {
@@ -204,7 +205,7 @@ fun BookshelfScreen(
                 Text(
                     "置顶的书始终排在最前，排序只影响各分组内部。",
                     fontSize = UiDimens.captionSmall,
-                    color = MiuixTheme.colorScheme.onSurface.copy(alpha = .7f),
+                    color = secondaryTextColor(),
                 )
                 BookshelfSort.entries.forEach { option ->
                     TextButton(
@@ -221,57 +222,68 @@ fun BookshelfScreen(
             }
         }
     }
+    // 书籍操作：与排序 Sheet 同一套轻量 Sheet 范式（AGENTS §4.12）。
+    // 此前是锚在卡片行尾的 `Popup`，偏移写死 120dp——换字号/换机型后菜单会错位，
+    // 而且它随列表项一起进出组合，滚动时会被卡片裁掉。
+    menuEntry?.let { entry ->
+        BookEntryMenu(
+            entry = entry,
+            viewModel = viewModel,
+            onOpenLocal = { onOpenLocal(it); menuEntryId = null },
+            onOpenRemote = { onOpenRemote(it); menuEntryId = null },
+            onOpenDetail = { onOpenDetail(it); menuEntryId = null },
+            onDismiss = { menuEntryId = null },
+        )
+    }
 }
 
 @Composable
 private fun BookshelfGroupHeader(section: BookshelfSection, expanded: Boolean, onToggle: () -> Unit) {
     // stickyHeader：跟随 LNR BookshelfHomeContent 的分组头，滚动时钉在顶部。
-    Surface(color = MiuixTheme.colorScheme.background) {
-        Column {
-            Row(
-                modifier = Modifier.fillMaxWidth().height(UiDimens.rowMin).clickable(onClick = onToggle).padding(horizontal = UiDimens.pagePadding),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(
-                    imageVector = when (section.group) {
-                        BookshelfGroup.Pinned -> MiuixIcons.Favorites
-                        // MiuiX 图标集没有 Bookmark；用 ListView 表示「全部」。
-                        BookshelfGroup.All -> MiuixIcons.ListView
-                    },
-                    contentDescription = null,
-                    tint = MiuixTheme.colorScheme.primary,
-                    modifier = Modifier.size(UiDimens.spaceL),
-                )
-                Spacer(Modifier.size(UiDimens.spaceS))
-                Text(
-                    section.group.title(section.entries.size),
-                    fontSize = UiDimens.bodyStrong,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.weight(1f),
-                )
-                // 展开 / 收起用两个图标而不是旋转箭头：MiuiX 图标集里没有可旋转的展开箭头，
-                // 故自带 expand_more_24px（Material chevron），只靠 rotate() 表达状态。
-                val rotation by animateFloatAsState(
-                    targetValue = if (expanded) 0f else 180f,
-                    animationSpec = tween(Motion.duration(UiDimens.MOTION_FAST), easing = FastOutSlowInEasing),
-                    label = "bookshelfGroupArrow",
-                )
-                Icon(
-                    imageVector = ImageVector.vectorResource(com.example.hyperreader.R.drawable.expand_more_24px),
-                    contentDescription = if (expanded) "收起" else "展开",
-                    tint = MiuixTheme.colorScheme.onSurface.copy(alpha = .6f),
-                    modifier = Modifier.size(UiDimens.spaceL).rotate(rotation),
-                )
-            }
-            HorizontalDivider(Modifier.fillMaxWidth())
+    // 直接给 Column 上背景色，不套 `Surface`：Surface 需要额外的 contentColor 参数，
+    // 缺省时会做一次颜色复制并多出一层合成，这里只需要一块不透明底色挡住滚过去的卡片。
+    Column(Modifier.fillMaxWidth().background(MiuixTheme.colorScheme.background)) {
+        Row(
+            // 不加 horizontal 内边距：宿主（StudioApp 的 Column）已给过 pagePadding，
+            // 再加一遍会让分组头比页内标题与卡片多缩进 16dp。
+            modifier = Modifier.fillMaxWidth().height(UiDimens.rowMin).clickable(onClick = onToggle),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = when (section.group) {
+                    BookshelfGroup.Pinned -> MiuixIcons.Favorites
+                    // MiuiX 图标集没有 Bookmark；用 ListView 表示「全部」。
+                    BookshelfGroup.All -> MiuixIcons.ListView
+                },
+                contentDescription = null,
+                tint = MiuixTheme.colorScheme.primary,
+                modifier = Modifier.size(UiDimens.spaceL),
+            )
+            Spacer(Modifier.size(UiDimens.spaceS))
+            Text(
+                section.group.title(section.entries.size),
+                fontSize = UiDimens.bodyStrong,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.weight(1f),
+            )
+            // 展开 / 收起用两个图标而不是旋转箭头：MiuiX 图标集里没有可旋转的展开箭头，
+            // 故自带 expand_more_24px（Material chevron），只靠 rotate() 表达状态。
+            val rotation by animateFloatAsState(
+                targetValue = if (expanded) 0f else 180f,
+                animationSpec = tween(Motion.duration(UiDimens.MOTION_FAST), easing = FastOutSlowInEasing),
+                label = "bookshelfGroupArrow",
+            )
+            Icon(
+                imageVector = ImageVector.vectorResource(com.example.hyperreader.R.drawable.expand_more_24px),
+                contentDescription = if (expanded) "收起" else "展开",
+                tint = tertiaryTextColor(),
+                modifier = Modifier.size(UiDimens.spaceL).rotate(rotation),
+            )
         }
+        HorizontalDivider(Modifier.fillMaxWidth())
     }
 }
 
-/**
- * 书架卡片，尺寸与排版对齐 LNR `BookCardContent`：94×144 封面、146dp 卡高、
- * 作者用强调色、简介两行。断点行保留本工程特有的「读到第 x 章」（AGENTS §4.8）。
- */
 /**
  * 书架卡片，1:1 对齐 LNR `BookCardContent` 的排版规格（0.19.0）。
  *
@@ -358,7 +370,7 @@ private fun BookshelfCard(
                     Text(
                         entry.source.displayLabel(),
                         fontSize = UiDimens.captionSmall,
-                        color = MiuixTheme.colorScheme.onSurface.copy(alpha = .6f),
+                        color = tertiaryTextColor(),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -369,7 +381,7 @@ private fun BookshelfCard(
                             entry.wordCount?.let { append(" · ${formatWordCount(it)} 字") }
                         }.ifBlank { "章节未知" },
                         fontSize = UiDimens.captionSmall,
-                        color = MiuixTheme.colorScheme.onSurface.copy(alpha = .6f),
+                        color = tertiaryTextColor(),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -377,17 +389,19 @@ private fun BookshelfCard(
                 // 末行：LNR 放简介或最新章节；本工程放「上次读到哪儿」，这是差异里
                 // 唯一必须保留的本工程语义（AGENTS §4.8 页进度是续读唯一依据）。
                 if (entry.lastReadAt > 0L) {
+                    // 两行按各自行高自然贴紧，不再叠 `spacedBy`：末行组高出来的部分
+                    // 要从上面三行里挤（`Arrangement.SpaceBetween`），卡片会显松散。
                     Column {
                         Text(
                             "上次阅读：${formatRelativeReadTime(now, entry.lastReadAt)}",
                             fontSize = UiDimens.captionSmall,
-                            color = MiuixTheme.colorScheme.onSurface.copy(alpha = .6f),
+                            color = tertiaryTextColor(),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
-                        resume?.let {
+                        resume?.let { progress ->
                             Text(
-                                "读到第${it.chapterIndex + 1}章 · 第${it.paragraphIndex + 1}段",
+                                "读到第${progress.chapterIndex + 1}章 · 第${progress.paragraphIndex + 1}段",
                                 fontSize = UiDimens.captionSmall,
                                 color = MiuixTheme.colorScheme.primary,
                                 maxLines = 1,
@@ -399,7 +413,7 @@ private fun BookshelfCard(
                     Text(
                         "尚未开始阅读",
                         fontSize = UiDimens.captionSmall,
-                        color = MiuixTheme.colorScheme.onSurface.copy(alpha = .6f),
+                        color = tertiaryTextColor(),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -426,7 +440,7 @@ private fun TagChip(painter: ImageVector) {
         Icon(
             imageVector = painter,
             contentDescription = null,
-            tint = MiuixTheme.colorScheme.onSurface.copy(alpha = .6f),
+            tint = tertiaryTextColor(),
             modifier = Modifier.size(LnrDimens.metaChipIcon),
         )
     }
@@ -438,11 +452,14 @@ private fun BookshelfSource.displayLabel(): String = when (this) {
     BookshelfSource.WENKU8 -> "Wenku8"
 }
 
-/** 触摸目标下限（与阅读器约定一致）。 */
-
 /**
- * 书架条目「更多」操作菜单（Popup 锚定卡片右下，全部 MiuiX 组件）。
- * 按书籍来源分组：本地 EPUB 只有打开类操作，Wenku8 书多出详情/在线/同作者。
+ * 书架条目「更多」操作菜单。
+ *
+ * 用轻量 `OverlayBottomSheet` 而不是锚在卡片上的 `Popup`：Sheet 由根 Scaffold 的
+ * 弹层承载，不受列表项组合与裁剪影响，条目滚出视口也不会留下悬空的菜单
+ * （AGENTS §4.12 同款范式：书架排序、EPUB 导出引擎）。
+ *
+ * 按书籍来源分组：本地 EPUB 只有打开类操作，Wenku8 书多出详情 / 在线 / 导出 / 同作者。
  */
 @Composable
 private fun BookEntryMenu(
@@ -458,14 +475,35 @@ private fun BookEntryMenu(
         block()
         onDismiss()
     }
-    Card(insideMargin = PaddingValues(vertical = UiDimens.spaceXXS)) {
-        Column(Modifier.width(IntrinsicSize.Min)) {
+    // 标题交给 Sheet 自己的 title 槽位（有对齐与内边距），正文不再重复一遍书名。
+    OverlayBottomSheet(show = true, title = entry.title, onDismissRequest = onDismiss) {
+        Column(
+            // 上下再留一点：Sheet 的 `insideMargin` 只给左右（24dp）与底部，
+            // 顶部贴着手柄会太挤。水平方向不再补，否则左右各 40dp。
+            modifier = Modifier.padding(vertical = UiDimens.spaceL),
+            verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS),
+        ) {
+            Text(
+                "${entry.source.displayLabel()} · ${entry.author}",
+                fontSize = UiDimens.captionSmall,
+                color = secondaryTextColor(),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
             if (entry.localUri != null) {
-                BasicComponent(title = "打开阅读", onClick = { act { viewModel.markShelfRead(entry.id); onOpenLocal(entry) } })
+                TextButton(
+                    text = "打开阅读",
+                    onClick = { act { viewModel.markShelfRead(entry.id); onOpenLocal(entry) } },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
+                )
             } else {
-                BasicComponent(title = "查看详情", onClick = { act { onOpenDetail(entry) } })
-                BasicComponent(
-                    title = "开始阅读",
+                TextButton(
+                    text = "查看详情",
+                    onClick = { act { onOpenDetail(entry) } },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
+                )
+                TextButton(
+                    text = "开始阅读",
                     onClick = {
                         act {
                             context.startActivity(
@@ -480,16 +518,31 @@ private fun BookEntryMenu(
                             viewModel.markShelfRead(entry.id)
                         }
                     },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
                 )
                 // 0.17.0：导出从「创建 tab」下沉为书籍菜单里的次级动作
-                BasicComponent(title = "导出 EPUB", onClick = { act { viewModel.startExportFromShelf(entry) } })
-                BasicComponent(title = "同作者作品", onClick = { act { viewModel.expandAuthor(entry.bookId) } })
+                TextButton(
+                    text = "导出 EPUB",
+                    onClick = { act { viewModel.startExportFromShelf(entry) } },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
+                )
+                TextButton(
+                    text = "同作者作品",
+                    onClick = { act { viewModel.expandAuthor(entry.bookId) } },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
+                )
             }
-            BasicComponent(
-                title = if (entry.isPinned) "取消置顶" else "置顶",
+            TextButton(
+                text = if (entry.isPinned) "取消置顶" else "置顶",
                 onClick = { act { viewModel.setPinned(entry.id, !entry.isPinned) } },
+                modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
             )
-            BasicComponent(title = "移出书架", onClick = { act { viewModel.removeFromShelf(entry.id) } })
+            TextButton(
+                text = "移出书架",
+                onClick = { act { viewModel.removeFromShelf(entry.id) } },
+                modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
+                colors = ButtonDefaults.textButtonColors(textColor = MiuixTheme.colorScheme.error),
+            )
         }
     }
 }

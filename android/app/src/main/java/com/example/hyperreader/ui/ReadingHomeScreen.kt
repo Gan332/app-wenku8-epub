@@ -23,7 +23,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.hyperreader.model.BookshelfEntry
 import com.example.hyperreader.settings.ReadingProgress
@@ -104,7 +103,7 @@ fun ReadingHomeScreen(
                         Text(
                             "从书架里点一本书就能开读；读过的书会自动出现在这里，随时接着往下读。",
                             fontSize = UiDimens.caption,
-                            color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f),
+                            color = secondaryTextColor(),
                         )
                         Row(horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
                             TextButton(text = "去书架", onClick = onOpenBookshelf, modifier = Modifier.heightIn(min = UiDimens.touchMin))
@@ -115,7 +114,7 @@ fun ReadingHomeScreen(
             }
         } else {
             item(key = "continue") {
-                SectionHeaderText("继续阅读")
+                SectionHeader("继续阅读")
                 ContinueReadingCard(
                     entry = continueEntry,
                     resume = progress[continueEntry.bookId],
@@ -127,7 +126,7 @@ fun ReadingHomeScreen(
 
         if (recentWithProgress.isNotEmpty()) {
             item(key = "recent-progress") {
-                SectionHeaderText("最近在读")
+                SectionHeader("最近在读")
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
                     items(recentWithProgress, key = { it.id }) { entry ->
                         RecentBookCard(entry = entry, resume = progress[entry.bookId], onClick = { open(entry) })
@@ -137,8 +136,10 @@ fun ReadingHomeScreen(
         }
 
         if (recentlyRead.isNotEmpty()) {
-            item(key = "recent-updated") {
-                SectionHeaderText("最近更新")
+            item(key = "recent-read") {
+                // 这一栏取的是 `lastReadAt` 降序，是「最近读过的书」，不是源站最近更新的书——
+                // 标题过去写成「最近更新」，与内容不符。栏目内不再另取数据，只把名字改对。
+                SectionHeader("最近阅读")
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
                     items(recentlyRead, key = { it.id }) { entry ->
                         RecentBookCard(entry = entry, resume = progress[entry.bookId], onClick = { open(entry) })
@@ -147,11 +148,6 @@ fun ReadingHomeScreen(
             }
         }
     }
-}
-
-@Composable
-private fun SectionHeaderText(text: String) {
-    Text(text, fontSize = UiDimens.section, fontWeight = FontWeight.Bold)
 }
 
 /** 「继续阅读」大卡：左侧封面，右侧书名 / 章节断点 / 时间 / 进度条。 */
@@ -200,7 +196,7 @@ private fun ContinueReadingCard(
                 Text(
                     detail.joinToString(" · "),
                     fontSize = UiDimens.captionSmall,
-                    color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f),
+                    color = secondaryTextColor(),
                     maxLines = 1,
                 )
                 resume?.let {

@@ -10,8 +10,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.example.hyperreader.settings.configExportFileName
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
