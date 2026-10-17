@@ -11,8 +11,6 @@ import com.xyreader.archive.NovelStyle
 import com.xyreader.archive.Paragraph
 import com.xyreader.core.Chapter as ReaderChapter
 import com.xyreader.core.PageSource
-import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.isActive
 
 /**
  * 在线阅读的页面源：**按章抓取 → 用与本地 EPUB 完全同一套 `StaticLayout` 分页 → 位图页**。
@@ -214,7 +212,7 @@ class OnlinePageSource private constructor(
 
         for ((index, chapter) in catalog.withIndex()) {
             // 用户取消 / 换书 / 关面板后立即停手，不继续打扰源站
-            if (!currentCoroutineContext().isActive) break
+            if (!kotlinx.coroutines.currentCoroutineContext().isActive) break
 
             val content = runCatching { fetchContent(chapter) }.getOrNull()
             // 匹配规则在纯函数里（matchChapterBody），这里只负责取正文与推进循环

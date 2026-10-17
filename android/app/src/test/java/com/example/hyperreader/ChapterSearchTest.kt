@@ -33,7 +33,10 @@ class ChapterSearchTest {
     fun matchChapterBodyIgnoresCaseForLatinQueries() {
         val (offset, snippet) = matchChapterBody(listOf("Hello World"), "hello")!!
         assertEquals(0, offset)
-        assertTrue(snippet.contains("hello"))
+        // 匹配忽略大小写，但摘要引用的是**正文原文**：查询是小写 hello、
+        // 正文是 Hello，摘要里必须是 Hello 而不是查询的写法
+        // （与 `contextSnippet` 同口径，ReaderSearchTest 已锁定同一行为）。
+        assertEquals(SNIPPET_MARK + "Hello" + SNIPPET_MARK + " World", snippet)
     }
 
     @Test
