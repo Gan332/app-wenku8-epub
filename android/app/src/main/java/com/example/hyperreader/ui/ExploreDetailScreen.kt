@@ -89,7 +89,8 @@ fun ExploreDetailScreen(
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = UiDimens.pagePadding, end = UiDimens.pagePadding, top = UiDimens.spaceS, bottom = UiDimens.spaceXL),
+        // 左右内边距由宿主给一次（StudioApp 的 Column 已 padding(pagePadding)）。
+        contentPadding = PaddingValues(top = UiDimens.spaceS, bottom = UiDimens.spaceXL),
         verticalArrangement = Arrangement.spacedBy(UiDimens.spaceM),
     ) {
         item(key = "back") {

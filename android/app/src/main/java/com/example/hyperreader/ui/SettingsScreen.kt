@@ -785,7 +785,9 @@ internal fun SettingsScaffold(title: String, onBack: () -> Unit, blocks: List<@C
         Text(title, fontSize = UiDimens.title, fontWeight = FontWeight.Bold)
         LazyColumn(
             modifier = Modifier.fillMaxWidth().weight(1f),
-            contentPadding = PaddingValues(horizontal = UiDimens.pagePadding, vertical = UiDimens.spaceXXS),
+            // 左右内边距由宿主给一次（StudioApp 的 Column 已 padding(pagePadding)）：
+            // 这里再写一遍会让列表里的卡片比页内标题多缩进 16dp。
+            contentPadding = PaddingValues(vertical = UiDimens.spaceXXS),
             verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS),
         ) {
             items(blocks.size) { index -> blocks[index]() }

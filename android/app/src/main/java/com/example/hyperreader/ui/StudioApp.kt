@@ -477,7 +477,8 @@ private fun StudioApp(
                     onItemClick = { },
                     highlightIndex = steps.indexOfFirst { it.first == state.exportStep }.coerceAtLeast(0),
                     enabled = false,
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = UiDimens.pagePadding, vertical = UiDimens.spaceXS),
+                    // 左右内边距由宿主给一次（本文件 273 行的 Column 已 padding(pagePadding)）。
+                    modifier = Modifier.fillMaxWidth().padding(vertical = UiDimens.spaceXS),
                 )
             }
         }

@@ -71,7 +71,9 @@ fun ReadingHomeScreen(
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = UiDimens.pagePadding, vertical = UiDimens.spaceM),
+        // 左右内边距由宿主给一次（StudioApp 的 Column 已 padding(pagePadding)），
+        // 这里再写一遍会让正文比页内标题多缩进 16dp。
+        contentPadding = PaddingValues(vertical = UiDimens.spaceM),
         verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS),
     ) {
         item(key = "title") {
