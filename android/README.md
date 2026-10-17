@@ -67,6 +67,28 @@ cd android
 .\\gradlew.bat testDebugUnitTest assembleDebug
 ```
 
-GitHub Actions 会自动安装 SDK、Gradle 9.6.0，并上传 debug APK。推送 `v*` 标签时，APK 会自动附加到 GitHub Release。
+GitHub Actions 会自动安装 SDK、Gradle 9.8.1，并上传 debug APK。推送 `v*` 标签时，APK 会自动附加到 GitHub Release。
+
+## 日常安装（固定下载入口）
+
+main 上每次通过全部检查的构建都会覆盖到固定标签 `ci-latest`，地址不变，可直接存书签：
+
+```text
+https://github.com/Gan332/app-wenku8-epub/releases/download/ci-latest/app-release.apk
+https://github.com/Gan332/app-wenku8-epub/releases/download/ci-latest/app-debug.apk
+```
+
+- 只有单元测试与 Rust 测试**全部通过**的构建才会覆盖它，因此这个地址永远是能装的版本；
+  失败的推送不会把它变成半成品。
+- 它是**预发布**（prerelease），且不会顶掉 `v*` 正式版本的 Latest 标记。
+- 与 Actions 页面的 artifact 相比：不需要进运行页、不需要解压、不受 14 天过期限制。
+- Release 说明里带当次的提交号、versionName/versionCode 与两个 APK 的 SHA-256。
+
+命令行安装（需要 `adb`）：
+
+```powershell
+Invoke-WebRequest -Uri 'https://github.com/Gan332/app-wenku8-epub/releases/download/ci-latest/app-release.apk' -OutFile "$env:TEMP\app-release.apk"
+adb install -r "$env:TEMP\app-release.apk"
+```
 
 正式发布前请配置自有 keystore；当前仓库不包含签名密钥。

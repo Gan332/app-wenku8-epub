@@ -52,7 +52,8 @@ jobs:
           "$SDKMANAGER" 'platform-tools' 'platforms;android-37.0' 'build-tools;37.0.0' 'ndk;27.2.12479018'
 
       - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
+        # 固定到 v1（官方推荐写法）：@stable 会随上游改动，工具链要做到可复现。
+        uses: dtolnay/rust-toolchain@v1
         with:
           targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
 
@@ -93,7 +94,9 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
         with:
-          gradle-version: '9.6.0'
+          # 必须与 android/gradle/wrapper/gradle-wrapper.properties 的 distributionUrl 一致：
+          # AGP 的版本检查会把两处不匹配直接判为构建失败（AGENTS §2 踩坑记录第 4 条）。
+          gradle-version: '9.8.1'
 
       - name: Run Android unit tests
         working-directory: android
@@ -147,3 +150,73 @@ jobs:
             android/app/build/outputs/apk/release/*.apk
           generate_release_notes: true
           fail_on_unmatched_files: false
+
+      # 固定下载入口（日常装机用）。
+      #
+      # 原先前者要下 APK 得进 Actions 页面开运行、再下载 artifact 的 zip（14 天过期、
+      # 还要解压）。这里把 main 上**通过全部检查**的构建挂到固定标签 `ci-latest` 上，
+      # 于是下载地址永不变化：
+      #   https://github.com/Gan332/app-wenku8-epub/releases/download/ci-latest/app-release.apk
+      #   https://github.com/Gan332/app-wenku8-epub/releases/download/ci-latest/app-debug.apk
+      #
+      # 只在 push 到 main 且前面的步骤全部成功时执行，因此这一个 URL 天然只承载绿灯构建；
+      # 失败的那次推送不会覆盖它（用户拿到的永远是最新可用版本，而不是半成品）。
+      # 标签 `ci-latest` 不匹配触发用的 'v*'，不会自触发新一轮构建。
+      - name: Refresh rolling CI release
+        if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          git_sha="$(git rev-parse HEAD)"
+          git_short="${git_sha:0:7}"
+          version_name="$(grep -oP 'versionName = "\K[^"]+' android/app/build.gradle.kts | head -n 1)"
+          version_code="$(grep -oP 'versionCode = \K\d+' android/app/build.gradle.kts | head -n 1)"
+          release_apk="$(ls android/app/build/outputs/apk/release/*.apk | head -n 1)"
+          debug_apk="$(ls android/app/build/outputs/apk/debug/*.apk | head -n 1)"
+          title="文库 EPUB 工坊 · CI 最新构建 (main)"
+          notes="$RUNNER_TEMP/ci-latest-notes.md"
+
+          # 中文说明留在 workflow 里而不是拆成单独文件：多一个"首次运行时还不存在"的
+          # 依赖就等于多一个第一次必失败的坑。数字每次都重新算，不留过期读数。
+          cat > "$notes" <<EOF
+          **本包由 CI 自动发布，不是正式版本。**
+
+          - 提交：\`$git_short\`
+          - 版本：\`$version_name\` · versionCode $version_code
+          - 只在单元测试与 Rust 测试**全部通过**后才发布；失败的推送不会覆盖这里，所以这个地址永远是能装的版本
+
+          **固定下载地址**（存书签即可，每次都是最新绿灯构建）：
+
+          \`\`\`text
+          https://github.com/$REPO/releases/download/ci-latest/app-release.apk
+          https://github.com/$REPO/releases/download/ci-latest/app-debug.apk
+          \`\`\`
+
+          **校验（SHA-256）**
+
+          \`\`\`text
+          $(sha256sum "$release_apk" | cut -d' ' -f1)  app-release.apk
+          $(sha256sum "$debug_apk" | cut -d' ' -f1)  app-debug.apk
+          \`\`\`
+
+          release 包经过 R8 压缩：改过 proguard-rules.pro 或新引库之后请务必真机冒烟
+          （AGENTS §5.5：R8 的问题只能在运行期证伪）。
+          EOF
+
+          if gh release view ci-latest --repo "$REPO" >/dev/null 2>&1; then
+            gh release edit ci-latest --repo "$REPO" --title "$title" --prerelease --latest=false
+          else
+            gh release create ci-latest --repo "$REPO" --target "$git_sha" \
+              --title "$title" --prerelease --latest=false \
+              --notes-file "$notes"
+          fi
+
+          # --clobber：每天都在同一个标签上换新版，资产必须就地覆盖
+          gh release upload ci-latest \
+            android/app/build/outputs/apk/debug/*.apk \
+            android/app/build/outputs/apk/release/*.apk \
+            --repo "$REPO" --clobber
+
+          gh release edit ci-latest --repo "$REPO" --notes-file "$notes"

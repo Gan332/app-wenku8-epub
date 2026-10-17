@@ -106,6 +106,17 @@
 - 新增 `ImageUrlTest`（9 个用例）：图片白名单边界、相对/协议相对/中继地址归一、
   入口轮换与中继改写不碰图片域、解析器封面与插图、首选入口的轮换顺序。
 - Web 侧 `test/parsers.test.js` 同步归一用例，并把夹具插图的断言锁到 `pic.777743.xyz`。
+- **固定下载入口**：main 上通过全部检查的构建现在会覆盖到固定标签 `ci-latest`，
+  下载地址不再变化（`releases/download/ci-latest/app-release.apk`），不必再进 Actions
+  运行页下载 artifact 的 zip 并解压，也不受 14 天保留期限制。该发布是 prerelease，
+  不顶替 `v*` 正式版本的 Latest 标记；失败的构建不会覆盖它。
+- **CI 工具链对齐最新**：`dtolnay/rust-toolchain` 由 `@stable` 改到 `v1`
+  （工具链要可复现，不跟上游变动漂移）；Gradle 9.6.0 → 9.8.1（workflow 与 wrapper
+  两处同步，AGENTS §2 第 4 条要求一致）；Kotlin 2.4.20 → 2.4.21。
+  其余 action 已是最新主版本（checkout v7 / setup-java v6 / cache v6 /
+  upload-artifact v7 / setup-gradle v6 / action-gh-release v3），运行时均为 node24；
+  AGP 9.4.1 与 MiuiX 0.9.4 也已是各自最新稳定版。
+
 ## [0.19.0-alpha04] - 2026-10-07（预发布）
 
 收尾 alpha03 遗留的半成品提交，并修掉本轮暴露的四个真实缺陷。
