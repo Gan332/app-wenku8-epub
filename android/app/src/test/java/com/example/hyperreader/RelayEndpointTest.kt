@@ -197,7 +197,8 @@ class RelayEndpointTest {
         assertEquals("https://www.wenku8.net/novel/2/2365/index.htm", book.directoryUrl)
         assertEquals("https://www.wenku8.net/modules/article/articleinfo.php?id=2365", book.sourceUrl)
         assertEquals("https://www.wenku8.net/modules/article/articleinfo.php?id=2365", book.bookUrl)
-        assertEquals("https://www.wenku8.net/image/2365.jpg", book.coverUrl)
+        // 封面路径 `/image/…` 属于图片 CDN：解析出口把中继域还原后，直接钉到 img.wenku8.com
+        assertEquals("https://img.wenku8.com/image/2365.jpg", book.coverUrl)
 
         val indexHtml = """
             <html><body><div>

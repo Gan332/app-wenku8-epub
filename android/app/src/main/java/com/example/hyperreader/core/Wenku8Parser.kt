@@ -60,7 +60,7 @@ object Wenku8Parser {
             isComplete = fieldValue(document, "文章状态", "文章状态：", "文章状态:").contains("完结"),
             tags = tags,
             summary = cleanText(summary).replace(Regex("^内容简介\\s*[：:]\\s*"), ""),
-            coverUrl = direct(Wenku8Url.resolve(bookUrl, coverNode?.attr("src"))),
+            coverUrl = Wenku8Url.normalizeImage(coverNode?.attr("src"), bookUrl),
             sourceUrl = direct(bookUrl) ?: bookUrl,
             bookUrl = direct(bookUrl) ?: bookUrl,
             directoryUrl = direct(directoryUrl),
@@ -108,7 +108,7 @@ object Wenku8Parser {
         root.select("[id^=adv],[class*=advert],[class*=banner]").remove()
         val imageUrls = mutableListOf<String>()
         for (image in root.select("img").toList()) {
-            val url = direct(imageSource(image, pageUrl))
+            val url = imageSource(image, pageUrl)
             val width = image.attr("width").toIntOrNull() ?: 0
             val height = image.attr("height").toIntOrNull() ?: 0
             if (url == null || (width in 1..3) || (height in 1..3) || Regex("spacer|blank\\.(gif|png)|pixel", RegexOption.IGNORE_CASE).containsMatchIn(image.attr("src"))) {
@@ -146,11 +146,15 @@ object Wenku8Parser {
      *
      * 与 Web 版 `src/wenku8.js` 的 `imageSource` 同源，回归见
      * `ExportPipelineTest.resolvesLazyImageAgainstDataBase`。
+     *
+     * 取值后统一走 [Wenku8Url.normalizeImage]：相对路径按前缀钉回图片 CDN
+     * （`/image/…` → `img.wenku8.com`、`/pictures/…` → `pic.wenku8.com`），明文 http 升 https。
+     * 少了这一步，页面地址解析出的 `www.wenku8.net/image/…` 在主站是 404（实测）。
      */
     private fun imageSource(image: Element, pageUrl: String): String? {
-        val dataBase = Wenku8Url.resolve(pageUrl, image.attr("data-base")) ?: pageUrl
+        val dataBase = Wenku8Url.resolve(pageUrl, image.attr("data-base"))?.let(Wenku8Url::canonicalizeImage) ?: pageUrl
         return sequenceOf("data-original", "data-src", "data-lazy-src", "src")
-            .mapNotNull { Wenku8Url.resolve(dataBase, image.attr(it)) }
+            .mapNotNull { Wenku8Url.normalizeImage(image.attr(it), dataBase) }
             .firstOrNull()
     }
 
@@ -295,7 +299,7 @@ object Wenku8Parser {
             seen.add(id)
             val image = (container.selectFirst("img[src]")
                 ?: anchor.parents().take(COVER_ANCESTOR_LIMIT).firstNotNullOfOrNull { it.selectFirst("img[src]") })
-                ?.let { Wenku8Url.resolve(finalUrl, it.attr("src")) }
+                ?.let { Wenku8Url.normalizeImage(it.attr("src"), finalUrl) }
             results += SearchBook(
                 id = id,
                 title = title,
@@ -304,7 +308,7 @@ object Wenku8Parser {
                 status = Regex("状态\\s*[：:]\\s*([^\\s/]+)").find(raw)?.groupValues?.get(1).orEmpty(),
                 updatedAt = Regex("(?:更新|最后更新)\\s*[：:]\\s*(\\d{4}-\\d{2}-\\d{2})").find(raw)?.groupValues?.get(1).orEmpty(),
                 wordCount = Regex("(?:字数|全文长度)\\s*[：:]\\s*([\\d,，]+)\\s*字").find(raw)?.groupValues?.get(1)?.replace(",", "")?.replace("，", "")?.toLongOrNull(),
-                coverUrl = direct(image),
+                coverUrl = image,
                 latestChapter = Regex("最新章节\\s*[：:]\\s*(.+)").find(raw)?.groupValues?.get(1).orEmpty(),
                 sourceUrl = Wenku8Urls.book(id),
             )

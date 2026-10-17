@@ -78,7 +78,9 @@ class Wenku8HttpClient(private val cacheDirectory: File, sessionCookieJar: Cooki
         var rotated = false
         while (true) {
             try {
-                return executeOnce(Wenku8Endpoint.rewire(rawUrl), jobId, maxBytes, referer, mode, image)
+                // 图片：先钉回 CDN 主机与 https，再交给入口改写（图片不是入口，不会被改写）
+                val target = if (image) Wenku8Url.canonicalizeImage(rawUrl) else rawUrl
+                return executeOnce(Wenku8Endpoint.rewire(target), jobId, maxBytes, referer, mode, image)
             } catch (error: Wenku8Exception) {
                 if (error.code != "UPSTREAM_CHALLENGE" || rotated) throw error
                 if (!Wenku8Endpoint.rotateHost()) throw error
@@ -95,7 +97,7 @@ class Wenku8HttpClient(private val cacheDirectory: File, sessionCookieJar: Cooki
         mode: HttpRateLimiter.Mode,
         image: Boolean,
     ): HttpResult {
-        var current = validateUrl(rawUrl)
+        var current = validateUrl(rawUrl, image)
         var redirects = 0
         var attempt = 0
         while (redirects <= MAX_REDIRECTS) {
@@ -117,7 +119,7 @@ class Wenku8HttpClient(private val cacheDirectory: File, sessionCookieJar: Cooki
                 val location = response.header("Location")
                 response.close()
                 if (location.isNullOrBlank()) throw Wenku8Exception("资源返回重定向但没有 Location。", "BAD_REDIRECT")
-                current = validateUrl(current.resolve(location)?.toString() ?: location)
+                current = validateUrl(current.resolve(location)?.toString() ?: location, image)
                 redirects += 1
                 continue
             }
@@ -156,10 +158,12 @@ class Wenku8HttpClient(private val cacheDirectory: File, sessionCookieJar: Cooki
         throw Wenku8Exception("资源重定向次数过多。", "TOO_MANY_REDIRECTS")
     }
 
-    private fun validateUrl(raw: String): HttpUrl {
+    private fun validateUrl(raw: String, image: Boolean = false): HttpUrl {
         val parsed = raw.toHttpUrlOrNull() ?: throw Wenku8Exception("网址格式无效。", "INVALID_URL")
         if (parsed.username.isNotEmpty() || parsed.password.isNotEmpty()) throw Wenku8Exception("网址不能包含用户名或密码。", "URL_CREDENTIALS")
-        if (!Wenku8Url.isAllowedHost(parsed.host)) throw Wenku8Exception("只允许访问 wenku8 来源。", "UNSUPPORTED_HOST")
+        // 图片走图片白名单（多放行站点自有图床 pic.777743.xyz，AGENTS §4.2）；页面/接口仍严格三域
+        val allowed = if (image) Wenku8Url.isAllowedImageHost(parsed.host) else Wenku8Url.isAllowedHost(parsed.host)
+        if (!allowed) throw Wenku8Exception("只允许访问 wenku8 来源。", "UNSUPPORTED_HOST")
         try {
             InetAddress.getAllByName(parsed.host).forEach { address ->
                 if (address.isAnyLocalAddress || address.isLoopbackAddress || address.isLinkLocalAddress || address.isSiteLocalAddress || address.isMulticastAddress) {

@@ -26,10 +26,19 @@ object Wenku8Endpoint {
     /**
      * 直连候选边缘入口（按 403 轮换；对照 LNR `Wenku8Api.hosts`）。
      *
-     * 起始用 `wenku8.net`；遇到 Cloudflare 拦截时 [rotateHost] 依次换到 `.cc`、`.com`——
-     * 换的是**边缘入口**而非接口语义，白名单与合规边界不变。
+     * 起始用 `wenku8.net`，用户可在设置 → 网络改成 `.cc` / `.com`（[applyPreferredHost]）；
+     * 遇到 Cloudflare 拦截时 [rotateHost] 依次换到下一个——换的是**边缘入口**而非接口语义，
+     * 白名单与合规边界不变。
      */
     val DIRECT_HOSTS: List<String> = listOf(DIRECT_BASE, "https://www.wenku8.cc", "https://www.wenku8.com")
+
+    /**
+     * 入口尝试顺序：用户偏好的入口排在最前（设置 → 网络），其余保持 [DIRECT_HOSTS] 的顺序。
+     *
+     * 规范 URL 永远是 [DIRECT_BASE]（`.net`），这里只决定**第一次**请求打哪个镜像。
+     */
+    @Volatile
+    private var entries: List<String> = DIRECT_HOSTS
 
     @Volatile
     private var hostIndex: Int = 0
@@ -38,10 +47,24 @@ object Wenku8Endpoint {
     private val triedHosts = LinkedHashSet<Int>()
 
     /** 公开页基址：中继优先（仅在开关开且端点合法时），否则当前直连入口。 */
-    fun publicBase(): String = if (isRelayActive()) relay ?: DIRECT_HOSTS[hostIndex] else DIRECT_HOSTS[hostIndex]
+    fun publicBase(): String = if (isRelayActive()) relay ?: entries[hostIndex] else entries[hostIndex]
 
     /** 当前使用的直连入口（设置页展示用）。 */
-    fun activeDirectBase(): String = DIRECT_HOSTS[hostIndex]
+    fun activeDirectBase(): String = entries[hostIndex]
+
+    /**
+     * 应用用户偏好的首个直连入口；传空/非法值回落到 `.net`。
+     *
+     * 只影响起始入口，[DIRECT_HOSTS] 作为候选集合不变。
+     */
+    @Synchronized
+    fun applyPreferredHost(base: String?) {
+        val chosen = DIRECT_HOSTS.firstOrNull { it.equals(base?.trim(), ignoreCase = true) } ?: DIRECT_BASE
+        if (entries.firstOrNull() != chosen) {
+            entries = listOf(chosen) + DIRECT_HOSTS.filter { it != chosen }
+        }
+        resetHosts()
+    }
 
     /**
      * 换一个直连边缘入口重试；返回 false 表示已经没有未试过的入口。
@@ -50,8 +73,8 @@ object Wenku8Endpoint {
     @Synchronized
     fun rotateHost(): Boolean {
         if (isRelayActive()) return false
-        for (offset in 1..DIRECT_HOSTS.size) {
-            val candidate = (hostIndex + offset) % DIRECT_HOSTS.size
+        for (offset in 1..entries.size) {
+            val candidate = (hostIndex + offset) % entries.size
             if (triedHosts.add(candidate)) {
                 hostIndex = candidate
                 return true
@@ -60,8 +83,17 @@ object Wenku8Endpoint {
         return false
     }
 
-    /** 把任意 wenku8 URL 的 scheme+host 换成当前入口（路径与查询保留）。 */
-    fun rewire(url: String): String = url.replaceFirst(HOST_PREFIX, publicBase())
+    /**
+     * 把**页面/接口** URL 的 scheme+host 换成当前入口（路径与查询保留）。
+     *
+     * 图片 CDN（`img.wenku8.com` / `pic.…`）不是入口：改写成入口会让请求落到主站
+     * 并不存在的 `/image/…`（实测 404），封面与插图会静默失败。非入口 host 原样返回。
+     */
+    fun rewire(url: String): String {
+        val host = runCatching { URI(url.trim()).host }.getOrNull()
+        if (!Wenku8Url.isEntryHost(host)) return url
+        return url.replaceFirst(HOST_PREFIX, publicBase())
+    }
 
     /** 恢复默认入口（App 启动时调用，避免上一次会话的轮换结果影响本次）。 */
     @Synchronized
@@ -150,14 +182,18 @@ object Wenku8Endpoint {
     /**
      * 直连 URL → 中继 URL（同路径同查询的反代形式）。
      *
-     * 只改写 wenku8 自身域名；其它 URL（已是中继、或第三方图片域）原样返回。
+     * 只改写**入口域**且**路径在中继白名单内**的公开页；其它 URL 原样返回：
+     * - 图片 CDN（`img.wenku8.com/image/…` 等）不在 Worker 的 `ALLOWED` 里，改写过去只会拿到
+     *   404 `not relayable`，封面与插图会静默失败——图片一律直连（图域不经 Cloudflare）；
+     * - 已是中继的 URL 不叠加改写。
      */
     fun toRelayUrl(url: String): String {
         val base = relayBase() ?: return url
         if (!isRelayActive()) return url
         val uri = runCatching { URI(url.trim()) }.getOrNull() ?: return url
         val host = uri.host?.lowercase() ?: return url
-        if (!Wenku8Url.isDirectHost(host)) return url
+        if (!Wenku8Url.isEntryHost(host)) return url
+        if (!isRelayablePath(uri.path)) return url
         val suffix = buildString {
             append(uri.rawPath.ifEmpty { "/" })
             uri.rawQuery?.let { append('?').append(it) }

@@ -191,9 +191,10 @@ class CoreSmokeTest {
         assertTrue(Wenku8Url.isAllowedHost("img.wenku8.com"))
         assertTrue(Wenku8Url.isAllowedHost("www.wenku8.net"))
         assertTrue(!Wenku8Url.isAllowedHost("evil.com"))
-        // 源站封面为 http，客户端会强制升级为 https
-        val source = "http://img.wenku8.com/image/2/2835/2835s.jpg"
-        val normalized = "${java.net.URI(source).scheme.let { "https" }}://img.wenku8.com/image/2/2835/2835s.jpg"
+        // 源站封面是明文 http，归一必须真的升到 https。
+        // （此前这条断言是自己拼出 "https://" 再断言自己拼的串，测不到生产代码。）
+        val normalized = Wenku8Url.canonicalizeImage("http://img.wenku8.com/image/2/2835/2835s.jpg")
+        assertEquals("https://img.wenku8.com/image/2/2835/2835s.jpg", normalized)
         assertEquals("https", java.net.URI(normalized).scheme)
         assertEquals("img.wenku8.com", java.net.URI(normalized).host)
     }

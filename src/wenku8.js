@@ -125,7 +125,7 @@ function parseBookHtml(html, { bookUrl, requestedDirectoryUrl = null }) {
   const directoryLink = content.find('a[href*="/novel/"]').filter((_, node) => /\/index\.html?$/i.test($(node).attr('href') || '')).first().attr('href');
   const directoryUrl = new URL(requestedDirectoryUrl || directoryLink, bookUrl).toString();
   const coverNode = content.find('img[src*="/image/"]').first();
-  const coverUrl = coverNode.attr('src') ? new URL(coverNode.attr('src'), bookUrl).toString() : null;
+  const coverUrl = normalizeImageUrl(coverNode.attr('src'), bookUrl);
   const pathIds = sourceIds(new URL(directoryUrl));
 
   return {
@@ -173,6 +173,44 @@ function resolveUrl(value, baseUrl) {
   }
 }
 
+const IMAGE_CDN = 'https://img.wenku8.com';
+const PICTURE_CDN = 'https://pic.wenku8.com';
+const IMAGE_HOSTS = new Set(['img.wenku8.com', 'pic.wenku8.com', 'pic.777743.xyz']);
+
+/** 镜像入口域（去掉 `www.` 前缀比较）；图片 CDN 不是入口。 */
+function isEntryHost(host) {
+  const bare = String(host || '').toLowerCase().replace(/^www\./, '');
+  return WENKU_HOSTS.has(bare);
+}
+
+/**
+ * 图片地址归一（与 Android 版 `Wenku8Url.canonicalizeImage` 同源）：
+ * 相对路径按前缀钉回图片 CDN（`/image/…` → img、`/pictures/…` → pic），明文 http 升 https。
+ * 少了这一步，相对地址按页面解析会得到 `www.wenku8.net/image/…`，该路径在主站是 404。
+ */
+function canonicalizeImageUrl(url) {
+  const raw = String(url || '').trim();
+  let uri;
+  try {
+    uri = new URL(raw);
+  } catch {
+    return raw;
+  }
+  const host = uri.hostname.toLowerCase();
+  if (isEntryHost(host)) {
+    if (uri.pathname.startsWith('/image/')) return `${IMAGE_CDN}${uri.pathname}${uri.search}`;
+    if (uri.pathname.startsWith('/pictures/')) return `${PICTURE_CDN}${uri.pathname}${uri.search}`;
+    return uri.toString();
+  }
+  if (IMAGE_HOSTS.has(host) && uri.protocol === 'http:') return `https://${host}${uri.pathname}${uri.search}`;
+  return uri.toString();
+}
+
+function normalizeImageUrl(value, baseUrl) {
+  const resolved = resolveUrl(value, baseUrl);
+  return resolved ? canonicalizeImageUrl(resolved) : null;
+}
+
 function looksLikeSpacerImage($, node) {
   const src = $(node).attr('src') || '';
   const width = Number($(node).attr('width') || 0);
@@ -181,9 +219,9 @@ function looksLikeSpacerImage($, node) {
 }
 
 function imageSource($, node, baseUrl) {
-  const dataBase = resolveUrl($(node).attr('data-base'), baseUrl) || baseUrl;
+  const dataBase = canonicalizeImageUrl(resolveUrl($(node).attr('data-base'), baseUrl) || baseUrl);
   for (const name of ['data-original', 'data-src', 'data-lazy-src', 'src']) {
-    const value = resolveUrl($(node).attr(name), dataBase);
+    const value = normalizeImageUrl($(node).attr(name), dataBase);
     if (value) return value;
   }
   return null;
@@ -359,6 +397,8 @@ module.exports = {
   assertWenkuUrl,
   cleanInline,
   cleanText,
+  normalizeImageUrl,
+  canonicalizeImageUrl,
   normalizeSourceUrl,
   parseBook,
   parseBookHtml,

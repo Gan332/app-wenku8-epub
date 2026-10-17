@@ -22,8 +22,8 @@ import kotlinx.coroutines.withContext
  * 缓存分两层：内存 LruCache + 磁盘 cacheDir/covers。
  *
  * 缓存键始终是wenku8 原域 URL（解析出口已用 [Wenku8Endpoint.restoreToDirect] 还原），
- * 只有真正发请求时才用 [Wenku8Endpoint.toRelayUrl] 改写到中继——这样开关切换不会
- * 重复占缓存，EPUB 与书架里存的也始终是 wenku8 地址。
+ * 且图片一律**直连**：图片 CDN 不在中继白名单内（见 [Wenku8Endpoint.toRelayUrl]），
+ * 图域本身也不经 Cloudflare，所以开关切换不会重复占缓存，EPUB 与书架里存的也始终是 wenku8 地址。
  */
 class CoverRepository(context: Context) {
     private val directory = File(context.cacheDir, "covers").apply { mkdirs() }
@@ -32,11 +32,18 @@ class CoverRepository(context: Context) {
         override fun sizeOf(key: String, value: ImageBitmap): Int = value.width * value.height * 4
     }
 
-    /** URL 规范化：强制 https，并裁掉查询串以提高命中率。 */
+    /**
+     * URL 规范化：先 [Wenku8Url.canonicalizeImage]（钉回图片 CDN + 强制 https），
+     * 再裁掉查询串以提高命中率。
+     *
+     * 缓存键与真实请求共用这份结果，因此 `http://img.wenku8.com/x.jpg` 与
+     * `https://img.wenku8.com/x.jpg` 命中同一份缓存；图片域走图片白名单
+     * （多放行站点自有图床 `pic.777743.xyz`，AGENTS §4.2）。
+     */
     fun normalize(url: String): String = runCatching {
-        val uri = Wenku8Url.assertAllowed(url)
+        val uri = Wenku8Url.assertAllowedImage(Wenku8Url.canonicalizeImage(url))
         val base = "${uri.scheme}://${uri.host}${uri.path}"
-        Wenku8Url.assertAllowed(base).toString()
+        Wenku8Url.assertAllowedImage(base).toString()
     }.getOrElse { url.trim() }
 
     fun cacheFile(url: String): File = File(directory, "${url.hashCode().toUInt().toString(16)}-${url.length}.cover")

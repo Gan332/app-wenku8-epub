@@ -6,6 +6,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const iconv = require('iconv-lite');
 const {
+  canonicalizeImageUrl,
+  normalizeImageUrl,
   normalizeSourceUrl,
   parseBookHtml,
   parseChapterHtml,
@@ -39,7 +41,7 @@ test('parses the saved book and index fixtures', () => {
   assert.equal(book.author, '君川优树');
   assert.equal(book.status, '连载中');
   assert.match(book.summary, /银翼大队/);
-  assert.equal(book.coverUrl, 'http://img.wenku8.com/image/2/2835/2835s.jpg');
+  assert.equal(book.coverUrl, 'https://img.wenku8.com/image/2/2835/2835s.jpg');
   assert.equal(index.bookId, '2835');
   assert.equal(index.chapters.length, 25);
   assert.equal(index.chapters[0].id, '113354');
@@ -56,6 +58,8 @@ test('parses ordinary and illustration chapter fixtures', () => {
   const illustration = parseChapterHtml(read('illustration.html'), index.chapters.at(-1), index.chapters.at(-1).url);
   assert.equal(illustration.textLength, 0);
   assert.equal(illustration.imageUrls.length, 12);
+  // 站点 2026 用新图床承载插图（夹具即真实抓取）：解析出口必须原样保留它的域
+  assert.equal(illustration.imageUrls.every((url) => url.startsWith('https://pic.777743.xyz/')), true);
   assert.deepEqual(illustration.blocks.map((block) => block.index), Array.from({ length: 12 }, (_, index) => index));
 });
 
@@ -65,6 +69,33 @@ test('resolves relative lazy image URLs against the chapter URL', () => {
   const parsed = parseChapterHtml(html, { id: 'x', title: '测试', url: chapterUrl, order: 1, volume: '正文' }, chapterUrl);
   assert.deepEqual(parsed.imageUrls, ['https://www.wenku8.net/image-root/cover/a.jpg']);
   assert.deepEqual(parsed.blocks.filter((block) => block.type === 'image'), [{ type: 'image', index: 0 }]);
+});
+
+test('pins relative image paths to the image CDNs and upgrades cleartext', () => {
+  // 相对路径按页面地址解析会得到 www.wenku8.net/image/…，主站没有这个路径（404）
+  assert.equal(
+    canonicalizeImageUrl('https://www.wenku8.net/image/2/2835/2835s.jpg'),
+    'https://img.wenku8.com/image/2/2835/2835s.jpg',
+  );
+  assert.equal(
+    canonicalizeImageUrl('https://www.wenku8.cc/pictures/0/471/17513/3213.jpg'),
+    'https://pic.wenku8.com/pictures/0/471/17513/3213.jpg',
+  );
+  assert.equal(
+    normalizeImageUrl('/image/2/2835/2835s.jpg', 'https://www.wenku8.net/book/2835.htm'),
+    'https://img.wenku8.com/image/2/2835/2835s.jpg',
+  );
+  assert.equal(
+    normalizeImageUrl('//img.wenku8.com/image/2/2835/2835s.jpg', 'https://www.wenku8.net/book/2835.htm'),
+    'https://img.wenku8.com/image/2/2835/2835s.jpg',
+  );
+  assert.equal(
+    normalizeImageUrl('http://pic.777743.xyz/2/2835/120828/149153.jpg', 'https://www.wenku8.net/book/2835.htm'),
+    'https://pic.777743.xyz/2/2835/120828/149153.jpg',
+  );
+  // 未知第三方与 data: 不擅自改写
+  assert.equal(canonicalizeImageUrl('http://example.com/a.jpg'), 'http://example.com/a.jpg');
+  assert.equal(normalizeImageUrl('data:image/gif;base64,AAAA', 'https://www.wenku8.net/book/2835.htm'), null);
 });
 
 test('honors numeric and HTTP-date Retry-After values', () => {
