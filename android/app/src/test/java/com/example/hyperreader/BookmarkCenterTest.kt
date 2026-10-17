@@ -112,14 +112,24 @@ class BookmarkCenterTest {
 
     @Test
     fun groupBookmarksFallsBackToReadableTitleForLegacyData() {
-        // 0.19.0 之前写入的书签没有冻结书名/来源，不能显示成空白标题
+        // 0.19.0 之前写入的书签：没有 hostBookId / 书名 / 来源三个冻结字段。
+        // 它仍带阅读器侧的 bookId，但那只是不可逆哈希，不能当展示名用。
         val legacy = BookmarkEntity(id = 1, bookId = 7L, pageIndex = 0, createdAt = 1)
         val group = groupBookmarks(listOf(legacy)).single()
 
-        assertEquals("书籍 7", group.displayTitle)
-        // 老数据没有来源标记，按在线处理会误导，按本地处理要求 URI 存在——
-        // 这里只锁定「不空且可读」，来源由界面另行判断
+        assertEquals("未知书籍", group.displayTitle)
+        // 老数据没有来源标记，不能被误判成本地书（那会让它去书架查一个必然查不到的 URI）
         assertEquals("", group.bookSource)
+        assertFalse(group.isLocal)
+    }
+
+    @Test
+    fun groupBookmarksUsesHostIdWhenOnlyTitleMissing() {
+        // 有 hostBookId 但没冻结书名（理论上不会发生，但降级路径应给出可读结果）
+        val partial = BookmarkEntity(id = 1, bookId = 7L, pageIndex = 0, createdAt = 1, hostBookId = "2835")
+        val group = groupBookmarks(listOf(partial)).single()
+
+        assertEquals("书籍 2835", group.displayTitle)
     }
 
     @Test

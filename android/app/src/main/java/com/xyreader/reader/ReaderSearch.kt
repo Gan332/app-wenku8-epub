@@ -16,6 +16,11 @@ data class SearchState(
     val totalPages: Int = 0,
     val running: Boolean = false,
     val finished: Boolean = false,
+    /** 0.19.0：章节级全量搜索的命中（在线书搜未读章节时用）。 */
+    val chapterHits: List<com.xyreader.core.ChapterSearchHit> = emptyList(),
+    /** 已扫描章节数 / 总章节数；全量搜索不是瞬时的，没有进度用户会以为卡住。 */
+    val scannedChapters: Int = 0,
+    val totalChapters: Int = 0,
 )
 
 /**
@@ -103,3 +108,24 @@ fun bookmarkSnippet(text: String?, limit: Int = BOOKMARK_SNIPPET_LENGTH): String
 
 /** 连续空白（含换行、段落缩进）折叠为一个空格。 */
 private val WHITESPACE_RUN = Regex("\\s+")
+
+/**
+ * 单章正文匹配（`ChapterSearchSource.searchChapters` 的纯逻辑内核）。
+ *
+ * 抽成独立纯函数有两个原因：
+ * - 「找第一处命中并取上下文」这条规则值得单独测，而实现它的页面源
+ *   （在线阅读）需要 Context 与排版引擎，纯 JVM 单测构造不出来；
+ * - 实现方只负责「取正文 + 循环 + 响应取消」，匹配规则不会散落在多处。
+ *
+ * 段落以 `\n` 拼接：与分页引擎的输入同源，因此同一段文字在搜索与渲染中的
+ * 字符偏移是一致的。未命中返回 null（调用方据此跳过该章）。
+ */
+fun matchChapterBody(paragraphs: List<String>, query: String): Pair<Int, String>? {
+    val needle = query.trim()
+    if (needle.isEmpty() || paragraphs.isEmpty()) return null
+    val body = paragraphs.joinToString("\n")
+    val at = body.indexOf(needle, ignoreCase = true)
+    if (at < 0) return null
+    val snippet = contextSnippet(body, needle) ?: return null
+    return at to snippet
+}

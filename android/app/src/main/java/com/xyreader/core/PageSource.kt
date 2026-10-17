@@ -75,3 +75,39 @@ interface PageSource : Closeable {
 /** 便捷：字节数组解码为 ImageBitmap，失败返回 null */
 fun ByteArray.decodeToImageBitmap(): ImageBitmap? =
     BitmapFactory.decodeByteArray(this, 0, size)?.asImageBitmap()
+
+/**
+ * 章节级全量搜索：把搜索范围从「已渲染的页」扩到「全书正文」。
+ *
+ * 存在的理由：默认的页级搜索（`pageText` 逐页）只能扫到**已加载**的页。在线阅读
+ * 是逐章抓取的，未读章节的正文此刻根本不存在，页级扫描必然搜不到（AGENTS §4.8）。
+ *
+ * 契约要点：
+ * - **可取消**：实现方必须在长循环里响应协程取消，否则用户关掉搜索面板后仍会继续抓；
+ * - **不改变页轴**：搜索只读正文，不得把章节接到页面源上，否则用户正在读的位置会跳；
+ * - **报告进度**：通过 [onProgress] 汇报「已扫 n / m」，全书抓取不是瞬时的。
+ *
+ * 命中以章节为单位（[ChapterSearchHit]）而非页码——全量搜索发生在页面源
+ * 打开之前，那时还没有页码可言。调用方负责把章节换算成可跳转的位置。
+ */
+interface ChapterSearchSource {
+    /**
+     * 搜索全书正文，返回命中的章节。
+     *
+     * @param query 关键词（调用方已 trim）
+     * @param onProgress 已扫描章节数与总章节数
+     */
+    suspend fun searchChapters(
+        query: String,
+        onProgress: (scanned: Int, total: Int) -> Unit,
+    ): List<ChapterSearchHit>
+}
+
+/** 一处章节级命中。 [snippet] 用 [SNIPPET_MARK] 标记命中段，渲染时给命中段上强调色。 */
+data class ChapterSearchHit(
+    val chapterIndex: Int,
+    val chapterTitle: String,
+    val snippet: String,
+    /** 该章命中处落在整章正文里的字符偏移；定位用，无则 -1。 */
+    val charOffset: Int = -1,
+)

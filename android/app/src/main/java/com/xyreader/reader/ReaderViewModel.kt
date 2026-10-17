@@ -248,6 +248,61 @@ class ReaderViewModel(
         _search.value = SearchState()
     }
 
+    /** 当前页面源是否支持章节级全量搜索（在线书可搜未读章节）。 */
+    val supportsChapterSearch: Boolean
+        get() = source is com.xyreader.core.ChapterSearchSource
+
+    /**
+     * 章节级全量搜索（0.19.0）：把搜索范围从「已渲染的页」扩到全书正文。
+     *
+     * 页级搜索搜不到未读章节，是因为那些正文此刻还不存在——在线书逐章抓取，
+     * 没读过的章没有被抓下来。本方法按目录逐章取正文匹配，因此**受全局限流约束**，
+     * 长书要扫很久；界面据此显示进度并允许取消。
+     *
+     * 页面源不支持时（如本地 EPUB，它的页级搜索已经覆盖全书）退回普通页级搜索，
+     * 不给用户一个「搜不了」的死路。
+     */
+    fun searchWholeBook(query: String) {
+        val src = source as? com.xyreader.core.ChapterSearchSource
+        if (src == null) {
+            searchBook(query)
+            return
+        }
+        val needle = query.trim()
+        searchJob?.cancel()
+        if (needle.isEmpty()) {
+            _search.value = SearchState()
+            return
+        }
+        // 初始态必须在 launch **之前**写：反过来的话协程可能已经回报了首批进度，
+        // 被这一行整体覆盖成 0，界面上的进度条会先跳回起点再往前走。
+        // 同时清空 chapterHits：两种结果语义不同，混在一起会让用户以为
+        // 上一次页级搜索的结果属于这一次全书搜索。
+        _search.value = SearchState(query = needle, running = true)
+        searchJob = viewModelScope.launch {
+            val found = src.searchChapters(needle) { scanned, total ->
+                // 进度回报频率很高（每章一次），写状态前先判活，避免取消后还在写
+                if (isActive) {
+                    _search.value = _search.value.copy(
+                        query = needle,
+                        running = true,
+                        scannedChapters = scanned,
+                        totalChapters = total,
+                    )
+                }
+            }
+            if (!isActive) return@launch
+            _search.value = _search.value.copy(
+                query = needle,
+                chapterHits = found,
+                scannedChapters = _search.value.totalChapters,
+                running = false,
+                finished = true,
+            )
+            _events.emit(if (found.isEmpty()) "全书搜索完成，没有找到「$needle」" else "全书搜索完成，${found.size} 章命中")
+        }
+    }
+
     /** 样式键：小说文字样式与版面参数变化都要重建排版。 */
     private fun styleKey(prefs: ReaderPrefs): String =
         listOf(

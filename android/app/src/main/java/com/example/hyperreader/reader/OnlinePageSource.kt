@@ -40,7 +40,7 @@ class OnlinePageSource private constructor(
     private val fetchContent: suspend (HostChapter) -> OnlineChapterContent,
     private val startIndex: Int,
     initial: LoadedChapter,
-) : AbstractPageSource(), PageSource {
+) : AbstractPageSource(), PageSource, com.xyreader.core.ChapterSearchSource {
 
     private data class LoadedChapter(
         val id: String,
@@ -180,6 +180,58 @@ class OnlinePageSource private constructor(
         onFirstClose {
             snapshot.forEach { runCatching { it.source.close() } }
         }
+    }
+
+    /**
+     * 全书章节级搜索（0.19.0）：逐章抓取正文并匹配，**不把章节接到页轴上**。
+     *
+     * 与页级搜索的根本差别：页级搜索只能扫已渲染的页，未读章节此刻还不存在；
+     * 这里直接把正文抓下来搜，因此**受全局 1 秒限流约束**——一本 300 章的书
+     * 最坏要几分钟，界面必须显示进度并允许取消。
+     *
+     * 三条约束（[com.xyreader.core.ChapterSearchSource] 的契约）：
+     * - **可取消**：每章之间检查协程取消，关掉搜索面板即刻停手；
+     * - **不改页轴**：只读 [fetchContent]，不碰 [snapshot] / [nextIndex]，
+     *   用户正在读的位置不受搜索影响；
+     * - **单章只抓一次**：[fetchContent] 内部已有 `loaded` 缓存（见
+     *   `OnlinePageSourceOpener.fetch`），重复搜索同一章不会重复打网络。
+     *
+     * 单章失败（源站删除、限流退避后仍失败）**跳过该章继续**而不是中断整轮：
+     * 一章读不到不代表后面几百章都读不到。
+     */
+    override suspend fun searchChapters(
+        query: String,
+        onProgress: (Int, Int) -> Unit,
+    ): List<com.xyreader.core.ChapterSearchHit> {
+        val needle = query.trim()
+        if (needle.isEmpty()) return emptyList()
+
+        val total = catalog.size
+        val hits = mutableListOf<com.xyreader.core.ChapterSearchHit>()
+        onProgress(0, total)
+
+        for ((index, chapter) in catalog.withIndex()) {
+            // 用户取消 / 换书 / 关面板后立即停手，不继续打扰源站
+            if (!kotlinx.coroutines.currentCoroutineContext().isActive) break
+
+            val content = runCatching { fetchContent(chapter) }.getOrNull()
+            // 匹配规则在纯函数里（matchChapterBody），这里只负责取正文与推进循环
+            val matched = com.xyreader.reader.matchChapterBody(
+                content?.paragraphs.orEmpty(),
+                needle,
+            )
+            if (matched != null) {
+                val (at, snippet) = matched
+                hits += com.xyreader.core.ChapterSearchHit(
+                    chapterIndex = index,
+                    chapterTitle = chapter.title,
+                    snippet = snippet,
+                    charOffset = at,
+                )
+            }
+            onProgress(index + 1, total)
+        }
+        return hits
     }
 
     companion object {

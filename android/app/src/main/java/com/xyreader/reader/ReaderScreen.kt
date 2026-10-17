@@ -1050,10 +1050,15 @@ private fun ReaderPagerArea(
 }
 
 /**
- * 页内搜索弹层（MiuiX OverlayBottomSheet，与阅读设置面板同款容器）。
+ * 搜索弹层（MiuiX OverlayBottomSheet，与阅读设置面板同款容器）。
  *
- * 输入框 + 结果列表：每项显示「第 N 页」与上下文摘要，摘要里命中段用 [SNIPPET_MARK]
- * 分隔，渲染时给命中段上强调色。扫描是长任务，故显式展示 `已扫 x / y 页` 进度。
+ * 两种搜索（0.19.0）：
+ * - **页内搜索**：逐页扫已渲染的页，秒级返回，但在线书**搜不到未读章节**——
+ *   那些正文此刻还不存在；
+ * - **全书搜索**：页面源支持时（在线书）按目录逐章抓取比对，能搜到全书，
+ *   但受全局 1 秒限流约束，长书要扫几分钟，故显式展示 `已扫 x / y 章` 并可取消。
+ *
+ * 两者共用输入框与结果列表；结果行按「页 / 章」区分。
  */
 @Composable
 private fun ReaderSearchSheet(
@@ -1063,6 +1068,10 @@ private fun ReaderSearchSheet(
 ) {
     val state by viewModel.search.collectAsState()
     var input by rememberSaveable { mutableStateOf("") }
+    // 页面源是否支持章节级全量搜索；不支持时只留页内搜索（本地 EPUB 的页级搜索已覆盖全书）。
+    val canSearchWholeBook = viewModel.supportsChapterSearch
+    // 全书搜索的命中按章定位，页内搜索按页；两者结果区共用一个列表但语义不同。
+    val chapterResults = state.chapterHits.isNotEmpty()
 
     OverlayBottomSheet(show = true, onDismissRequest = onDismiss) {
         Column(
@@ -1072,7 +1081,7 @@ private fun ReaderSearchSheet(
             verticalArrangement = Arrangement.spacedBy(ReaderDimens.spaceS),
         ) {
             Text(
-                text = "页内搜索",
+                text = "搜索",
                 style = MiuixTheme.textStyles.title4,
                 fontWeight = FontWeight.SemiBold,
             )
@@ -1089,29 +1098,56 @@ private fun ReaderSearchSheet(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 TextButton(
-                    text = if (state.running) "搜索中…" else "开始搜索",
+                    text = if (state.running) "搜索中…" else "页内搜索",
                     enabled = input.isNotBlank() && !state.running,
                     modifier = Modifier.weight(1f),
                     onClick = { viewModel.searchBook(input) },
                 )
-                if (state.running || state.scannedPages > 0) {
-                    Text(
-                        text = if (state.running) "已扫 ${state.scannedPages} / ${state.totalPages} 页"
-                        else "已扫 ${state.scannedPages} 页 · ${state.hits.size} 处命中",
-                        style = MiuixTheme.textStyles.body2,
-                        color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                if (canSearchWholeBook) {
+                    TextButton(
+                        text = if (state.running) "扫描中…" else "全书搜索",
+                        // 全书搜索同样占用搜索槽位：并发跑两个扫描会加倍打源站
+                        enabled = input.isNotBlank() && !state.running,
+                        modifier = Modifier.weight(1f),
+                        onClick = { viewModel.searchWholeBook(input) },
                     )
                 }
             }
+            // 全书搜索的进度单位是「章」。受全局限流约束，长书可能扫几分钟，
+            // 没有进度用户会以为卡住，因此显式展示。
+            if (state.totalChapters > 0 && state.running) {
+                Text(
+                    "已扫 ${state.scannedChapters} / ${state.totalChapters} 章（按需抓取，可能需要几分钟）",
+                    style = MiuixTheme.textStyles.body2,
+                    color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                )
+            } else if (state.totalChapters > 0) {
+                Text(
+                    "已扫 ${state.scannedChapters} / ${state.totalChapters} 章 · ${state.chapterHits.size} 章命中",
+                    style = MiuixTheme.textStyles.body2,
+                    color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                )
+            } else if (state.running || state.scannedPages > 0) {
+                Text(
+                    text = if (state.running) "已扫 ${state.scannedPages} / ${state.totalPages} 页"
+                    else "已扫 ${state.scannedPages} 页 · ${state.hits.size} 处命中",
+                    style = MiuixTheme.textStyles.body2,
+                    color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                )
+            }
             when {
-                state.hits.isEmpty() && state.finished && input.isNotBlank() ->
+                state.chapterHits.isEmpty() && state.hits.isEmpty() && state.finished && input.isNotBlank() ->
                     Text(
-                        text = "没有找到「${state.query}」。若正在在线阅读，未抓取的章节搜不到。",
+                        text = "没有找到「${state.query}」。若正在在线阅读，可改用「全书搜索」逐章抓取后再匹配。",
                         style = MiuixTheme.textStyles.body2,
                         color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                     )
-                state.hits.isEmpty() -> Text(
-                    text = "输入关键词后开始搜索。结果按页码顺序列出，点一条即可跳转。",
+                state.chapterHits.isEmpty() && state.hits.isEmpty() -> Text(
+                    text = if (canSearchWholeBook) {
+                        "输入关键词后选择搜索方式。「页内搜索」只扫已读到的页，「全书搜索」逐章抓取，能搜到未读章节。"
+                    } else {
+                        "输入关键词后开始搜索。结果按页码顺序列出，点一条即可跳转。"
+                    },
                     style = MiuixTheme.textStyles.body2,
                     color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                 )
@@ -1119,8 +1155,15 @@ private fun ReaderSearchSheet(
                     modifier = Modifier.heightIn(max = ReaderDimens.searchResultMaxHeight),
                     verticalArrangement = Arrangement.spacedBy(ReaderDimens.spaceXS),
                 ) {
-                    items(state.hits, key = { it.page }) { hit ->
-                        SearchHitRow(hit = hit, onClick = { onJumpToPage(hit.page) })
+                    // 全书搜索结果优先展示：它覆盖范围更广，用户刚点的就是它
+                    if (chapterResults) {
+                        items(state.chapterHits, key = { "chapter-${it.chapterIndex}" }) { hit ->
+                            ChapterSearchHitRow(hit = hit)
+                        }
+                    } else {
+                        items(state.hits, key = { it.page }) { hit ->
+                            SearchHitRow(hit = hit, onClick = { onJumpToPage(hit.page) })
+                        }
                     }
                 }
             }
@@ -1151,20 +1194,63 @@ private fun SearchHitRow(hit: SearchHit, onClick: () -> Unit) {
                 fontWeight = FontWeight.SemiBold,
             )
             // 摘要按 SNIPPET_MARK 切开：命中段强调，其余弱化。
-            Row(Modifier.fillMaxWidth()) {
-                hit.snippet.split(SNIPPET_MARK).forEachIndexed { index, part ->
-                    if (part.isNotEmpty()) {
-                        Text(
-                            text = part,
-                            style = MiuixTheme.textStyles.body2,
-                            color = if (index % 2 == 1) MiuixTheme.colorScheme.primary
-                            else MiuixTheme.colorScheme.onSurface.copy(alpha = 0.75f),
-                            fontWeight = if (index % 2 == 1) FontWeight.Medium else FontWeight.Normal,
-                            modifier = Modifier.weight(if (index % 2 == 1) 1.4f else 1f, fill = false),
-                        )
-                    }
-                }
+            SnippetText(hit.snippet)
+        }
+    }
+}
+
+/**
+ * 摘要渲染：按 [SNIPPET_MARK] 切开，命中段上强调色，其余弱化。
+ *
+ * 页级与章节级结果共用——两者的摘要格式由同一个纯函数产出，重复渲染逻辑只会
+ * 让两处样式日后分叉。
+ */
+@Composable
+private fun SnippetText(snippet: String) {
+    Row(Modifier.fillMaxWidth()) {
+        snippet.split(SNIPPET_MARK).forEachIndexed { index, part ->
+            if (part.isNotEmpty()) {
+                Text(
+                    text = part,
+                    style = MiuixTheme.textStyles.body2,
+                    color = if (index % 2 == 1) MiuixTheme.colorScheme.primary
+                    else MiuixTheme.colorScheme.onSurface.copy(alpha = 0.75f),
+                    fontWeight = if (index % 2 == 1) FontWeight.Medium else FontWeight.Normal,
+                    modifier = Modifier.weight(if (index % 2 == 1) 1.4f else 1f, fill = false),
+                )
             }
+        }
+    }
+}
+
+/**
+ * 章节级命中行（0.19.0）：章节名 + 摘要，**不提供点击跳转**。
+ *
+ * 不跳转是刻意的：命中章在搜索时尚未加载，页码还不存在（页码随加载累积），
+ * 给一个点不动的行比不给更糟。要读这一章，用户退出后在目录里选它——
+ * 目录里已经有该章的入口，点击会以它为起始章重新打开（见 `EXTRA_START_CHAPTER`）。
+ */
+@Composable
+private fun ChapterSearchHitRow(hit: com.xyreader.core.ChapterSearchHit) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(ReaderDimens.sheetItemCorner),
+        color = MiuixTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.5f),
+    ) {
+        Column(
+            modifier = Modifier.padding(
+                horizontal = ReaderDimens.spaceM,
+                vertical = ReaderDimens.spaceS,
+            ),
+            verticalArrangement = Arrangement.spacedBy(ReaderDimens.spaceXXS),
+        ) {
+            Text(
+                text = "第 ${hit.chapterIndex + 1} 章 · ${hit.chapterTitle}",
+                style = MiuixTheme.textStyles.body2,
+                color = MiuixTheme.colorScheme.primary,
+                fontWeight = FontWeight.SemiBold,
+            )
+            SnippetText(hit.snippet)
         }
     }
 }
