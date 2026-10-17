@@ -98,9 +98,15 @@ object UiDimens {
  * - 文字栏左内边距 12dp、作者与元信息间距 8dp / 6dp → `BookCardContent`
  * - 设置分组 16dp 圆角、16dp 外边距、16dp 下间距、2dp 项间距、24dp 分组标题边距
  *   → `SettingsScreen.SettingsCategory`
- * - 顶栏标题 `typography.displayLarge` → 本项目 [display]
+ * - 探索横排书卡 98×138dp 封面 / 封面左右各 4dp / 卡间距 4dp / 行下留白 12dp
+ *   → `ExploreHomeScreen.ExploreBookCard` 与 `ExploreRowSection`
+ * - 顶栏标题 `typography.displayLarge` → 本项目 [display]，页内标题区 64dp
  *
  * 单一来源：屏幕上的尺寸一律从这里取（AGENTS §4.4）。改这里等于改全应用排版。
+ *
+ * 只放**当前真的在用**的规格：上游有而本工程无法复刻的形状不要留在这里
+ * （例如 LNR 的标签下划线指示器，MiuiX `TabRow` 没有对应插槽），
+ * 留着会让人误以为界面已经对齐。
  */
 object LnrDimens {
     // —— 书籍卡片（`BookCardContent`）——
@@ -178,30 +184,40 @@ object LnrDimens {
     /** 设置分组标题上下外边距。 */
     val settingsHeaderMarginV = 10.dp
 
-    // —— 标签指示器（`TabRowDefaults.SecondaryIndicator`）——
-
-    /** 标签指示器高度。 */
-    val tabIndicatorHeight = 4.dp
-
-    /** 标签指示器上圆角（顶角 3dp，底角方角）。 */
-    val tabIndicatorCorner = 3.dp
-
-    // —— 探索列表（`ExploreHomeScreen.ExplorePage`）——
+    // —— 探索页（`ExploreHomeScreen.ExploreRowSection` / `ExploreBookCard`）——
+    // 注意：上游的标签下划线指示器（`TabRowDefaults.SecondaryIndicator`，4dp 高、
+    // 顶角 3dp）**不在**这里——MiuiX 0.9.4 的 `TabRow` 只有「选中项胶囊高亮」，
+    // 没有指示器插槽（见其参数表），本工程界面统一 MiuiX，不复刻那个形状。
 
     /**
-     * 探索列表分区标题高度的换算基数。
+     * 书卡标题预留高度的换算基数。
      *
-     * LNR 写 `with(density) { (16.sp * 2.2f).toDp() }`，此处只保留那个系数，
-     * 由调用方乘以自己的标题字号。
+     * LNR 写 `with(density) { (16.sp * 2.2f).toDp() }`：标题固定占两行，同一行里
+     * 各卡片的作者行才会对齐。这里只保留系数，由调用方乘以基准字号（16sp）。
      */
-    const val EXPLORE_TITLE_HEIGHT_FACTOR = 2.2f
+    const val exploreTitleHeightFactor = 2.2f
 
-    // —— 纵向书卡（`ExploreScreen` 的横向书卡 / 阅读首页小卡）——
+    /** 横排书卡封面宽（LNR `Cover(width = 98.dp, …)`）。 */
+    val exploreCoverWidth = 98.dp
 
-    /** 探索页横向书卡宽度。 */
-    val posterCardWidth = 132.dp
+    /** 横排书卡封面高。 */
+    val exploreCoverHeight = 138.dp
 
-    /** 探索页横向书卡圆角。 */
+    /** 封面在卡片内的左右留白（LNR 4dp；卡片因此比封面宽，可点区域更大）。 */
+    val exploreCoverInset = 4.dp
+
+    /** 横排书卡之间的间距（LNR `spacedBy(4.dp)`）。 */
+    val exploreCardGap = 4.dp
+
+    /** 书行与下方分割线之间的距离（LNR `padding(bottom = 12.dp)`）。 */
+    val exploreRowBottomPadding = 12.dp
+
+    /** 探索展开页网格单元的最小宽度（本工程自定：LNR 展开页用的是列表行，不是网格）。 */
+    val exploreExpandedCellMin = 132.dp
+
+    // —— 纵版封面（阅读首页小卡 / 探索展开页网格）——
+
+    /** 纵版封面圆角（LNR `Cover(rounded = 6.dp)`）。 */
     val posterCardCorner = 6.dp
 
     /** 阅读首页「继续阅读」大卡封面宽度（比小卡宽，突出主入口）。 */
@@ -210,7 +226,7 @@ object LnrDimens {
     /** 阅读首页「最近在读」小卡宽度。 */
     val recentCardWidth = 104.dp
 
-    /** 竖版封面比例（宽 : 高），LNR 用 94:144 之外的近似值，此处统一 3:4。 */
+    /** 纵版封面比例（宽 : 高）——阅读首页与探索展开页网格共用 3:4（横排书卡用 98:138）。 */
     const val POSTER_ASPECT = 3f / 4f
 }
 

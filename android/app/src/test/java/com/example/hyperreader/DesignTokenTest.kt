@@ -93,21 +93,28 @@ class DesignTokenTest {
         assertEquals("设置组内条目间距", 2.dp, LnrDimens.settingsItemGap)
         assertEquals("设置分组标题左右外边距", 24.dp, LnrDimens.settingsHeaderMarginH)
         assertEquals("设置分组标题上下外边距", 10.dp, LnrDimens.settingsHeaderMarginV)
-        assertEquals("标签指示器高度", 4.dp, LnrDimens.tabIndicatorHeight)
-        assertEquals("标签指示器圆角", 3.dp, LnrDimens.tabIndicatorCorner)
+        assertEquals("顶栏内容区高度", 64.dp, LnrDimens.topBarContentHeight)
         assertEquals("顶栏图标槽位", 48.dp, LnrDimens.topBarIconSlot)
+        // —— 探索页（`ExploreHomeScreen.ExploreRowSection` / `ExploreBookCard`）——
+        assertEquals("探索书卡封面宽", 98.dp, LnrDimens.exploreCoverWidth)
+        assertEquals("探索书卡封面高", 138.dp, LnrDimens.exploreCoverHeight)
+        assertEquals("探索书卡封面内缩", 4.dp, LnrDimens.exploreCoverInset)
+        assertEquals("探索书卡间距", 4.dp, LnrDimens.exploreCardGap)
+        assertEquals("探索书行下留白", 12.dp, LnrDimens.exploreRowBottomPadding)
+        assertEquals("探索展开页单元最小宽", 132.dp, LnrDimens.exploreExpandedCellMin)
     }
 
     /**
-     * 封面比例必须与 LNR 书架卡一致（94:144 ≈ 0.6528，LNR 探索页另用近似 3:4）。
+     * 封面比例与书卡标题预留高度必须来自令牌，不允许各处自己写一个数。
      *
-     * 这里钉的是本工程内部一致性：书架卡、探索海报卡、阅读首页小卡共用同一个
-     * [LnrDimens.POSTER_ASPECT]，避免三处各写一个比例。
+     * 3:4 用于阅读首页小卡与探索展开页网格；探索**横排书卡**改用 LNR 自己的 98:138
+     * （见 [LnrDimens.exploreCoverWidth] / [LnrDimens.exploreCoverHeight]）。
+     * 标题预留系数 2.2 来自 LNR 的 `(16.sp * 2.2f).toDp()`，横排书卡与展开页网格共用。
      */
     @Test
     fun posterAspectIsShared() {
         assertEquals("封面比例", 3f / 4f, LnrDimens.POSTER_ASPECT, 0f)
-        assertEquals("探索页标题高度系数", 2.2f, LnrDimens.EXPLORE_TITLE_HEIGHT_FACTOR, 0f)
+        assertEquals("探索页标题预留系数", 2.2f, LnrDimens.exploreTitleHeightFactor, 0f)
     }
 
     /**

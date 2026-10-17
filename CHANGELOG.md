@@ -17,8 +17,18 @@
   骨架改用 LNR `BookCardContentSkeleton` 的尺寸构成（40/20/32dp 占位）。
 - **设置页改成分组卡**：不再是「每分类一张卡」，改为 LNR `SettingsCategory` 的形状——
   分组标题（24dp 左右外边距）+ 一张 16dp 圆角组卡，组内 2dp 行距的扁平行。
-- **探索页顶栏**：补上 LNR `TopBar` 的 48dp 导航图标槽位与右侧搜索图标按钮，
-  大标题与图标同排。
+- **探索页对齐 LNR `ExploreHomeScreen`**：页内标题区高 64dp（`MediumTopAppBar` 的内容区）；
+  横排书卡封面改为 LNR 的 **98×138dp**（原 132×176）、封面左右各 4dp、卡间距 4dp，
+  标题**固定两行高度**（`16sp × 2.2`）——同一行里各卡片的作者行终于对得齐；
+  书行两端渐隐、吸附式横滑（一次滑一张）并在行尾接分割线；分区标题行的「更多」
+  文字按钮换成 LNR 同款箭头图标按钮。
+- **探索页左右内边距修正**：宿主与页面各加一次 16dp（实际左右各 32dp），
+  与书架页的 16dp 不一致；现在统一由宿主给一次。未登录提示卡内部的双重内边距同理修掉。
+- **探索展开页顶栏**：返回由文字按钮换成图标按钮，标题改成与其它页一致的页内大标题
+  （displayLarge + W600），网格封面比例与圆角改用横排书卡同源规格（98:138 / 6dp）。
+- **`LnrDimens` 只留在用的规格**：LNR 的标签下划线指示器在 MiuiX `TabRow` 上没有插槽
+  （该组件只有「选中项胶囊高亮」），`tabIndicatorHeight` / `tabIndicatorCorner`
+  两个无法落地的值已移除；补上探索书卡的 6 个新规格并在 `DesignTokenTest` 里逐项钉死。
 - **新增 `LnrDimens`**：所有上述 LNR 字面规格收进 `ui/UiDimens.kt` 的单一来源，
   由 `DesignTokenTest.lnrLayoutSpecsAreLocked` 逐项钉死。
 

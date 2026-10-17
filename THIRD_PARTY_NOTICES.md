@@ -119,6 +119,24 @@
 - 上游的插件安装器与插件商店、Room 数据库、`api/userdata/**` 的持久化实现、  
   `api/bookshelf/**`、material3 UI 组件。
 
+## LightNovelReader 主界面排版规格（0.19.0 起）
+
+- **来源**：`com.example.hyperreader.ui` 下的 `LnrDimens`（尺寸字面值）与照其排版的界面
+  （探索页分区行/横排书卡、书架卡片、设置分组卡、阅读首页小卡），以及 `res/drawable` 下
+  LNR 同款 Material 图标（`outline_book` / `outline_explore` / `outline_settings` /
+  `search` / `arrow_forward` 等，另有一份 `lnr_*` 前缀的副本）。
+- **上游**：[dmzz-yyhyy/LightNovelReader](https://github.com/dmzz-yyhyy/LightNovelReader)
+  （`dev/1.3`）
+- **许可证**：Apache License 2.0
+- **引入范围**：**只有排版规格与图标**——`ExploreHomeScreen.ExploreRowSection` /
+  `ExploreBookCard`、`BookCardContent`、`SettingsScreen.SettingsCategory` 的尺寸与
+  结构被改写为本项目的 MiuiX 实现（material3 组件一个都没引入，有守卫单测）；
+  `ExploreScreen` 的 `horizontalFadingEdge` 修饰符参照上游 `utils/Extentions.kt` 的
+  `fadingEdge` 重写（离屏合成 + `DstIn` 蒙版，同样 4 行）。
+- **未引入**：上游的 `MediumTopAppBar` / `PrimaryTabRow` / 导航体系；展开页的列表行与
+  过滤器（本项目的展开页是网格，过滤器由数据源侧提供）。
+- **说明**：Apache-2.0 与本项目的 MIT 许可证兼容。
+
 ## MiuiX
 
 - **来源**：`top.yukonga.miuix.kmp`（`miuix-ui` / `miuix-core` / `miuix-icons`），v0.9.4
