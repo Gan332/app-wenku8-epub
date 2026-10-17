@@ -89,6 +89,9 @@ fun BookshelfScreen(
     val now = remember(state.bookshelf, readingProgress) { System.currentTimeMillis() }
     // 菜单目标从列表状态反查：sheet 挂在页面层，条目被滚出视口或书架变化时不会悬空。
     val menuEntry = state.bookshelf.firstOrNull { it.id == menuEntryId }
+    // 分组按书架内容记忆，放在 LazyColumn **之外**：`LazyListScope` 的 DSL 块不是
+    // @Composable 上下文，在里面调 `remember` 会直接编译失败。
+    val sections = remember(state.bookshelf) { groupBookshelf(state.bookshelf) }
     // 折叠状态是纯 UI 关注点，不进 ViewModel（AGENTS §4.6.1）。
     var collapsed by remember { mutableStateOf(emptySet<BookshelfGroup>()) }
     // 单滚动容器：页头（标题 / 说明 / 导入 / 导出 / 分割线）与书籍列表放在同一个
@@ -143,7 +146,6 @@ fun BookshelfScreen(
                 )
             }
         } else {
-            val sections = remember(state.bookshelf) { groupBookshelf(state.bookshelf) }
             sections.forEach { section ->
                 stickyHeader(key = "header-${section.group}") {
                     BookshelfGroupHeader(
