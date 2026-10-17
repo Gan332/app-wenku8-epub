@@ -103,3 +103,24 @@ enum class EpubEngine(val label: String, val summary: String) {
             entries.firstOrNull { it.name == raw } ?: CLASSIC
     }
 }
+
+/**
+ * 首选直连入口（0.19.0，设置 → 网络）。
+ *
+ * 规范 URL 永远是 `www.wenku8.net`（书架、EPUB 内链、缓存键都以它为准）；
+ * 这里只决定**第一次**请求打哪个镜像边缘，被 Cloudflare 拦截时仍按候选顺序轮换。
+ *
+ * 起因：镜像的可用性随网络与时间波动（社区实现实测 `.net` 更容易被拦，
+ * 见 TakaHoshino/Wenku8Reader 的默认镜像选择），把起始入口交给用户比写死一个更稳。
+ */
+@Serializable
+enum class DirectEntry(val label: String, val base: String) {
+    NET("wenku8.net", "https://www.wenku8.net"),
+    CC("wenku8.cc", "https://www.wenku8.cc"),
+    COM("wenku8.com", "https://www.wenku8.com"),
+    ;
+
+    companion object {
+        fun fromName(raw: String?): DirectEntry = entries.firstOrNull { it.name == raw } ?: NET
+    }
+}

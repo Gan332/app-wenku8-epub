@@ -4,6 +4,7 @@ import com.example.hyperreader.core.Wenku8Endpoint
 import com.example.hyperreader.core.Wenku8Parser
 import com.example.hyperreader.core.Wenku8Url
 import com.example.hyperreader.model.Chapter
+import com.example.hyperreader.settings.DirectEntry
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -215,5 +216,15 @@ class ImageUrlTest {
         Wenku8Endpoint.applyPreferredHost("https://evil.com")
         assertEquals(Wenku8Endpoint.DIRECT_BASE, Wenku8Endpoint.activeDirectBase())
         assertEquals(3, Wenku8Endpoint.DIRECT_HOSTS.size)
+    }
+
+    /** 设置项与端点常量必须一一对应，改了一处而漏了另一处会静默换错镜像。 */
+    @Test
+    fun directEntryNamesRoundTrip() {
+        assertEquals(DirectEntry.NET, DirectEntry.fromName(null))
+        assertEquals(DirectEntry.NET, DirectEntry.fromName("nope"))
+        assertEquals(DirectEntry.CC, DirectEntry.fromName("CC"))
+        assertEquals("https://www.wenku8.cc", DirectEntry.CC.base)
+        assertEquals(DirectEntry.entries.map { it.base }, Wenku8Endpoint.DIRECT_HOSTS)
     }
 }

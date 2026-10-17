@@ -108,6 +108,9 @@ android/app/src/main/java/io/nightfish/lightnovelreader/api/   ← LNR 书源抽
 ### 4.2 安全与源站边界
 
 - 只允许 wenku8.net / wenku8.cc / wenku8.com
+- **图片专用白名单**（0.19.0）：图片下载额外放行站点自有图床 `img.wenku8.com` / `pic.wenku8.com` /
+  `pic.777743.xyz`（`Wenku8Url.isAllowedImageHost` / `assertAllowedImage`）。它**只作用于图片请求**，
+  页面、接口、会话链路一律仍只用上面三个域（`assertAllowed` 不变）
 - 阻止本机和内网地址，重定向后重新校验
 - Cookie 使用 Keystore 加密保存，过期需清理
 - EPUB 解析必须限制解压大小、条目大小，并拒绝路径穿越
@@ -146,7 +149,12 @@ android/app/src/main/java/io/nightfish/lightnovelreader/api/   ← LNR 书源抽
 - **User-Agent 使用标准浏览器 UA**（与平台一致的 Android Chrome 形态）——但 UA **不用于**绕过任何访问控制，登录墙与验证页照旧按§4.2 处理；
 - **编码**：源站声明 gbk/gb2312 但实际输出 GB18030，一律按 **GB18030** 解码（`Wenku8Encoding`，LNR issue #485）；
 - **直连入口轮换**：`.net → .cc → .com`，遇到 CF 拦截换一个边缘入口重试一次（`Wenku8Endpoint.rotateHost`），
-  三个都试过则原样抛出，避免把全部镜像打进风控。
+  三个都试过则原样抛出，避免把全部镜像打进风控。**起始入口**可在「设置 → 网络 → 直连入口」里选
+  （`DirectEntry` / `Wenku8Endpoint.applyPreferredHost`，默认 `.net`）——只影响第一次请求打哪个镜像，
+  规范 URL、书架与 EPUB 内链永远是 `www.wenku8.net`；
+- **图片域不参与任何改写**：入口轮换（`rewire`）与中继（`toRelayUrl`）只改写**入口域**
+  （`Wenku8Url.isEntryHost`）。改到图片 CDN 的 host 上会让请求落到主站并不存在的
+  `/image/…`（实测 404），封面与插图会静默消失。
 
 **403 排查口径**（实测于 2026-10）：匿名公开页前置 Cloudflare，对部分网络会返回
 403「Attention Required」（约 5.5KB 拦截页）：
@@ -154,6 +162,9 @@ android/app/src/main/java/io/nightfish/lightnovelreader/api/   ← LNR 书源抽
 - 与UA / Referer / Accept-Language **无关**（补齐浏览器头仍 403），不要试图伪装绕过；
 - 是**波动**的：同一网络实测出现过连续 8 次 403、也出现过 200；
 - 图域`img.wenku8.com` 走 nginx、不经 Cloudflare，**不受影响**（封面/插图链路正常）；
+  插图在 2026 年迁到新图床 `pic.777743.xyz`（同样不经 CF），按 §4.2 的图片白名单放行；
+  页面给的图片常是相对路径或明文 http，解析出口必须走 `Wenku8Url.normalizeImage`
+  （相对 `/image/…` → `img.wenku8.com`、`/pictures/…` → `pic.wenku8.com`、http → https）；
 - `wenku8.com` 镜像当前长期无响应，白名单里留着但不要指望。
 
 应用侧无需为 403 改解析逻辑：`Wenku8Parser.looksLikeChallenge()` 会转成 `UPSTREAM_CHALLENGE`。
@@ -393,11 +404,13 @@ MiuiX 化对照（上游全是 material3，本项目禁止 material，有守卫�
 4. **URL 双向变换**：解析出口`Wenku8Endpoint.restoreToDirect` 把中继 URL 还原成wenku8 原域
    （书架、EPUB 内链、再次抓取都不得指向第三方）；真正下载前用 `toRelayUrl` 改写，
    封面缓存键保持直连 URL。粘贴来源网址也先还原再 `assertAllowed`。
+   `toRelayUrl` 只改写**入口域**且**路径在白名单内**的 URL：图片 CDN 一律直连
+   （Worker 的 `ALLOWED` 里没有图片路径，改写过去只会拿到 404 `not relayable`）。
 5. **白名单不放宽**：`Wenku8Url.isAllowedHost` 只在「开关开且端点合法」时额外放行中继 host，
    内网拦截、重定向复校验、scheme 与凭据校验一律不变。
 
-设置流由 `Wenku8Application.onCreate` 监听（`relay_base` + `relay_enabled`）后应用；
-关开关时自动清空端点。回归见单测 `RelayEndpointTest`。
+设置流由 `Wenku8Application.onCreate` 监听（`relay_base` + `relay_enabled` + `direct_entry`）后应用；
+关开关时自动清空端点。回归见单测 `RelayEndpointTest` 与 `ImageUrlTest`。
 
 ### 4.12 设置页信息架构（0.18.0，对齐 Kazumi）
 
@@ -407,6 +420,7 @@ MiuiX 化对照（上游全是 material3，本项目禁止 material，有守卫�
   `SettingsSection` 二级页；`SETTINGS_GROUPS` 决定索引页的分组标题；
 - 分类侧栏：宽屏常驻左侧 rail（`SettingsRail`），窄屏用 `OverlayBottomSheet` 抽屉；
 - **编辑型设置用Sheet 轻量编辑**（如 EPUB 导出引擎）；长内容（阅读器、外观）仍走二级页；
+  网络分区里「直连入口」是三项选择（`.net` / `.cc` / `.com`），单一职责：决定第一次请求打哪个镜像；
 - 新增分类必须在 `SettingsSection` 加枚举 + 在 `CoreSmokeTest.settingsSectionsCoverEveryCategory`
   更新计数（该测试会卡住遗漏）。
 

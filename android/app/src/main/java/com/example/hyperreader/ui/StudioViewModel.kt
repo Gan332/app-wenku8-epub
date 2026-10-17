@@ -292,6 +292,20 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     val relayBase: kotlinx.coroutines.flow.Flow<String> = settingsRepository.relayBase
 
     /**
+     * 首选直连入口（设置 → 网络，0.19.0）。
+     *
+     * 只决定**第一次**请求打哪个镜像；规范 URL、书架与 EPUB 内链仍是 `www.wenku8.net`。
+     * 运行态由 [com.example.hyperreader.core.Wenku8Endpoint] 决定（Application 监听设置流应用），
+     * 这里只负责读写设置。
+     */
+    val directEntry: kotlinx.coroutines.flow.Flow<com.example.hyperreader.settings.DirectEntry> = settingsRepository.directEntry
+
+    /** 切换首选直连入口；下一次请求即生效（Application 的 collector 会重排入口）。 */
+    fun setDirectEntry(entry: com.example.hyperreader.settings.DirectEntry) {
+        viewModelScope.launch { runCatching { settingsRepository.setDirectEntry(entry) } }
+    }
+
+    /**
      * 官方标签（登录后从 `tags.php` 拉取）；未登录或抓取失败时为空，标签区只显示本地内容。
      * 声明必须在 `init` 之前：冷启动的 collector 会经 [mergedTags] 读到它。
      */

@@ -24,7 +24,7 @@ class Wenku8Application : Application() {
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     /**
-     * 把设置里的中继开关与端点应用到 [Wenku8Endpoint]。
+     * 把设置里的中继开关、端点与首选直连入口应用到 [Wenku8Endpoint]。
      *
      * 公开页抓取（书目索引、公开榜单、封面）会经它改写端点；会话链路不受影响。
      * 端点非法时 [Wenku8Endpoint.applyRelay] 直接清空，等价于关闭。
@@ -34,10 +34,15 @@ class Wenku8Application : Application() {
         // 每次启动从默认入口开始，避免上一次会话的轮换结果影响本次
         Wenku8Endpoint.resetHosts()
         appScope.launch {
-            combine(settingsRepository.relayBase, settingsRepository.relayEnabled) { base, enabled -> base to enabled }
-                .collect { (base, enabled) ->
+            combine(
+                settingsRepository.relayBase,
+                settingsRepository.relayEnabled,
+                settingsRepository.directEntry,
+            ) { base, enabled, entry -> Triple(base, enabled, entry.base) }
+                .collect { (base, enabled, preferred) ->
                     Wenku8Endpoint.applyRelay(base)
                     Wenku8Endpoint.setRelayEnabled(enabled)
+                    Wenku8Endpoint.applyPreferredHost(preferred)
                 }
         }
     }

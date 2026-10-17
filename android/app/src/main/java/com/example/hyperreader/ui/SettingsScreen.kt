@@ -44,6 +44,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.hyperreader.core.Wenku8Endpoint
 import com.example.hyperreader.settings.AppThemeMode
 import com.example.hyperreader.settings.AppThemeSettings
+import com.example.hyperreader.settings.DirectEntry
 import com.example.hyperreader.settings.ReaderBackground
 import com.example.hyperreader.settings.ReaderPageTurnMode
 import top.yukonga.miuix.kmp.basic.Button
@@ -414,20 +415,40 @@ private fun NetworkSection(state: StudioUiState, viewModel: StudioViewModel, onO
     SettingsScaffold("网络", viewModel::backSettings, listOf(
         { RelaySettings(viewModel) },
         {
-            // 直连入口状态：403 时会自动轮换 .net → .cc → .com，这里显示当前用的那个
+            // 直连入口：首次打哪个镜像由用户选（0.19.0），被拦时仍自动轮换
             Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(UiDimens.cardInset)) {
                 Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS), modifier = Modifier.padding(UiDimens.cardInset)) {
                     Text("直连入口", fontWeight = FontWeight.Bold, fontSize = UiDimens.section)
-                    var shownBase by remember { mutableStateOf(com.example.hyperreader.core.Wenku8Endpoint.activeDirectBase()) }
+                    val preferred by viewModel.directEntry.collectAsStateWithLifecycle(initialValue = DirectEntry.NET)
+                    var shownBase by remember { mutableStateOf(Wenku8Endpoint.activeDirectBase()) }
                     FieldCard(label = "当前入口", value = shownBase)
                     Text(
-                        "遇到 Cloudflare 拦截会自动换一个入口重试一次（.net → .cc → .com）；三个都试过则不再换，避免全部镜像被打进风控。",
+                        "首次请求打哪个镜像；被 Cloudflare 拦截时仍按 .net → .cc → .com 轮换一次" +
+                            "（三个都试过则不再换，避免全部镜像被打进风控）。" +
+                            "书目、书架与 EPUB 内链始终是 www.wenku8.net，切换只影响之后的请求。",
                         fontSize = UiDimens.captionSmall,
                         color = MiuixTheme.colorScheme.onSurface.copy(alpha = .7f),
                     )
+                    Row(horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
+                        DirectEntry.entries.forEach { entry ->
+                            TextButton(
+                                text = entry.label,
+                                onClick = {
+                                    viewModel.setDirectEntry(entry)
+                                    shownBase = entry.base
+                                },
+                                modifier = Modifier.heightIn(min = UiDimens.touchMin),
+                            )
+                        }
+                    }
+                    Text(
+                        "当前首选：${preferred.label}（源自社区实现实测：不同网络下被拦的镜像并不相同）",
+                        fontSize = UiDimens.captionSmall,
+                        color = MiuixTheme.colorScheme.primary,
+                    )
                     TextButton(
                         text = "刷新入口状态",
-                        onClick = { shownBase = com.example.hyperreader.core.Wenku8Endpoint.activeDirectBase() },
+                        onClick = { shownBase = Wenku8Endpoint.activeDirectBase() },
                         modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
                     )
                 }
@@ -531,7 +552,7 @@ private fun RelaySettings(viewModel: StudioViewModel) {
     LaunchedEffect(storedBase) { editing = storedBase }
     val normalized = Wenku8Endpoint.normalizeRelayBase(editing)
     val status = when {
-        normalized == null -> "端点未配置或无效：公开页当前直连 ${Wenku8Endpoint.DIRECT_BASE}"
+        normalized == null -> "端点未配置或无效：公开页当前直连 ${Wenku8Endpoint.activeDirectBase()}"
         enabled -> "公开页将走 $normalized；会话链路（搜索/榜单/标签/正文）仍直连"
         else -> "端点已保存，开关关闭中；开启后公开页走中继"
     }

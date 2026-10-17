@@ -3,9 +3,44 @@
 本项目遵循语义化版本。
 
 
-## [未发布] — 主界面排版对齐 LNR
+## [未发布]
 
-### 界面
+### 图片链路修复
+
+对照社区实现（TakaHoshino/Wenku8Reader）核了一遍图片链路，修掉三个真实缺口，
+每一条都有实测与单测锁定：
+
+- **插图整批丢失（最严重）**：站点 2026 年把插图迁到新图床 `pic.777743.xyz`
+  （仓库夹具 `test/fixtures/illustration.html` 里的 12 张图就是它），而白名单只放行
+  wenku8 三域 → `Wenku8HttpClient` 直接抛 `UNSUPPORTED_HOST` → 在线阅读与导出的插图
+  全部静默消失。新增**图片专用白名单**（`Wenku8Url.isAllowedImageHost` /
+  `assertAllowedImage`）：`img.wenku8.com` / `pic.wenku8.com` / `pic.777743.xyz`
+  只对图片请求放行，页面、接口与会话链路仍严格三域（AGENTS §4.2）。
+- **入口轮换把图片请求打到主站（0.18.0 引入的回归）**：`Wenku8Endpoint.rewire()`
+  会把**任意** host 换成当前入口，`img.wenku8.com/image/…` 因此变成
+  `www.wenku8.net/image/…`——该路径在主站并不存在（实测 404），新封面与全部插图都下不下来
+  （老封面靠磁盘缓存掩盖了症状）。现在只改写**入口域**（`Wenku8Url.isEntryHost`）。
+- **相对图片路径解析到主站**：源站常给 `/image/…`（封面）、`/pictures/…`（插图）这样的相对
+  路径，按页面地址解析同样得到 404 的 `www.wenku8.net/…`。新增 `Wenku8Url.normalizeImage`：
+  解析出口统一钉回 `img.wenku8.com` / `pic.wenku8.com`，并把明文 http 升到 https
+  （应用禁止明文流量）；Android 解析器与 Web 版 `src/wenku8.js` 同源实现。
+- **开中继反而图全挂**：`CoverRepository` 曾用 `toRelayUrl()` 改写封面/插图，而 Worker 的
+  `ALLOWED` 里没有图片路径 → 404 `not relayable`。现在 `toRelayUrl` 同时校验「入口域 +
+  路径白名单」，图片一律直连（图域不经 Cloudflare，见 AGENTS §4.2.1）。
+- 修掉一条**自证式断言**：`CoreSmokeTest.coverUrlNormalizesToHttpsAndStaysInAllowlist`
+  过去自己拼 `https://` 串再断言自己拼的串，测不到生产代码；现在直接断言
+  `canonicalizeImage` 的输出。
+
+### 直连入口可选择
+
+- 设置 → 网络 的「直连入口」卡片改成三项选择（`wenku8.net` / `wenku8.cc` / `wenku8.com`，
+  `DirectEntry`），决定**第一次**请求打哪个镜像；被 Cloudflare 拦截时仍按候选顺序轮换，
+  规范 URL、书架与 EPUB 内链永远是 `www.wenku8.net`。起因：社区实现实测不同网络下被拦的
+  镜像并不相同，写死起始入口不如交给用户。
+- `Wenku8Endpoint` 的尝试顺序改为「偏好入口 + 其余按原顺序」，`DIRECT_HOSTS` 仍是候选集合。
+  「首选直连入口」属网络部署偏好，**不随配置导出**（与中继端点同类）。
+
+### 界面（对齐 LNR）
 
 - **底部导航变四项**：阅读 / 书架 / 探索 / 设置，顺序与 LNR `MainDestination` 一致，
   **「阅读」成为默认首屏**。新增的阅读首页是「继续阅读」大卡 + 「最近在读」横向流 +
@@ -43,6 +78,9 @@
   沿用 `Recent`/`Search` 会让四个 tab 语义混淆。
 - 守卫测试新增 `lnrLayoutSpecsAreLocked` / `posterAspectIsShared` /
   `mainNavigationMatchesLnrOrder`。
+- 新增 `ImageUrlTest`（9 个用例）：图片白名单边界、相对/协议相对/中继地址归一、
+  入口轮换与中继改写不碰图片域、解析器封面与插图、首选入口的轮换顺序。
+- Web 侧 `test/parsers.test.js` 同步归一用例，并把夹具插图的断言锁到 `pic.777743.xyz`。
 ## [0.19.0-alpha04] - 2026-10-07（预发布）
 
 收尾 alpha03 遗留的半成品提交，并修掉本轮暴露的四个真实缺陷。

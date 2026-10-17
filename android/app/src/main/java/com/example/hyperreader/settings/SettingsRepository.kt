@@ -51,6 +51,13 @@ class SettingsRepository(private val context: Context) {
     /** 中继端点原文（未配置为空串）。 */
     val relayBase: Flow<String> = data.safeData().map { it[RELAY_BASE].orEmpty() }
 
+    /**
+     * 首选直连入口（0.19.0）：只影响**第一次**请求打哪个镜像边缘，默认 `.net`。
+     *
+     * 规范 URL、书架与 EPUB 内链仍统一用 `www.wenku8.net`，见 [DirectEntry]。
+     */
+    val directEntry: Flow<DirectEntry> = data.safeData().map { DirectEntry.fromName(it[DIRECT_ENTRY]) }
+
     val readerSettings: Flow<ReaderSettings> = data.safeData().map { prefs ->
         val default = ReaderSettings()
         ReaderSettings(
@@ -114,6 +121,9 @@ class SettingsRepository(private val context: Context) {
     }
 
     suspend fun setRelayBase(value: String) = edit { it[RELAY_BASE] = value.trim() }
+
+    /** 切换首选直连入口；只影响之后发出的请求，不影响已落库的 URL。 */
+    suspend fun setDirectEntry(entry: DirectEntry) = edit { it[DIRECT_ENTRY] = entry.name }
     suspend fun setDynamicColor(enabled: Boolean) = edit { it[USE_DYNAMIC_COLOR] = enabled }
     suspend fun setAccentColor(color: Int) = edit { it[ACCENT_COLOR] = color }
 
@@ -157,6 +167,9 @@ class SettingsRepository(private val context: Context) {
         val RELAY_ENABLED = booleanPreferencesKey("relay_enabled")
         /** 第三方中继端点，如 `https://relay.example.com`；为空则中继不生效。 */
         val RELAY_BASE = stringPreferencesKey("relay_base")
+
+        /** 首选直连入口（`DirectEntry.name`）；缺省或非法值视为 `.net`。 */
+        val DIRECT_ENTRY = stringPreferencesKey("direct_entry")
         val USE_DYNAMIC_COLOR = booleanPreferencesKey("use_dynamic_color")
         val ACCENT_COLOR = intPreferencesKey("accent_color")
         val READER_FONT_SIZE = floatPreferencesKey("reader_font_size")

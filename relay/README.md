@@ -12,6 +12,11 @@
 | 5 分钟缓存 | 转发 Cookie 或 Authorization |
 | 每 IP 每分钟 60 次的简单限流 | 记录访问日志（默认无日志） |
 | | 新增任何源站没有的接口 |
+| | 代理封面 / 插图（`img.wenku8.com`、`pic.wenku8.com`、`pic.777743.xyz`） |
+
+图片一律**直连**：图域走 nginx、不经 Cloudflare，本来就不需要中继；Worker 的 `ALLOWED`
+里也没有图片路径，改写到中继只会拿到 404 `not relayable`。App 侧 `Wenku8Endpoint.toRelayUrl`
+同时校验「入口域 + 路径白名单」，图片 URL 原样直连（回归见 `ImageUrlTest`）。
 
 不部署也能用 App：中继只是**可选传输路径**，App 默认直连。
 
