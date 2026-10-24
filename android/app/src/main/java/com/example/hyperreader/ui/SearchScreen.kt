@@ -20,8 +20,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.SearchBar
@@ -35,11 +33,16 @@ import com.example.hyperreader.model.SearchBook
 import com.example.hyperreader.model.SearchField
 
 @Composable
-fun SearchScreen(state: StudioUiState, viewModel: StudioViewModel, onLogin: () -> Unit, onClose: (() -> Unit)? = null) {
+fun SearchScreen(
+    state: StudioUiState,
+    viewModel: StudioViewModel,
+    onLogin: () -> Unit,
+    /** 已由顶栏返回图标与系统返回键接管（0.19.0-alpha05）；保留参数只为兼容旧调用点。 */
+    onClose: (() -> Unit)? = null,
+) {
     Column(Modifier.fillMaxWidth().padding(top = UiDimens.spaceL), verticalArrangement = Arrangement.spacedBy(UiDimens.spaceM)) {
-        // 0.18.0：搜索成为独立二级页，从探索页 TopBar 进入，故带返回
-        if (onClose != null) TextButton(text = "‹ 返回探索", onClick = onClose)
-        Text("搜索轻小说", fontSize = UiDimens.display, fontWeight = FontWeight.Bold)
+        // 搜索是独立全屏页：页名与返回都由顶栏给（PageChrome，0.19.0-alpha05），
+        // 页内不再画同名大标题或「‹ 返回探索」文字按钮。
         Text("登录 wenku8 后按书名或作者搜索。", color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f), fontSize = UiDimens.caption)
         if (!state.loggedIn) {
             Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(UiDimens.cardInset)) {

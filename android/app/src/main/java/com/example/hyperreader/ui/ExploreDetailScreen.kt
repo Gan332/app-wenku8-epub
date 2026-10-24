@@ -31,8 +31,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.example.hyperreader.core.ExploreBookDetail
 import com.example.hyperreader.core.ExploreBookSeed
 import com.example.hyperreader.ui.cover.CoverImage
@@ -59,7 +57,8 @@ fun ExploreDetailScreen(
     detail: ExploreBookDetail?,
     loading: Boolean,
     error: String?,
-    onBack: () -> Unit,
+    /** 页内返回已由顶栏接管（0.19.0-alpha05）；保留参数以维持调用契约。 */
+    @Suppress("UNUSED_PARAMETER") onBack: () -> Unit,
     onRetry: () -> Unit,
     onAddToShelf: () -> Unit,
     onReadOnline: () -> Unit,
@@ -91,10 +90,6 @@ fun ExploreDetailScreen(
         contentPadding = PaddingValues(top = UiDimens.spaceS, bottom = UiDimens.spaceXL),
         verticalArrangement = Arrangement.spacedBy(UiDimens.spaceM),
     ) {
-        item(key = "back") {
-            TextButton(text = "‹ 返回探索", onClick = onBack)
-        }
-
         // 加载中且还没有任何数据：只渲染 loading 卡片，避免闪一屏空卡片。
         // 用条件分支包住后续 item，而不是 `return@LazyColumn` —— 后者的标签
         // 指向 LazyListScope 的非内联 lambda，写起来脆且不利于阅读。

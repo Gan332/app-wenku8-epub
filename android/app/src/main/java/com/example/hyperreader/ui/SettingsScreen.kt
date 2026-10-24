@@ -33,11 +33,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -104,9 +102,9 @@ fun SettingsScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val configState by viewModel.configUi.collectAsStateWithLifecycle()
 
-    if (state.settingsSection != SettingsSection.OVERVIEW) {
-        BackHandler { viewModel.backSettings() }
-    }
+    // 系统返回键不再在这里接：`StudioApp` 的根 `BackHandler` 统一处理
+    // （`PageChrome.upTarget()` → CLOSE_SETTINGS）。两处都接会互相抢先，
+    // 首层按下就弹两层。
 
     when (state.settingsSection) {
         SettingsSection.OVERVIEW -> SettingsOverview(state, viewModel)
@@ -153,28 +151,18 @@ private fun SettingsOverview(state: StudioUiState, viewModel: StudioViewModel) {
                 contentPadding = PaddingValues(vertical = UiDimens.spaceL),
                 verticalArrangement = Arrangement.spacedBy(UiDimens.spaceM),
             ) {
-                item(key = "title") {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = LnrDimens.settingsGroupMargin)
-                            .heightIn(min = UiDimens.touchMin),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        // LNR 顶栏在标题左侧放一个 48dp 的页面图标（`navigationIcon` 槽位），
-                        // 本项目顶栏没有这个槽位，改在页内标题行复刻同一视觉关系。
-                        Box(
-                            modifier = Modifier.size(LnrDimens.topBarIconSlot),
-                            contentAlignment = Alignment.Center,
+                if (!wide) {
+                    // 页名由顶栏给（PageChrome，0.19.0-alpha05）：页内不再重复画「设置」大标题
+                    // 与同义图标槽；窄屏只保留「分类」抽屉入口。
+                    item(key = "categories") {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = LnrDimens.settingsGroupMargin)
+                                .heightIn(min = UiDimens.touchMin),
+                            horizontalArrangement = Arrangement.End,
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Icon(
-                                imageVector = ImageVector.vectorResource(com.example.hyperreader.R.drawable.outline_settings_24px),
-                                contentDescription = null,
-                                tint = MiuixTheme.colorScheme.onSurface,
-                            )
-                        }
-                        Text("设置", fontSize = UiDimens.display, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                        if (!wide) {
                             TextButton(text = "分类", onClick = { railOpen = true }, modifier = Modifier.heightIn(min = UiDimens.touchMin))
                         }
                     }
@@ -796,14 +784,23 @@ private fun AboutSection(viewModel: StudioViewModel) {
     ))
 }
 
+/**
+ * 设置二级页的容器。
+ *
+ * [title] 与 [onBack] 自 0.19.0-alpha05 起**不再参与渲染**：页名由顶栏
+ * （`PageChrome.chromeTitle`）给，返回由顶栏图标与系统返回键承担。保留参数是为了让
+ * 各调用点维持「这一页叫什么、怎么退」的自描述，同时避免调用方与视图层各存一份
+ * 真理。
+ */
 @Composable
-internal fun SettingsScaffold(title: String, onBack: () -> Unit, blocks: List<@Composable () -> Unit>) {
+internal fun SettingsScaffold(@Suppress("UNUSED_PARAMETER") title: String, @Suppress("UNUSED_PARAMETER") onBack: () -> Unit, blocks: List<@Composable () -> Unit>) {
     // 必须 fillMaxSize + LazyColumn 用 weight(1f)：
     // 只写 fillMaxWidth 时 Column 会把剩余高度给最后一个子项但不做滚动预算，
     // 内容一旦超出就被裁掉（真机上「字重以下全部不可达」）。
+    //
+    // 页名由顶栏给（`PageChrome.chromeTitle`，0.19.0-alpha05）：这里不再画一遍同名标题，
+    // 返回也改由顶栏图标 + 系统返回键承载（`PageChrome.upTarget` → `CLOSE_SETTINGS`）。
     Column(Modifier.fillMaxSize().padding(top = UiDimens.spaceL), verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
-        TextButton(text = "‹ 返回设置", onClick = onBack)
-        Text(title, fontSize = UiDimens.title, fontWeight = FontWeight.Bold)
         LazyColumn(
             modifier = Modifier.fillMaxWidth().weight(1f),
             // 左右内边距由宿主给一次（StudioApp 的 Column 已 padding(pagePadding)）：
@@ -813,9 +810,11 @@ internal fun SettingsScaffold(title: String, onBack: () -> Unit, blocks: List<@C
         ) {
             items(blocks.size) { index -> blocks[index]() }
         }
+        // 返回/页名已由顶栏接管；设置页自身的 BackHandler 也删了，统一走 StudioApp。
     }
 }
 
+/** 页名已被顶栏接管（0.19.0-alpha05）；保留参数只为让调用点改动最小。 */
 @Composable
 internal fun SectionTitle(text: String) = SectionHeader(text, minRowHeight = false)
 

@@ -178,32 +178,19 @@ fun ExploreScreen(
 @Composable
 private fun ExploreTitleRow(onOpenSearch: () -> Unit) {
     Row(
-        modifier = Modifier.fillMaxWidth().heightIn(min = LnrDimens.topBarContentHeight),
+        modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(
-            modifier = Modifier.size(LnrDimens.topBarIconSlot),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                imageVector = ImageVector.vectorResource(com.example.hyperreader.R.drawable.outline_explore_24px),
-                contentDescription = null,
-                tint = MiuixTheme.colorScheme.onSurface,
-            )
-        }
-        Column(
+        // 页名由顶栏给（PageChrome，0.19.0-alpha05）：这里不再重复画「探索」大标题与
+        // 同义图标槽，只留一行来源说明 + 搜索入口。
+        Text(
+            "Wenku8 轻小说文库 · 年度/月度榜单无需登录",
             modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXXS),
-        ) {
-            Text("探索", fontSize = UiDimens.display, fontWeight = FontWeight.Bold, maxLines = 1)
-            Text(
-                "Wenku8 轻小说文库 · 年度/月度榜单无需登录",
-                fontSize = UiDimens.captionSmall,
-                color = secondaryTextColor(),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
+            fontSize = UiDimens.captionSmall,
+            color = secondaryTextColor(),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
         IconButton(onClick = onOpenSearch, modifier = Modifier.size(UiDimens.touchMin)) {
             Icon(
                 imageVector = ImageVector.vectorResource(com.example.hyperreader.R.drawable.search_24px),

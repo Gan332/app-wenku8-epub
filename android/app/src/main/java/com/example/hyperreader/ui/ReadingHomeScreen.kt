@@ -23,7 +23,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
 import com.example.hyperreader.model.BookshelfEntry
 import com.example.hyperreader.settings.ReadingProgress
 import com.example.hyperreader.ui.cover.CoverImage
@@ -75,15 +74,14 @@ fun ReadingHomeScreen(
         contentPadding = PaddingValues(vertical = UiDimens.spaceM),
         verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS),
     ) {
-        item(key = "title") {
-            // 标题与书签入口同排（对齐 LNR `TopBar` 的大标题 + 图标槽位形状）。
-            // 书签中心是全屏页而非新的一级导航（AGENTS §4.6.1 第 1 条）。
+        item(key = "bookmarks-entry") {
+            // 页名由顶栏给（PageChrome，0.19.0-alpha05），页内不再重复画「阅读」大标题。
+            // 书签中心是全屏页而非新的一级导航（AGENTS §4.6.1 第 1 条），保留常驻入口。
             Row(
                 modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("阅读", fontSize = UiDimens.display, fontWeight = FontWeight.Bold)
                 TextButton(
                     text = "书签",
                     onClick = onOpenBookmarks,

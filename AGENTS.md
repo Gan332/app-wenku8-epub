@@ -13,7 +13,7 @@
 
 当前主要发版对象是 **Android 原生应用**。Android 版本不需要 Node.js 服务，WebView 仅用于 wenku8 登录。
 
-当前版本：`0.19.0-alpha03`（versionCode 28，见 `android/app/build.gradle.kts`，以该文件为准）
+当前版本：`0.19.0-alpha05`（versionCode 30，见 `android/app/build.gradle.kts`，以该文件为准）
 发布节奏：0.18.x 为**预发布**（prerelease，标签带 `-alphaNN`），功能收敛后再转正式版。
 包名：`com.example.hyperreader`（由 `com.wenku8.epubstudio` 于 0.9.0 重命名，非原地改名，升级需数据迁移）
 
@@ -213,6 +213,32 @@ OkHttp 执行不了故直接 403。浏览器通过后下发的 `cf_clearance` **
 - MiuX 组件**唯一**：0.9.3 起 material/material3/material-icons 全量移除，
   有单测 `mainSourcesUseNoMaterialComponents` 守卫，源码出现 material 引用直接失败
 - 主题色从 `MiuixTheme.colorScheme` 获取，不要写死颜色
+
+### 4.4.1 页面外框：页名与返回只有一个来源（0.19.0-alpha05）
+
+`ui/PageChrome.kt` 的三个纯函数是**唯一**决策点，顶栏标题、返回图标按钮、系统返回键、
+底部导航显隐全部从它读：
+
+| 函数 | 作用 |
+| --- | --- |
+| `shellPage()` | 当前显示哪一层（详情 > 导出记录 > 榜单展开 > 搜索 > 书签 > 导出向导 > 主导航） |
+| `chromeTitle()` | 顶栏页名 |
+| `upTarget()` | 返回键/返回图标该关哪一层；`NONE` = 不拦截，交回系统退出 |
+
+硬约束：
+
+1. **页名只由顶栏给**。页内**不得**再画一遍同名大标题（书架/阅读/探索/搜索曾经的
+   `fontSize = UiDimens.display` + 同名文字），否则同一屏两个标题且白占一行高度。
+   守卫：`DesignTokenTest.pageTitlesAreOnlyRenderedByTheTopBar`。
+2. **返回只走 `navigateUp(upTarget)`**。禁止再写页内「‹ 返回」文字按钮；
+   新增覆盖页时必须同时接进 `shellPage()`/`upTarget()`/`chromeTitle()` 三处，
+   `PageChromeTest` 会卡住遗漏的层级（标题为空或返回为 `NONE` 即失败）。
+   守卫：`DesignTokenTest.settingsSubPagesHaveNoInlineBackButton`。
+3. **主导航上必须 `NONE`**：`BackHandler(enabled = upTarget != NONE)`，否则返回键彻底失效。
+4. **导出向导的返回是逐级后退**：`PACKAGING` 退回 `CHAPTERS`（已选章节不丢），
+   其余步骤才 `closeExport()`。
+5. **`SettingsScreen` 里不要再接自己的 `BackHandler`**：根 `StudioApp` 已统一处理，
+   两处都接会互相抢先、首层按下就弹两层。
 
 ### 4.5 探索页自动获取（0.14.0 起；**取代** 0.7.0 的「被动触发」）
 

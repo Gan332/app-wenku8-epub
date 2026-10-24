@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
@@ -38,14 +39,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import top.yukonga.miuix.kmp.anim.DecelerateEasing
@@ -55,6 +54,7 @@ import top.yukonga.miuix.kmp.basic.BreadcrumbItem
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Checkbox
 import top.yukonga.miuix.kmp.basic.Icon
+import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.LinearProgressIndicator
 import top.yukonga.miuix.kmp.basic.NavigationBar
 import top.yukonga.miuix.kmp.basic.NavigationBarItem
@@ -67,6 +67,7 @@ import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.icon.extended.Download
 import top.yukonga.miuix.kmp.icon.extended.Recent
 import top.yukonga.miuix.kmp.icon.extended.Search
@@ -98,6 +99,11 @@ import com.example.hyperreader.model.SearchField
 import com.example.hyperreader.ui.ExportStep
 import com.example.hyperreader.ui.ExploreExpandedScreen
 import com.example.hyperreader.ui.Motion
+import com.example.hyperreader.ui.ShellPage
+import com.example.hyperreader.ui.UpTarget
+import com.example.hyperreader.ui.chromeTitle
+import com.example.hyperreader.ui.shellPage
+import com.example.hyperreader.ui.upTarget
 import com.example.hyperreader.ui.UiDimens
 import com.example.hyperreader.ui.StudioTab
 import com.example.hyperreader.ui.StudioUiState
@@ -200,17 +206,10 @@ private fun StudioApp(
     // 书签中心按书聚合的分组；随两个阅读器 Bridge 的写入实时更新。
     val bookmarkGroups by viewModel.bookmarkGroups.collectAsStateWithLifecycle(initialValue = emptyList())
     val context = LocalContext.current
-    val settingsTitle = when (state.settingsSection) {
-        SettingsSection.OVERVIEW -> "设置"
-                SettingsSection.ACCOUNT -> "账号"
-                SettingsSection.NETWORK -> "网络"
-        SettingsSection.APPEARANCE -> "主题与外观"
-        SettingsSection.READER -> "阅读器设置"
-        SettingsSection.STATISTICS -> "阅读统计"
-        SettingsSection.CATALOG -> "书目缓存"
-        SettingsSection.CONFIG -> "配置导入导出"
-        SettingsSection.ABOUT -> "关于"
-    }
+    // 标题与返回动作都从 PageChrome 的两个纯函数读（0.19.0-alpha05）：
+    // 顶栏标题、顶栏返回按钮、系统返回键三处共用同一份决策，不会各写一遍 `when`。
+    val chromeTitle = state.chromeTitle()
+    val upTarget = state.upTarget()
     // 根消息走 Snackbar（可滑走、自动消失），替代源站页的内联错误卡
     val snackbarHostState = remember { SnackbarHostState() }
     // 一级导航各页的滚动位置。状态必须挂在页面上层：`AnimatedContent` 切 tab 时
@@ -232,31 +231,34 @@ private fun StudioApp(
             viewModel.clearMessage()
         }
     }
+    // 系统返回键：任何覆盖页或设置二级页在栈上时先关它，而不是直接退出 App。
+    // 之前只有设置二级页接了 BackHandler，全屏页按返回键会退出应用，而同一屏
+    // 底部导航是隐藏的，用户没有其它退路（0.19.0-alpha05 修）。
+    val onUp: () -> Unit = { viewModel.navigateUp(upTarget) }
+    BackHandler(enabled = upTarget != UpTarget.NONE, onBack = onUp)
     Scaffold(
         topBar = {
             TopAppBar(
-                title = when {
-                    // 全屏覆盖页优先于 tab：探索详情 > 导出记录 > 导出向导 > 主导航
-                    state.exploreDetailId != null -> "书籍详情"
-                    state.showJobHistory -> "导出记录"
-                    state.exploreExpanded -> state.activeExplorePage?.title ?: "榜单"
-                    state.searchPageOpen -> "搜索"
-                    state.exportStep == ExportStep.RESOLVING -> "解析目录"
-                    state.exportStep == ExportStep.CHAPTERS -> "选择章节"
-                    state.exportStep == ExportStep.PACKAGING -> "导出设置"
-                    state.exportStep == ExportStep.PROGRESS -> "导出进度"
-                    state.tab == StudioTab.READING -> "阅读"
-                    state.tab == StudioTab.BOOKSHELF -> "我的书架"
-                    state.tab == StudioTab.EXPLORE -> "探索"
-                    else -> settingsTitle
+                title = chromeTitle,
+                // 返回图标按钮取代页内「‹ 返回」文字按钮：位置固定在左槽、措辞统一，
+                // 与 LNR（探索展开页已这么做过）和系统返回键指向同一个动作。
+                navigationIcon = {
+                    if (upTarget != UpTarget.NONE) {
+                        IconButton(onClick = onUp, modifier = Modifier.size(UiDimens.touchMin)) {
+                            Icon(
+                                imageVector = MiuixIcons.Back,
+                                contentDescription = "返回",
+                                tint = MiuixTheme.colorScheme.onSurface,
+                            )
+                        }
+                    }
                 },
-                // 0.18.0：顶栏账号入口——未登录点登录，已登录进设置 → 账号分类
-                // （登录只走官方登录页，不保存密码，AGENTS §4.2）
-                )
+            )
         },
         bottomBar = {
-            // 全屏覆盖页（探索详情、导出记录、榜单展开、搜索）不显示底部导航
-            if (state.exploreDetailId == null && !state.showJobHistory && !state.exploreExpanded && !state.searchPageOpen && !state.bookmarkCenterOpen) {
+            // 全屏覆盖页（详情 / 导出记录 / 榜单展开 / 搜索 / 书签中心 / 导出向导）不显示底部导航。
+            // 判据与页面层级共用 `shellPage()`，避免又多一处手写条件而漂移。
+            if (state.shellPage() == ShellPage.TABS) {
                 NavigationBar {
                     // 0.19.0 起四项，对齐 LNR `MainDestination`（阅读/书架/探索/设置，顺序一致）。
                     // 图标取 LNR 同款 Material 图标；MiuiX 图标集没有 Book/Bookshelf/Explore，
@@ -277,14 +279,14 @@ private fun StudioApp(
             val motionFast = Motion.duration(UiDimens.MOTION_FAST)
             val motionBase = Motion.duration(UiDimens.MOTION_MEDIUM)
             val motionSlow = Motion.duration(UiDimens.MOTION_SLOW)
-            val overlayKey = when {
-                state.exploreDetailId != null -> "detail"
-                state.showJobHistory -> "history"
-                state.exploreExpanded -> "expanded"
-                state.searchPageOpen -> "search"
-                state.bookmarkCenterOpen -> "bookmarks"
-                state.exportStep != null -> "export"
-                else -> "tabs"
+            val overlayKey = when (state.shellPage()) {
+                ShellPage.DETAIL -> "detail"
+                ShellPage.HISTORY -> "history"
+                ShellPage.EXPANDED -> "expanded"
+                ShellPage.SEARCH -> "search"
+                ShellPage.BOOKMARKS -> "bookmarks"
+                ShellPage.EXPORT -> "export"
+                ShellPage.TABS -> "tabs"
             }
             AnimatedContent(
                 targetState = overlayKey,
@@ -301,7 +303,7 @@ private fun StudioApp(
                     detail = state.exploreDetail,
                     loading = state.exploreDetailLoading,
                     error = state.exploreDetailError,
-                    onBack = viewModel::closeExploreDetail,
+                    // 返回由顶栏图标 + 系统返回键给（PageChrome），页面不再自带返回按钮。
                     onRetry = viewModel::retryExploreDetail,
                     onAddToShelf = viewModel::addExploreDetailToShelf,
                     onExport = viewModel::exportExploreDetail,
@@ -342,7 +344,7 @@ private fun StudioApp(
                 )
                     "history" -> JobHistoryScreen(state, viewModel)
                     "expanded" -> ExploreExpandedScreen(state, viewModel)
-                    "search" -> SearchScreen(state = state, viewModel = viewModel, onLogin = onLogin, onClose = viewModel::closeSearchPage)
+                    "search" -> SearchScreen(state = state, viewModel = viewModel, onLogin = onLogin, onClose = null)
                     "bookmarks" -> BookmarkCenterScreen(
                         groups = bookmarkGroups,
                         bookshelf = state.bookshelf,
@@ -512,7 +514,8 @@ private fun ResolvingScreen(state: StudioUiState, viewModel: StudioViewModel) {
         Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(top = UiDimens.spaceL),
         verticalArrangement = Arrangement.spacedBy(UiDimens.spaceM),
     ) {
-        TextButton(text = "‹ 关闭", onClick = viewModel::closeExport)
+        // 关闭由顶栏返回图标 + 系统返回键给（PageChrome → CLOSE_EXPORT）。
+        // 页名由顶栏给，这里只留「正在读取目录…」这句状态说明，不画大标题。
         Text("正在读取目录…", fontSize = UiDimens.title, fontWeight = FontWeight.Bold)
         state.detailError?.let { error ->
             Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(UiDimens.cardInset)) {
@@ -541,7 +544,7 @@ private fun ResolvingScreen(state: StudioUiState, viewModel: StudioViewModel) {
 @Composable
 private fun JobHistoryScreen(state: StudioUiState, viewModel: StudioViewModel) {
     Column(Modifier.fillMaxWidth().padding(top = UiDimens.spaceL), verticalArrangement = Arrangement.spacedBy(UiDimens.spaceM)) {
-        TextButton(text = "‹ 返回", onClick = { viewModel.setShowJobHistory(false) })
+        // 返回由顶栏图标 + 系统返回键给（PageChrome → CLOSE_HISTORY，0.19.0-alpha05）。
         HistoryScreen(state.jobs, viewModel)
     }
 }
@@ -554,7 +557,6 @@ private fun ChaptersScreen(state: StudioUiState, viewModel: StudioViewModel) {
         index.chapters.filter { state.search.isBlank() || it.title.contains(state.search, true) || it.volume.contains(state.search, true) }
     }
     Column(Modifier.fillMaxWidth().padding(top = UiDimens.spaceL), verticalArrangement = Arrangement.spacedBy(UiDimens.spaceM)) {
-        TextButton(text = "‹ 关闭向导", onClick = viewModel::closeExport)
         BookHeader(book.title, book.author, book.category, index.chapters.size, state.selectedIds.size)
         TextField(value = state.search, onValueChange = viewModel::setSearch, label = "搜索章节标题", useLabelAsPlaceholder = true, modifier = Modifier.fillMaxWidth())
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
@@ -578,7 +580,6 @@ private fun ExportScreen(state: StudioUiState, viewModel: StudioViewModel) {
         Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(top = UiDimens.spaceL),
         verticalArrangement = Arrangement.spacedBy(UiDimens.spaceM),
     ) {
-        TextButton(text = "‹ 返回章节", onClick = viewModel::backToChapters)
         BookHeader(book.title, book.author, book.category, selected, selected)
         Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(UiDimens.cardInset)) {
             Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceM)) {
@@ -604,7 +605,6 @@ private fun ProgressScreen(state: StudioUiState, viewModel: StudioViewModel) {
     val job = state.jobs.firstOrNull { it.id == state.activeJobId } ?: state.jobs.firstOrNull { it.status == JobStatus.running }
     if (job == null) {
         Column(Modifier.fillMaxWidth().padding(top = UiDimens.spaceL), verticalArrangement = Arrangement.spacedBy(UiDimens.spaceM)) {
-            TextButton(text = "‹ 关闭向导", onClick = viewModel::closeExport)
             Text("任务状态已更新。", color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f))
             TextButton(text = "查看导出记录", onClick = { viewModel.closeExport(); viewModel.setShowJobHistory(true) })
         }

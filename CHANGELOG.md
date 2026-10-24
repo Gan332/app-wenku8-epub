@@ -2,121 +2,88 @@
 
 本项目遵循语义化版本。
 
+## [0.19.0-alpha05] - 2026-10-24（预发布）
 
-## [未发布]
+收纳 alpha04 之后累积的全部改动（整书章节搜索、书签中心、LNR 排版对齐、四 tab 导航、
+直连入口、图片链路修复、CI 固定下载入口），并统一页面外框：**页名只由顶栏给，
+返回只走一处决策**。
 
-### 图片链路修复
+### 页面外框统一（本版重点）
 
-对照社区实现（TakaHoshino/Wenku8Reader）核了一遍图片链路，修掉三个真实缺口，
-每一条都有实测与单测锁定：
+0.19.0 之前「页名」和「返回」各写了三遍，三处互不相干：
 
-- **插图整批丢失（最严重）**：站点 2026 年把插图迁到新图床 `pic.777743.xyz`
-  （仓库夹具 `test/fixtures/illustration.html` 里的 12 张图就是它），而白名单只放行
-  wenku8 三域 → `Wenku8HttpClient` 直接抛 `UNSUPPORTED_HOST` → 在线阅读与导出的插图
-  全部静默消失。新增**图片专用白名单**（`Wenku8Url.isAllowedImageHost` /
-  `assertAllowedImage`）：`img.wenku8.com` / `pic.wenku8.com` / `pic.777743.xyz`
-  只对图片请求放行，页面、接口与会话链路仍严格三域（AGENTS §4.2）。
-- **入口轮换把图片请求打到主站（0.18.0 引入的回归）**：`Wenku8Endpoint.rewire()`
-  会把**任意** host 换成当前入口，`img.wenku8.com/image/…` 因此变成
-  `www.wenku8.net/image/…`——该路径在主站并不存在（实测 404），新封面与全部插图都下不下来
-  （老封面靠磁盘缓存掩盖了症状）。现在只改写**入口域**（`Wenku8Url.isEntryHost`）。
-- **相对图片路径解析到主站**：源站常给 `/image/…`（封面）、`/pictures/…`（插图）这样的相对
-  路径，按页面地址解析同样得到 404 的 `www.wenku8.net/…`。新增 `Wenku8Url.normalizeImage`：
-  解析出口统一钉回 `img.wenku8.com` / `pic.wenku8.com`，并把明文 http 升到 https
-  （应用禁止明文流量）；Android 解析器与 Web 版 `src/wenku8.js` 同源实现。
-- **开中继反而图全挂**：`CoverRepository` 曾用 `toRelayUrl()` 改写封面/插图，而 Worker 的
-  `ALLOWED` 里没有图片路径 → 404 `not relayable`。现在 `toRelayUrl` 同时校验「入口域 +
-  路径白名单」，图片一律直连（图域不经 Cloudflare，见 AGENTS §4.2.1）。
-- 修掉一条**自证式断言**：`CoreSmokeTest.coverUrlNormalizesToHttpsAndStaysInAllowlist`
-  过去自己拼 `https://` 串再断言自己拼的串，测不到生产代码；现在直接断言
-  `canonicalizeImage` 的输出。
+- 顶栏标题是 `StudioApp` 里的一长串 `when`；而 `0.18.0` 那条「顶栏账号入口」注释下面
+  **什么都没渲染**——顶栏右槽一直是空的。
+- 返回是各页自己的**文字按钮**：`‹ 返回探索`、`‹ 返回`、`‹ 关闭向导`、`‹ 返回设置`，
+  措辞不同、位置不同、样式也不同。
+- 系统返回键**只有设置二级页**接了 `BackHandler`。探索详情、搜索、书签中心、导出记录、
+  导出向导这五个全屏页按一下返回键会**直接退出 App**，而同一屏的底部导航是隐藏的，
+  用户没有别的退路。
 
-### 直连入口可选择
+现在统一到 `ui/PageChrome.kt` 的两个纯函数（[`shellPage`] / [`chromeTitle`] / [`upTarget`]）：
 
-- 设置 → 网络 的「直连入口」卡片改成三项选择（`wenku8.net` / `wenku8.cc` / `wenku8.com`，
-  `DirectEntry`），决定**第一次**请求打哪个镜像；被 Cloudflare 拦截时仍按候选顺序轮换，
-  规范 URL、书架与 EPUB 内链永远是 `www.wenku8.net`。起因：社区实现实测不同网络下被拦的
-  镜像并不相同，写死起始入口不如交给用户。
-- `Wenku8Endpoint` 的尝试顺序改为「偏好入口 + 其余按原顺序」，`DIRECT_HOSTS` 仍是候选集合。
-  「首选直连入口」属网络部署偏好，**不随配置导出**（与中继端点同类）。
+- **页名只有一个来源**：书架 / 阅读 / 探索 / 设置，以及搜索、书签、导出向导各步、
+  设置九个二级页的标题全部由 `chromeTitle()` 给。页内不再重复画同名大标题——
+  之前同一屏有两个标题（52dp 顶栏一个、内容区首行一个），滚动时还白占一行高度。
+- **返回只有一个动作**：顶栏左侧的返回图标按钮与系统返回键都走 `navigateUp(upTarget)`。
+  设置二级页 → 索引页；导出向导的打包页 → 退回选章页（**已选章节不丢**），其余步骤
+  → 关闭向导；其它覆盖页 → 关掉该页。
+- **主导航不拦截返回键**：`upTarget()` 返回 `NONE` 时 `BackHandler` 直接禁用，交回系统。
+- **底部导航的显隐判据也共用 `shellPage()`**，不再与页面层级各写一份条件。
+
+配套：`PageChromeTest`（11 个用例）锁层级优先级、「标题与层级不许各说各话」、
+「主导航必须不拦截返回」；`DesignTokenTest` 新增 `pageTitlesAreOnlyRenderedByTheTopBar`
+与 `settingsSubPagesHaveNoInlineBackButton` 两条守卫。
+
+### 阅读
+
+- **整书章节搜索**（在线书）：目录里的关键词检索之外，新增按正文搜索并定位到章节。
+- **书签中心**：独立全屏页（不占一级导航），按书分组聚合两个阅读器的书签，
+  条目带**正文摘录**；支持单条删除与整本清空。
+- **上下滚动不再页间断开**：`NovelPageSource` 过去每页都出整屏高位图，页容量取整剩下的
+  死区堆在页底（默认边距下相邻页之间空出约 305px）。新增 `NovelStyle.seamlessFlow`：
+  上下滚动时上边距只落首页顶部、下边距只落末页底部，位图取该页实际占用高度。
+- **中文正文不再有多余空格**：行内标签边界与序列化缩进会在汉字之间留空格，新增只作用于
+  「两侧都是 CJK」的间隙清理，并可按设置关闭。
 
 ### 界面（对齐 LNR）
 
-- **底部导航变四项**：阅读 / 书架 / 探索 / 设置，顺序与 LNR `MainDestination` 一致，
-  **「阅读」成为默认首屏**。新增的阅读首页是「继续阅读」大卡 + 「最近在读」横向流 +
-  整架最近阅读过的一栏，空态给出去书架/探索的出口。导出入口**没有**回到一级导航，
-  它仍在书架卡片
-  菜单与探索详情里（AGENTS §4.6.1 的立法意图保留）。
-- **书架卡片重排**：卡高 146dp、圆角 12dp、内边距 4dp、封面 94×144dp、封面与正文间 12dp、
-  正文栏用 `SpaceBetween` 顶到底——全部对齐 LNR `BookCardContent` 的字面规格。
-  元信息行改成 LNR `TagChip` 的「图标 + 文字」形状（原先是纯文本 `·` 拼接）。
-  骨架改用 LNR `BookCardContentSkeleton` 的尺寸构成（40/20/32dp 占位）。
-- **设置页改成分组卡**：不再是「每分类一张卡」，改为 LNR `SettingsCategory` 的形状——
-  分组标题（24dp 左右外边距）+ 一张 16dp 圆角组卡，组内 2dp 行距的扁平行。
-- **探索页对齐 LNR `ExploreHomeScreen`**：页内标题区高 64dp（`MediumTopAppBar` 的内容区）；
-  横排书卡封面改为 LNR 的 **98×138dp**（原 132×176）、封面左右各 4dp、卡间距 4dp，
-  标题**固定两行高度**（`16sp × 2.2`）——同一行里各卡片的作者行终于对得齐；
-  书行两端渐隐、吸附式横滑（一次滑一张）并在行尾接分割线；分区标题行的「更多」
-  文字按钮换成 LNR 同款箭头图标按钮。
-- **左右内边距统一由宿主给一次**：宿主（`StudioApp` 的 `Column`）已经加了 `pagePadding`，
-  探索页、阅读首页、设置二级页、探索详情与导出向导面包屑却各自又加了一遍，实际左右各 32dp——
-  同一屏上「页内标题 16dp、正文与卡片 32dp」两种缩进并排。现在页面侧不再重复；
-  未登录提示卡内部的双重内边距同理修掉。书架分组头也曾比卡片多缩进 16dp。
-  （`SettingsScreen` 里 `ToggleRow` 的 16dp 是卡片**自身**的内边距，保留。）
-- **探索展开页顶栏**：返回由文字按钮换成图标按钮，标题改成与其它页一致的页内大标题
-  （displayLarge + W600），网格封面比例与圆角改用横排书卡同源规格（98:138 / 6dp）。
-- **`LnrDimens` 只留在用的规格**：LNR 的标签下划线指示器在 MiuiX `TabRow` 上没有插槽
-  （该组件只有「选中项胶囊高亮」），`tabIndicatorHeight` / `tabIndicatorCorner`
-  两个无法落地的值已移除；补上探索书卡的 6 个新规格并在 `DesignTokenTest` 里逐项钉死。
-- **新增 `LnrDimens`**：所有上述 LNR 字面规格收进 `ui/UiDimens.kt` 的单一来源，
-  由 `DesignTokenTest.lnrLayoutSpecsAreLocked` 逐项钉死。
+- 底部导航四项：阅读 / 书架 / 探索 / 设置，顺序与 LNR `MainDestination` 一致，
+  **「阅读」为默认首屏**（继续阅读大卡 + 最近在读横向流 + 最近阅读一栏）。
+  导出入口**没有**回到一级导航（AGENTS §4.6.1）。
+- 书架卡片、设置分组卡、探索页横排书卡、探索展开页网格全部对齐 LNR 字面规格，
+  数值收进 `LnrDimens` 并由 `DesignTokenTest.lnrLayoutSpecsAreLocked` 逐项钉死。
+- 书籍操作菜单从 `Popup` 改为轻量 Sheet；切 tab 不再丢滚动位置；左右页面边距只由宿主给一次；
+  共用 `SectionHeader`，副文本颜色从六种写法收成两档语义。
 
-### 界面重构（交互与共用件）
+### 网络
 
-- **书籍操作菜单从 `Popup` 改为轻量 Sheet**：菜单过去锚在卡片行尾、偏移写死
-  `120.dp`，且随列表项一起进出组合——换字号或换机型后位置就不对，滚动时还会被卡片裁掉。
-  现在与「书架排序」「EPUB 导出引擎」共用同一套 `OverlayBottomSheet` 范式
-  （AGENTS §4.12），由根 Scaffold 的弹层承载，条目滚出视口也不会留下悬空的菜单；
-  「移出书架」用 `error` 色区分破坏性操作。
-- **切 tab 不再丢滚动位置**：`AnimatedContent` 切页时旧页会离开组合，页内 `remember`
-  的 `LazyListState` 随之丢失，回到书架/探索总是跳回顶部。现在两级列表的滚动状态
-  由 `StudioApp` 按 tab 持有并下发，页面只渲染。
-- **书架分组头不再叠一层 `Surface`**：分组头只需要一块不透明底色挡住滚过去的卡片，
-  直接给 `Column` 上 `background`，少一层合成。
-- **共用件收敛**：新增 `ui/SectionHeader.kt`，把探索页 `SectionHeader`、阅读首页
-  `SectionHeaderText`、设置页 `SectionTitle` 三份同义实现合成一份（字号/字重早已相同，
-  行高与是否支持行尾操作不一致）；副文本颜色从 `onSurface.copy(alpha = 0.6f / 0.68f /
-  0.7f / 0.72f / 0.75f / 0.8f)` 六种写法收成 `secondaryTextColor()` /
-  `tertiaryTextColor()` 两档语义。
-- **对照标题与内容**：阅读首页第三栏取的是 `lastReadAt` 降序（最近**读过**的书），
-  标题却写成「最近更新」，现改为「最近阅读」。
-- 顺手清掉死代码与陈旧 import：`StudioApp` 里无人使用的 `MiSansFont`、
-  `ExploreDetailScreen` 的孤立 KDoc、`ConfigSection`/`ExportProgressRow`/`CoverImage`
-  的未用 import；
-  探索详情封面的 `0.75f` 改用 `LnrDimens.POSTER_ASPECT`。
+- **图片专用白名单**：站点 2026 年把插图迁到新图床 `pic.777743.xyz`，原先直接
+  `UNSUPPORTED_HOST` → 插图整批静默消失。新增 `isAllowedImageHost` / `assertAllowedImage`，
+  只对图片请求放行；页面、接口与会话链路仍严格三域。
+- **入口轮换不再改写图片域**：`rewire()` 曾把 `img.wenku8.com/image/…` 换成主站，
+  实测 404（0.18.0 的回归）。现在只改写入口域。
+- `Wenku8Url.normalizeImage`：`/image/…` → `img.wenku8.com`、`/pictures/…` →
+  `pic.wenku8.com`，明文 http 升 https；中继只改写入口域且路径在白名单内，图片一律直连。
+- 设置 → 网络新增「直连入口」三项选择（`.net` / `.cc` / `.com`），决定**第一次**请求
+  打哪个镜像；规范 URL 与 EPUB 内链永远是 `www.wenku8.net`。该偏好不随配置导出。
+
+### 配置
+
+- 导入的枚举匹配改为大小写不敏感（`RecentRead` 这类驼峰枚举过去被判「取值无效」跳过）。
+- 导出键 `bookshelfSort` → `sort`，避开「导出文件不得包含书架内容」的禁词。
 
 ### 内部
 
-- `StudioTab` 增加 `READING`；默认首屏由书架改为阅读。
-- 从 LNR 复制 `outline_book` / `outline_explore` / `outline_settings` / `search`
-  四个导航图标（Apache-2.0）；MiuiX 图标集没有 Book/Bookshelf/Explore，
-  沿用 `Recent`/`Search` 会让四个 tab 语义混淆。
-- 守卫测试新增 `lnrLayoutSpecsAreLocked` / `posterAspectIsShared` /
-  `mainNavigationMatchesLnrOrder`。
-- 新增 `ImageUrlTest`（9 个用例）：图片白名单边界、相对/协议相对/中继地址归一、
-  入口轮换与中继改写不碰图片域、解析器封面与插图、首选入口的轮换顺序。
-- Web 侧 `test/parsers.test.js` 同步归一用例，并把夹具插图的断言锁到 `pic.777743.xyz`。
-- **固定下载入口**：main 上通过全部检查的构建现在会覆盖到固定标签 `ci-latest`，
-  下载地址不再变化（`releases/download/ci-latest/app-release.apk`），不必再进 Actions
-  运行页下载 artifact 的 zip 并解压，也不受 14 天保留期限制。该发布是 prerelease，
-  不顶替 `v*` 正式版本的 Latest 标记；失败的构建不会覆盖它。
-- **CI 工具链对齐最新**：Gradle 9.6.0 → 9.8.1（workflow 与 wrapper 两处同步，
-  AGENTS §2 第 4 条要求一致）；Kotlin 2.4.20 → 2.4.21。
-  其余 action 已是最新主版本（checkout v7 / setup-java v6 / cache v6 /
-  upload-artifact v7 / setup-gradle v6 / action-gh-release v3），运行时均为 node24；
-  AGP 9.4.1 与 MiuiX 0.9.4 也已是各自最新稳定版。
-  `dtolnay/rust-toolchain` 保持 `@stable`：这个 action 的 ref 就是工具链通道，
-  `v1` 会被解析成「Rust 1.x」，实测直接报 `'toolchain' is a required input`（本轮踩过）。
+- **固定下载入口**：main 上通过全部检查的构建覆盖固定标签 `ci-latest`，
+  `releases/download/ci-latest/app-release.apk` 永不过期、不必解压 artifact。
+  该发布是 prerelease，不顶替 `v*` 的 Latest；失败构建不覆盖。
+- CI：Gradle 9.6.0 → 9.8.1、Kotlin 2.4.20 → 2.4.21。
+  `dtolnay/rust-toolchain` **保持 `@stable`**：它的 ref 就是工具链通道，`v1` 会被解析成
+  「Rust 1.x」，实测直接报 `'toolchain' is a required input`——第一次推 ci-latest 正是
+  因为这个红的，修完才绿。
+- 新增 `PageChromeTest`；`DesignTokenTest` 增两条守卫；`ImageUrlTest`（9 个用例）锁定
+  图片白名单边界与改写规则。
 
 ## [0.19.0-alpha04] - 2026-10-07（预发布）
 

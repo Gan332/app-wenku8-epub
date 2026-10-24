@@ -67,6 +67,70 @@ class DesignTokenTest {
     }
 
     /**
+     * 页名只能有一个来源：顶栏（`PageChrome.chromeTitle`，0.19.0-alpha05）。
+     *
+     * 0.19.0 之前书架、阅读首页、探索、设置四个一级页，以及搜索页与设置二级页，
+     * 都在顶栏下方又画了一遍同名大标题（`fontSize = UiDimens.display` + Bold），
+     * 同一屏出现两个标题：一个在 52dp 的顶栏里，一个在内容区首行。滚动时页面
+     * 还少了一行可用高度。
+     *
+     * 这里用「文件 + 页面名」的精确组合锁定，而不是禁止所有 `UiDimens.display`：
+     * 探索详情里的书名、阅读器设置里的示例正文等仍然需要大字号的正文。
+     */
+    @Test
+    fun pageTitlesAreOnlyRenderedByTheTopBar() {
+        val sourceRoot = generateSequence(File(requireNotNull(System.getProperty("user.dir")))) { it.parentFile }
+            .flatMap { dir -> sequenceOf(File(dir, "src/main/java"), File(dir, "app/src/main/java")) }
+            .firstOrNull { it.isDirectory }
+        requireNotNull(sourceRoot) { "未找到 src/main/java（user.dir=${System.getProperty("user.dir")}）" }
+
+        // 页面名 → 不该再出现在页内的那个字面量
+        val forbidden = mapOf(
+            "BookshelfScreen.kt" to "\"书架\"",
+            "ReadingHomeScreen.kt" to "\"阅读\"",
+            "ExploreScreen.kt" to "\"探索\"",
+            "SearchScreen.kt" to "\"搜索轻小说\"",
+        )
+        val offenders = mutableListOf<String>()
+        forbidden.forEach { (fileName, literal) ->
+            val file = File(sourceRoot, "com/example/hyperreader/ui/$fileName")
+            assertTrue("未找到 $fileName", file.isFile)
+            file.readLines().forEachIndexed { index, line ->
+                // 只看「画标题」的写法：display 字号与字面量同行
+                if (line.contains(literal) && line.contains("UiDimens.display")) {
+                    offenders += "$fileName:${index + 1}: ${line.trim()}"
+                }
+            }
+        }
+        assertTrue(
+            "页内重复了大标题（页名只由顶栏给，见 PageChrome）：\n" + offenders.joinToString("\n"),
+            offenders.isEmpty(),
+        )
+    }
+
+    /**
+     * 设置二级页不再自带返回按钮：返回走顶栏图标与系统返回键。
+     *
+     * `SettingsScaffold` 曾经把「‹ 返回设置」文字按钮和页名一起画在页内，
+     * 与顶栏形成两套返回。这条断言把该写法钉死。
+     */
+    @Test
+    fun settingsSubPagesHaveNoInlineBackButton() {
+        val sourceRoot = generateSequence(File(requireNotNull(System.getProperty("user.dir")))) { it.parentFile }
+            .flatMap { dir -> sequenceOf(File(dir, "src/main/java"), File(dir, "app/src/main/java")) }
+            .firstOrNull { it.isDirectory }
+        requireNotNull(sourceRoot) { "未找到 src/main/java" }
+
+        val settings = File(sourceRoot, "com/example/hyperreader/ui/SettingsScreen.kt")
+        assertTrue("未找到 SettingsScreen.kt", settings.isFile)
+        val source = settings.readText()
+        assertTrue(
+            "设置页又出现了页内返回文字按钮（应由顶栏 + BackHandler 承担）",
+            !source.contains("‹ 返回设置"),
+        )
+    }
+
+    /**
      * LNR 排版规格的回归守卫（0.19.0）。
      *
      * `LnrDimens` 里的数字全部来自 LNR 上游源码的字面值（`BookCardContent` /

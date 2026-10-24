@@ -428,6 +428,32 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     fun backSettings() = mutable.update { it.copy(settingsSection = SettingsSection.OVERVIEW) }
 
     /**
+     * 统一的向上导航：顶栏返回按钮与系统返回键都走这里（0.19.0-alpha05）。
+     *
+     * 目标由纯函数 [upTarget] 决定，这里只负责执行；[UpTarget.NONE] 什么也不做
+     * （调用方据此不拦截返回键，交回系统退出 App）。
+     *
+     * 与直接调 `closeXxx()` 的区别：导出向导的返回是**逐级后退**——打包页退回选章页，
+     * 已选章节不丢；其余步骤才关闭向导。
+     */
+    fun navigateUp(target: UpTarget) {
+        when (target) {
+            UpTarget.NONE -> Unit
+            UpTarget.CLOSE_DETAIL -> closeExploreDetail()
+            UpTarget.CLOSE_HISTORY -> setShowJobHistory(false)
+            UpTarget.CLOSE_EXPANDED -> closeExploreExpanded()
+            UpTarget.CLOSE_SEARCH -> closeSearchPage()
+            UpTarget.CLOSE_BOOKMARKS -> closeBookmarkCenter()
+            UpTarget.CLOSE_EXPORT -> if (state.value.exportStep == ExportStep.PACKAGING) {
+                backToChapters()
+            } else {
+                closeExport()
+            }
+            UpTarget.CLOSE_SETTINGS -> backSettings()
+        }
+    }
+
+    /**
      * 探索榜单两类入口：
      * - **登录墙内**（`requiresAuth = true`）：`toplist.php` 的四个排序榜，
      *   走用户**自己的**会话 Cookie（AGENTS §4.5.3：本人登录后按账号权限访问不算规避）；

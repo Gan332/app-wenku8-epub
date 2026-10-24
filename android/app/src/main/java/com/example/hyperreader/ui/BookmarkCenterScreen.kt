@@ -44,7 +44,8 @@ fun BookmarkCenterScreen(
     onOpenBookmark: (BookmarkGroup, BookmarkEntity) -> Unit,
     onRemoveBookmark: (Long) -> Unit,
     onClearBook: (String) -> Unit,
-    onBack: () -> Unit,
+    /** 已由顶栏返回图标与系统返回键接管（0.19.0-alpha05）；保留参数以维持调用契约。 */
+    @Suppress("UNUSED_PARAMETER") onBack: () -> Unit,
 ) {
     val now = remember(groups) { System.currentTimeMillis() }
     val localUriByBookId = remember(bookshelf) { bookshelf.associate { it.bookId to it.localUri } }
@@ -53,7 +54,7 @@ fun BookmarkCenterScreen(
         modifier = Modifier.fillMaxWidth().padding(top = UiDimens.spaceL),
         verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS),
     ) {
-        TextButton(text = "‹ 返回", onClick = onBack)
+        // 页名与返回由顶栏给（PageChrome，0.19.0-alpha05）；页内不再画返回按钮。
 
         if (groups.isEmpty()) {
             EmptyState(

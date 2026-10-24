@@ -7,10 +7,10 @@
 - `ui/StudioApp.kt`：MiuiX 主题、书架、探索、创建流程、章节选择、导出进度和设置页面
 - `ui/BookshelfScreen.kt`：本地 EPUB/Wenku8 书架（封面 + 书名 + 折叠分组 + 排序入口）
 - `ui/BookshelfSort.kt`：书架排序纯函数（`sortBookshelf`，置顶恒在最前、全序确定）
-- `ui/BookActionsDialog.kt`：书籍操作二级界面
-- `ui/BookDetailScreen.kt`：封面大图与独立元数据控件
+- `ui/ReadingHomeScreen.kt`：阅读首页（继续阅读 / 最近在读 / 最近阅读，默认首屏）
+- `ui/BookmarkCenterScreen.kt`：跨书书签中心（按书分组、带正文摘录）
 - `ui/cover/`：封面加载、缓存与全屏缩放预览
-- `ui/SettingsScreen.kt`：设置总览与五个二级页面
+- `ui/SettingsScreen.kt`：设置索引（分组卡 + 分类侧栏）与九个二级页
 - `ui/ConfigSection.kt`：配置导入导出（凭据安全的标量模型）
 - `settings/ConfigTransfer.kt`：配置编解码、逐字段校验与写入
 - `reader/XyReaderActivity.kt`：本地 EPUB 阅读器宿主（装配仓库与页面源，见下）
@@ -27,6 +27,9 @@
 - `ui/NotificationRoute.kt`：通知点击路由的纯函数决策层
 - `ui/ExploreScreen.kt`：Wenku8 数据源探索和搜索
 - `ui/ReadingStatsScreen.kt`：阅读时长和阅读统计
+- `ui/PageChrome.kt`：页面外框的**单一决策点**（`shellPage` / `chromeTitle` / `upTarget`）——
+  顶栏标题、返回图标按钮、系统返回键、底部导航显隐全部从这里读，
+  由 `PageChromeTest` 锁定层级优先级与逐级后退（0.19.0-alpha05）
 - `ui/StudioViewModel.kt`：应用状态、搜索、详情和主题交互
 - `settings/`：DataStore 应用主题、阅读设置、搜索历史和阅读进度
 - `auth/LoginActivity.kt`：仅用于 wenku8 登录和验证码的 WebView

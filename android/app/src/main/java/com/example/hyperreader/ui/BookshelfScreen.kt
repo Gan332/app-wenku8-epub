@@ -105,9 +105,8 @@ fun BookshelfScreen(
         contentPadding = PaddingValues(top = UiDimens.spaceL, bottom = UiDimens.spaceL),
         verticalArrangement = Arrangement.spacedBy(UiDimens.spaceM),
     ) {
-        item(key = "page-title") {
-            Text("书架", fontSize = UiDimens.display, fontWeight = FontWeight.Bold)
-        }
+        // 页名由顶栏给（PageChrome，0.19.0-alpha05）：这里不再画一遍「书架」大标题，
+        // 只留一句说明。页面标题的单一来源是 `chromeTitle()`。
         item(key = "page-caption") {
             Text("在线书籍和本地 EPUB 都可以在这里继续阅读。", color = secondaryTextColor(), fontSize = UiDimens.caption)
         }
