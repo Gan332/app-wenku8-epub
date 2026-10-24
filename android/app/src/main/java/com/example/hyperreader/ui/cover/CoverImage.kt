@@ -21,7 +21,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.hyperreader.Wenku8Application
-import top.yukonga.miuix.kmp.basic.Text as MiuixText
+import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 @Composable
@@ -75,7 +75,7 @@ fun CoverImage(
             modifier = modifier.background(MiuixTheme.colorScheme.background).padding(UiDimens.spaceXXS),
             contentAlignment = Alignment.Center,
         ) {
-            MiuixText(
+            Text(
                 text = if (failed) "无封面" else "加载中",
                 fontSize = UiDimens.captionSmall,
                 textAlign = TextAlign.Center,

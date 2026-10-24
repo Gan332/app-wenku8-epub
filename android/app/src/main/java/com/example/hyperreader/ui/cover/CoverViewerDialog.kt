@@ -31,7 +31,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
-import top.yukonga.miuix.kmp.basic.Text as MiuixText
+import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Close
 import kotlin.math.abs
@@ -107,8 +107,8 @@ fun CoverViewerDialog(
                             translationY = offset.y,
                         ),
                 )
-                failed -> MiuixText("封面加载失败", color = Color.White, fontSize = UiDimens.body)
-                else -> MiuixText("正在加载封面…", color = Color.White, fontSize = UiDimens.body)
+                failed -> Text("封面加载失败", color = Color.White, fontSize = UiDimens.body)
+                else -> Text("正在加载封面…", color = Color.White, fontSize = UiDimens.body)
             }
 
             IconButton(
