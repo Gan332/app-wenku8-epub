@@ -409,7 +409,7 @@ class NovelPageSource internal constructor(
         return pagesOut to firstPages
     }
 
-    /** 统一 StaticLayout 构建：可调行距、含字体 padding、左对齐；首行缩进按样式生效 */
+    /** 统一 StaticLayout 构建：可调行距、行高统一（不含字体 padding，避免首/末行高度不一致导致裁切）、左对齐；首行缩进按样式生效 */
     private fun buildLayout(text: String): StaticLayout {
         val content: CharSequence =
             if (style.firstLineIndent && text.isNotEmpty()) {
@@ -420,13 +420,13 @@ class NovelPageSource internal constructor(
         return StaticLayout.Builder.obtain(content, 0, content.length, textPaint, contentWidth)
             .setAlignment(Layout.Alignment.ALIGN_NORMAL)
             .setLineSpacing(0f, style.lineSpacingMultiplier.coerceIn(0.8f, 2.5f))
-            .setIncludePad(true)
+            .setIncludePad(false)
             .build()
     }
 
     /**
-     * 行高测量：三行探针布局取相邻内侧行的 getLineTop 差（首行含字体顶部 padding、
-     * 与内侧行不等高，故取第 2→3 行差作为统一行高）；探针异常时按字体度量兜底。
+     * 行高测量：三行探针布局取相邻行的 getLineTop 差（行高统一，不含字体 padding）；
+     * 探针异常时按字体度量兜底。
      */
     private fun measureLineHeight(): Int {
         val probe = buildLayout("测试\n测\n测试")
