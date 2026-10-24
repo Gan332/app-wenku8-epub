@@ -110,12 +110,13 @@
   下载地址不再变化（`releases/download/ci-latest/app-release.apk`），不必再进 Actions
   运行页下载 artifact 的 zip 并解压，也不受 14 天保留期限制。该发布是 prerelease，
   不顶替 `v*` 正式版本的 Latest 标记；失败的构建不会覆盖它。
-- **CI 工具链对齐最新**：`dtolnay/rust-toolchain` 由 `@stable` 改到 `v1`
-  （工具链要可复现，不跟上游变动漂移）；Gradle 9.6.0 → 9.8.1（workflow 与 wrapper
-  两处同步，AGENTS §2 第 4 条要求一致）；Kotlin 2.4.20 → 2.4.21。
+- **CI 工具链对齐最新**：Gradle 9.6.0 → 9.8.1（workflow 与 wrapper 两处同步，
+  AGENTS §2 第 4 条要求一致）；Kotlin 2.4.20 → 2.4.21。
   其余 action 已是最新主版本（checkout v7 / setup-java v6 / cache v6 /
   upload-artifact v7 / setup-gradle v6 / action-gh-release v3），运行时均为 node24；
   AGP 9.4.1 与 MiuiX 0.9.4 也已是各自最新稳定版。
+  `dtolnay/rust-toolchain` 保持 `@stable`：这个 action 的 ref 就是工具链通道，
+  `v1` 会被解析成「Rust 1.x」，实测直接报 `'toolchain' is a required input`（本轮踩过）。
 
 ## [0.19.0-alpha04] - 2026-10-07（预发布）
 
