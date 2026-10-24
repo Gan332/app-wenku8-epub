@@ -303,7 +303,9 @@ private fun StudioApp(
                     detail = state.exploreDetail,
                     loading = state.exploreDetailLoading,
                     error = state.exploreDetailError,
-                    // 返回由顶栏图标 + 系统返回键给（PageChrome），页面不再自带返回按钮。
+                    // 返回由顶栏图标 + 系统返回键给（PageChrome），页面不再自带返回按钮；
+                    // 这个回调保留只为让详情页仍可独立复用。
+                    onBack = viewModel::closeExploreDetail,
                     onRetry = viewModel::retryExploreDetail,
                     onAddToShelf = viewModel::addExploreDetailToShelf,
                     onExport = viewModel::exportExploreDetail,

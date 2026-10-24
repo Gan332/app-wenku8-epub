@@ -31,6 +31,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import com.example.hyperreader.core.ExploreBookDetail
 import com.example.hyperreader.core.ExploreBookSeed
 import com.example.hyperreader.ui.cover.CoverImage
