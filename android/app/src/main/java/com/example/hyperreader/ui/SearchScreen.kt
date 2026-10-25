@@ -11,6 +11,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -78,8 +79,14 @@ fun SearchScreen(
                         Text("最近搜索", fontSize = UiDimens.caption, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f))
                         TextButton(text = "清空", onClick = viewModel::clearSearchHistory)
                     }
-                    Row(horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
-                        state.searchHistory.take(5).forEach { keyword -> TextButton(text = keyword, onClick = { viewModel.setSearchQuery(keyword) }) }
+                    // 历史词是可变长度内容：普通 Row 装不下第 3 个词就会把后面的裁掉，
+                    // 改成横向滚动，保证每个历史词都能完整看到并点到。
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
+                        // 不传 key：历史词理论上已去重，但旧版本可能留下重复项，
+                        // 重复 key 会让 LazyRow 直接崩溃。
+                        items(state.searchHistory.take(5)) { keyword ->
+                            TextButton(text = keyword, onClick = { viewModel.setSearchQuery(keyword) })
+                        }
                     }
                 }
             },

@@ -38,9 +38,13 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.vectorResource
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import com.example.hyperreader.MessageCard
+import com.example.hyperreader.core.ExplorePage
 import com.example.hyperreader.model.SearchBook
 import com.example.hyperreader.ui.cover.CoverImage
 import top.yukonga.miuix.kmp.basic.Card
@@ -49,6 +53,7 @@ import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.PullToRefresh
 import top.yukonga.miuix.kmp.basic.TabRow
+import top.yukonga.miuix.kmp.basic.TabRowDefaults
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.theme.MiuixTheme
@@ -116,11 +121,17 @@ fun ExploreScreen(
             item(key = "page-switcher") {
                 val pages = viewModel.explorePages
                 val selectedIndex = pages.indexOfFirst { it.id == activePageId }.coerceAtLeast(0)
+                // MiuiX TabRow 的项宽是固定值（默认 76dp），装不下「今日更新」「2026 年度精选」
+                // 这样的标签就会省略成「今日更…」。按最长标题实测后把 min/max 一起放宽，
+                // 项宽仍然统一，只是整行更宽、继续横向滚动。
+                val tabWidth = rememberExploreTabWidth(pages)
                 TabRow(
                     tabs = pages.map { it.title },
                     selectedTabIndex = selectedIndex,
                     onTabSelected = { pages.getOrNull(it)?.let(viewModel::loadExplore) },
                     modifier = Modifier.fillMaxWidth(),
+                    minWidth = tabWidth,
+                    maxWidth = tabWidth,
                     height = UiDimens.touchMin,
                 )
             }
@@ -166,6 +177,36 @@ fun ExploreScreen(
             state.exploreMessage?.let { message -> item(key = "explore-message") { MessageCard(message) } }
         }
     }
+}
+
+/** MiuiX `TabItem` 在标签文字左右各留 12dp（库内常量，未公开为 token）。 */
+private val EXPLORE_TAB_ITEM_PADDING = 12.dp
+
+/**
+ * 榜单切换标签的项宽：按**最长标题**实测，而不是用 MiuiX 的默认固定宽度。
+ *
+ * 缺陷背景：MiuiX `TabRow` 默认项宽 76dp，且标签只显示一行、超出即省略；
+ * 榜单标题里的「今日更新」「热门轻小说」「2026 年度精选」都超过这个宽度，
+ * 首屏标签会变成「今日更…」。这里用与 `TabItem` 相同的字号（body1）和
+ * 选中态字重（Bold）测量，再补上它内部的左右内边距——系统字体放大时
+ * `Density.fontScale` 变化会触发重测，不会再次截断。
+ */
+@Composable
+private fun rememberExploreTabWidth(pages: List<ExplorePage>): Dp {
+    val density = LocalDensity.current
+    val textMeasurer = rememberTextMeasurer()
+    val textStyle = MiuixTheme.textStyles.body1
+    return remember(pages, textStyle, density) {
+        val longest = pages.maxOfOrNull { page ->
+            textMeasurer.measure(
+                text = AnnotatedString(page.title),
+                style = textStyle.copy(fontWeight = FontWeight.Bold),
+                maxLines = 1,
+                softWrap = false,
+            ).size.width
+        } ?: 0
+        with(density) { longest.toDp() } + EXPLORE_TAB_ITEM_PADDING * 2
+    }.coerceAtLeast(TabRowDefaults.TabRowMinWidth)
 }
 
 /**
