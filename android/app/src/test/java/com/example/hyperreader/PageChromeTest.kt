@@ -7,11 +7,13 @@ import com.example.hyperreader.ui.ShellPage
 import com.example.hyperreader.ui.StudioTab
 import com.example.hyperreader.ui.StudioUiState
 import com.example.hyperreader.ui.UpTarget
+import com.example.hyperreader.ui.chromeSubtitle
 import com.example.hyperreader.ui.chromeTitle
 import com.example.hyperreader.ui.shellPage
 import com.example.hyperreader.ui.upTarget
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -45,6 +47,25 @@ class PageChromeTest {
         assertEquals("账号", account.chromeTitle())
         val network = state().copy(tab = StudioTab.SETTINGS, settingsSection = SettingsSection.NETWORK)
         assertEquals("网络", network.chromeTitle())
+    }
+
+    @Test
+    fun everyShellPageHasASubtitle() {
+        val states = listOf(
+            state(),
+            state().copy(tab = StudioTab.BOOKSHELF),
+            state().copy(tab = StudioTab.EXPLORE),
+            state().copy(tab = StudioTab.SETTINGS, settingsSection = SettingsSection.READER),
+            state().copy(exploreDetailId = "2835"),
+            state().copy(showJobHistory = true),
+            state().copy(exploreExpanded = true),
+            state().copy(searchPageOpen = true),
+            state().copy(bookmarkCenterOpen = true),
+            state().copy(exportStep = ExportStep.PACKAGING),
+        )
+        states.forEach { state ->
+            assertTrue("${state.shellPage()} 缺少顶栏副标题", state.chromeSubtitle().isNotBlank())
+        }
     }
 
     @Test

@@ -22,6 +22,9 @@ object UiDimens {
     /** 紧凑信息行的最小高度（详情页字段卡、设置摘要行）。 */
     val rowMin: Dp = 48.dp
 
+    /** 浮层描边厚度。 */
+    val hairline: Dp = 1.dp
+
     // —— 间距六档（只允许用这六档表达元素间距）——
     // 0.18.1 起整体放宽一档：原先 4/8/12 在高密度屏上偏紧，控件之间挤在一起。
     val spaceXXS: Dp = 2.dp
@@ -44,10 +47,52 @@ object UiDimens {
     /** 详情页封面宽度。 */
     val coverWidth: Dp = 160.dp
 
+    /** 阅读首页「继续阅读」主视觉封面宽度。 */
+    val heroCoverWidth: Dp = 88.dp
+
+    /** 书架列表封面宽度。 */
+    val shelfCoverWidth: Dp = 74.dp
+
+    /** 书架列表封面高度。 */
+    val shelfCoverHeight: Dp = 104.dp
+
+    /** 书架卡片最小高度。 */
+    val shelfCardMinHeight: Dp = 128.dp
+
+    /** 探索页横排书卡总宽。 */
+    val exploreCardWidth: Dp = 108.dp
+
+    /** 探索页横排封面宽度。 */
+    val exploreCoverWidth: Dp = 104.dp
+
+    /** 探索页横排封面高度。 */
+    val exploreCoverHeight: Dp = 144.dp
+
+    /** 阅读首页「最近阅读」横向卡片宽度。 */
+    val recentCardWidth: Dp = 104.dp
+
     // —— 跨页复用的装饰值 ——
     // 封面圆角此前在书架、探索列表、探索大图三处各写一遍 8dp；
     // 加载指示器此前有 16 / 22 / 24dp 三种尺寸，同一屏里粗细不一。
     val cardCorner: Dp = 8.dp
+
+    /** 主视觉 / 空态面板圆角。 */
+    val heroCorner: Dp = 24.dp
+
+    /** 一般浮层面板圆角。 */
+    val panelCorner: Dp = 18.dp
+
+    /** 浮动底部导航栏圆角。 */
+    val navCorner: Dp = 26.dp
+
+    /** 底部导航选中项圆角。 */
+    val navItemCorner: Dp = 18.dp
+
+    /** 浮动底部导航栏阴影。 */
+    val navElevation: Dp = 8.dp
+
+    /** 设置分类行左侧字标尺寸。 */
+    val settingGlyph: Dp = 36.dp
 
     val indicator: Dp = 24.dp
 

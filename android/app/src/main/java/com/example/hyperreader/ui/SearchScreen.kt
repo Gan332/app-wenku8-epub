@@ -44,9 +44,17 @@ fun SearchScreen(
     Column(Modifier.fillMaxWidth().padding(top = UiDimens.spaceL), verticalArrangement = Arrangement.spacedBy(UiDimens.spaceM)) {
         // 搜索是独立全屏页：页名与返回都由顶栏给（PageChrome，0.19.0-alpha05），
         // 页内不再画同名大标题或「‹ 返回探索」文字按钮。
-        Text("登录 wenku8 后按书名或作者搜索。", color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f), fontSize = UiDimens.caption)
+        StudioHero(
+            kicker = "FIND YOUR NEXT BOOK",
+            title = "找下一本想读的书",
+            description = "登录 wenku8 后可按书名或作者搜索站内作品；本地书目索引在断网时仍可用。",
+        )
         if (!state.loggedIn) {
-            Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(UiDimens.cardInset)) {
+            Card(
+                Modifier.fillMaxWidth(),
+                cornerRadius = UiDimens.panelCorner,
+                insideMargin = PaddingValues(UiDimens.spaceM),
+            ) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text("搜索需要 wenku8 登录", fontSize = UiDimens.body)
                     TextButton(text = "登录", onClick = onLogin)
@@ -164,7 +172,8 @@ private fun SearchResultCard(result: SearchBook, onOpen: (SearchBook) -> Unit, m
                 onClick = { onOpen(result) },
             )
             .pressableScale(interaction),
-        insideMargin = PaddingValues(UiDimens.cardInset),
+        cornerRadius = UiDimens.panelCorner,
+        insideMargin = PaddingValues(UiDimens.spaceM),
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXS)) {
             Text(result.title, fontSize = UiDimens.section, fontWeight = FontWeight.Bold, maxLines = 2)

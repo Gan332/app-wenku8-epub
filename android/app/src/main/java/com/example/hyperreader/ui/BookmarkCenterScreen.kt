@@ -93,7 +93,11 @@ private fun BookmarkGroupCard(
     onRemoveBookmark: (Long) -> Unit,
     onClearBook: (String) -> Unit,
 ) {
-    Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(UiDimens.cardInset)) {
+    Card(
+        Modifier.fillMaxWidth(),
+        cornerRadius = UiDimens.panelCorner,
+        insideMargin = PaddingValues(UiDimens.spaceM),
+    ) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(UiDimens.spaceS),
             verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXXS),

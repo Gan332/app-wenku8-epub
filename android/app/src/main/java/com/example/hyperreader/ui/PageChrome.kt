@@ -87,6 +87,34 @@ fun StudioUiState.chromeTitle(): String = when (shellPage()) {
 }
 
 /**
+ * 顶栏副标题。只补充当前页面的语境，不承担页面名，避免与 [chromeTitle] 争夺层级。
+ */
+fun StudioUiState.chromeSubtitle(): String = when (shellPage()) {
+    ShellPage.DETAIL -> "作品档案 · Wenku8"
+    ShellPage.HISTORY -> "已生成的 EPUB 与任务状态"
+    ShellPage.EXPANDED -> "完整书目，继续向下发现下一本"
+    ShellPage.SEARCH -> "在 Wenku8 站内查找作品"
+    ShellPage.BOOKMARKS -> "所有书籍里的阅读标记"
+    ShellPage.EXPORT -> "从目录到 EPUB 的四步流程"
+    ShellPage.TABS -> when (tab) {
+        StudioTab.READING -> "回到上次停下的那一页"
+        StudioTab.BOOKSHELF -> "把想读的书放在触手可及的地方"
+        StudioTab.EXPLORE -> "从榜单开始，发现下一段故事"
+        StudioTab.SETTINGS -> when (settingsSection) {
+            SettingsSection.OVERVIEW -> "让阅读更合你的习惯"
+            SettingsSection.ACCOUNT -> "登录状态与本地会话"
+            SettingsSection.APPEARANCE -> "配色、动态色与强调色"
+            SettingsSection.READER -> "排版、背景与翻页方式"
+            SettingsSection.NETWORK -> "中继、入口与浏览器验证"
+            SettingsSection.STATISTICS -> "阅读时长与连续记录"
+            SettingsSection.CATALOG -> "离线书目与导入文件"
+            SettingsSection.CONFIG -> "备份并迁移你的阅读环境"
+            SettingsSection.ABOUT -> "版本、来源与使用边界"
+        }
+    }
+}
+
+/**
  * 返回键（以及顶栏返回图标）该做什么。
  *
  * 与 `com.xyreader.reader.ReaderUiState.resolveBack` 同构：先关最上层的覆盖页，

@@ -39,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.hyperreader.core.Wenku8Endpoint
+import com.example.hyperreader.BuildConfig
 import com.example.hyperreader.settings.AppThemeMode
 import com.example.hyperreader.settings.AppThemeSettings
 import com.example.hyperreader.settings.DirectEntry
@@ -74,6 +75,16 @@ private enum class SettingsCategory(val title: String, val summary: String, val 
     DATA("数据", "书目缓存、阅读统计与配置备份", SettingsSection.CATALOG),
     ABOUT("关于", "版本、数据来源与使用边界", SettingsSection.ABOUT),
 }
+
+private val SettingsCategory.glyph: String
+    get() = when (this) {
+        SettingsCategory.ACCOUNT -> "人"
+        SettingsCategory.READING -> "读"
+        SettingsCategory.APPEARANCE -> "色"
+        SettingsCategory.NETWORK -> "网"
+        SettingsCategory.DATA -> "存"
+        SettingsCategory.ABOUT -> "i"
+    }
 
 /** 索引页的分组（Kazumi `_SettingsGroup`）。 */
 private val SETTINGS_GROUPS: List<Pair<String, List<SettingsCategory>>> = listOf(
@@ -147,9 +158,16 @@ private fun SettingsOverview(state: StudioUiState, viewModel: StudioViewModel) {
             }
             LazyColumn(
                 modifier = Modifier.weight(1f),
-                contentPadding = PaddingValues(vertical = UiDimens.spaceL),
-                verticalArrangement = Arrangement.spacedBy(UiDimens.spaceM),
+                contentPadding = PaddingValues(top = UiDimens.spaceS, bottom = UiDimens.spaceXL),
+                verticalArrangement = Arrangement.spacedBy(UiDimens.spaceL),
             ) {
+                item(key = "settings-hero") {
+                    StudioHero(
+                        kicker = "MAKE IT YOURS",
+                        title = "把阅读调到最舒服",
+                        description = "主题、排版、网络与本地数据都收在这里。修改会即时保存，不需要额外确认。",
+                    )
+                }
                 if (!wide) {
                     // 页名由顶栏给（PageChrome，0.19.0-alpha05）：页内不再重复画「设置」大标题
                     // 与同义图标槽；窄屏只保留「分类」抽屉入口。
@@ -157,11 +175,15 @@ private fun SettingsOverview(state: StudioUiState, viewModel: StudioViewModel) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = LnrDimens.settingsGroupMargin)
                                 .heightIn(min = UiDimens.touchMin),
-                            horizontalArrangement = Arrangement.End,
+                            horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
+                            Text(
+                                "选择一个分类快速跳转",
+                                fontSize = UiDimens.captionSmall,
+                                color = tertiaryTextColor(),
+                            )
                             TextButton(text = "分类", onClick = { railOpen = true }, modifier = Modifier.heightIn(min = UiDimens.touchMin))
                         }
                     }
@@ -172,12 +194,12 @@ private fun SettingsOverview(state: StudioUiState, viewModel: StudioViewModel) {
                         Text(
                             groupTitle,
                             modifier = Modifier.padding(
-                                horizontal = LnrDimens.settingsHeaderMarginH,
-                                vertical = LnrDimens.settingsHeaderMarginV,
+                                horizontal = UiDimens.spaceXS,
+                                vertical = UiDimens.spaceXXS,
                             ),
-                            fontSize = UiDimens.caption,
+                            fontSize = UiDimens.captionSmall,
                             fontWeight = FontWeight.Bold,
-                            color = MiuixTheme.colorScheme.onSurface.copy(alpha = .6f),
+                            color = secondaryTextColor(),
                         )
                     }
                     // 一个分组 = **一张**圆角组卡，组内多行（不是每分类一张卡）：
@@ -186,15 +208,16 @@ private fun SettingsOverview(state: StudioUiState, viewModel: StudioViewModel) {
                         Card(
                             Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = LnrDimens.settingsGroupMargin)
-                                .padding(bottom = LnrDimens.settingsGroupBottom),
-                            insideMargin = PaddingValues(UiDimens.spaceXXS),
+                                .padding(bottom = UiDimens.spaceXS),
+                            cornerRadius = UiDimens.heroCorner,
+                            insideMargin = PaddingValues(UiDimens.spaceXS),
                         ) {
-                            Column(verticalArrangement = Arrangement.spacedBy(LnrDimens.settingsItemGap)) {
+                            Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXXS)) {
                                 categories.forEach { category ->
                                     SettingsEntryRow(
                                         title = category.title,
                                         summary = category.summary,
+                                        glyph = category.glyph,
                                         onClick = { viewModel.openSettingsSection(category.section) },
                                     )
                                 }
@@ -204,11 +227,13 @@ private fun SettingsOverview(state: StudioUiState, viewModel: StudioViewModel) {
                                     SettingsEntryRow(
                                         title = "配置备份",
                                         summary = "主题与阅读器设置的备份与迁移。",
+                                        glyph = "备",
                                         onClick = { viewModel.openSettingsSection(SettingsSection.CONFIG) },
                                     )
                                     SettingsEntryRow(
                                         title = "阅读统计",
                                         summary = "阅读时长、连续天数与每本书排行。",
+                                        glyph = "时",
                                         onClick = { viewModel.openSettingsSection(SettingsSection.STATISTICS) },
                                     )
                                 }
@@ -220,11 +245,13 @@ private fun SettingsOverview(state: StudioUiState, viewModel: StudioViewModel) {
                                     SettingsEntryRow(
                                         title = "EPUB 导出引擎",
                                         summary = "${engine.label} · ${engine.summary}",
+                                        glyph = "出",
                                         onClick = { engineSheet = true },
                                     )
                                     SettingsEntryRow(
                                         title = "导出记录",
                                         summary = "历史导出任务，可保存或分享已生成的 EPUB。",
+                                        glyph = "记",
                                         onClick = { viewModel.setShowJobHistory(true) },
                                     )
                                 }
@@ -287,24 +314,39 @@ private fun SettingsOverview(state: StudioUiState, viewModel: StudioViewModel) {
  * 用 [UiDimens.touchMin] 只作下限，保证触摸目标不小于 48dp（AGENTS §4.4）。
  */
 @Composable
-private fun SettingsEntryRow(title: String, summary: String, onClick: () -> Unit) {
+private fun SettingsEntryRow(title: String, summary: String, glyph: String, onClick: () -> Unit) {
     val interaction = remember { MutableInteractionSource() }
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = UiDimens.touchMin)
-            .clip(RoundedCornerShape(LnrDimens.settingsGroupCorner))
+            .clip(RoundedCornerShape(UiDimens.panelCorner))
             .clickable(interactionSource = interaction, indication = null, onClick = onClick)
             .pressableScale(interaction)
-            .padding(horizontal = UiDimens.spaceS, vertical = UiDimens.spaceXS),
+            .padding(horizontal = UiDimens.spaceS, vertical = UiDimens.spaceS),
         verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceM),
     ) {
+        Box(
+            modifier = Modifier
+                .size(UiDimens.settingGlyph)
+                .clip(RoundedCornerShape(UiDimens.cardCorner))
+                .background(MiuixTheme.colorScheme.primaryContainer),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                glyph,
+                color = MiuixTheme.colorScheme.onPrimaryContainer,
+                fontSize = UiDimens.caption,
+                fontWeight = FontWeight.Bold,
+            )
+        }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXXS)) {
-            Text(title, fontWeight = FontWeight.Medium, fontSize = UiDimens.bodyStrong, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(title, fontWeight = FontWeight.SemiBold, fontSize = UiDimens.bodyStrong, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(
                 summary,
                 fontSize = UiDimens.captionSmall,
-                color = MiuixTheme.colorScheme.onSurface.copy(alpha = .7f),
+                color = secondaryTextColor(),
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -312,8 +354,8 @@ private fun SettingsEntryRow(title: String, summary: String, onClick: () -> Unit
         Icon(
             imageVector = MiuixIcons.ChevronForward,
             contentDescription = null,
-            tint = MiuixTheme.colorScheme.onSurface.copy(alpha = .5f),
-            modifier = Modifier.size(UiDimens.spaceL),
+            tint = tertiaryTextColor(),
+            modifier = Modifier.size(UiDimens.spaceS),
         )
     }
 }
@@ -327,11 +369,33 @@ private fun SettingsRail(current: SettingsCategory?, onSelect: (SettingsCategory
         SETTINGS_GROUPS.forEach { (_, categories) ->
             categories.forEach { category ->
                 val selected = category == current
-                TextButton(
-                    text = if (selected) "✓ ${category.title}" else category.title,
-                    onClick = { onSelect(category) },
-                    modifier = Modifier.fillMaxWidth(),
-                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(UiDimens.panelCorner))
+                        .background(
+                            if (selected) MiuixTheme.colorScheme.primaryContainer
+                            else Color.Transparent,
+                        )
+                        .clickable { onSelect(category) }
+                        .padding(horizontal = UiDimens.spaceS, vertical = UiDimens.spaceS),
+                    horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(UiDimens.settingGlyph)
+                            .clip(RoundedCornerShape(UiDimens.cardCorner))
+                            .background(
+                                if (selected) MiuixTheme.colorScheme.primary.copy(alpha = 0.16f)
+                                else MiuixTheme.colorScheme.surfaceContainer,
+                            ),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(category.glyph, fontSize = UiDimens.captionSmall, fontWeight = FontWeight.Bold)
+                    }
+                    Text(category.title, fontSize = UiDimens.caption, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal)
+                }
             }
         }
     }
@@ -349,10 +413,8 @@ private fun AccountSection(state: StudioUiState, viewModel: StudioViewModel, onL
     var confirmLogout by remember { mutableStateOf(false) }
     SettingsScaffold("账号", viewModel::backSettings, listOf(
         {
-            Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(UiDimens.cardInset)) {
-                Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS), modifier = Modifier.padding(UiDimens.cardInset)) {
-                    Text("wenku8 账号", fontWeight = FontWeight.Bold, fontSize = UiDimens.section)
-                    FieldCard(
+            StudioPanel("wenku8 账号") {
+                    StudioFactRow(
                         label = "状态",
                         value = if (state.loggedIn) "已登录（使用你自己的会话）" else "未登录",
                     )
@@ -372,9 +434,8 @@ private fun AccountSection(state: StudioUiState, viewModel: StudioViewModel, onL
                     Text(
                         "登录只在官方登录页进行，应用不保存你的账号密码；会话失效时搜索与标签会自动退回本地内容。",
                         fontSize = UiDimens.captionSmall,
-                        color = MiuixTheme.colorScheme.onSurface.copy(alpha = .7f),
+                        color = secondaryTextColor(),
                     )
-                }
             }
         },
     ))
@@ -403,18 +464,16 @@ private fun NetworkSection(state: StudioUiState, viewModel: StudioViewModel, onO
         { RelaySettings(viewModel) },
         {
             // 直连入口：首次打哪个镜像由用户选（0.19.0），被拦时仍自动轮换
-            Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(UiDimens.cardInset)) {
-                Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS), modifier = Modifier.padding(UiDimens.cardInset)) {
-                    Text("直连入口", fontWeight = FontWeight.Bold, fontSize = UiDimens.section)
+            StudioPanel("直连入口") {
                     val preferred by viewModel.directEntry.collectAsStateWithLifecycle(initialValue = DirectEntry.NET)
                     var shownBase by remember { mutableStateOf(Wenku8Endpoint.activeDirectBase()) }
-                    FieldCard(label = "当前入口", value = shownBase)
+                    StudioFactRow(label = "当前入口", value = shownBase)
                     Text(
                         "首次请求打哪个镜像；被 Cloudflare 拦截时仍按 .net → .cc → .com 轮换一次" +
                             "（三个都试过则不再换，避免全部镜像被打进风控）。" +
                             "书目、书架与 EPUB 内链始终是 www.wenku8.net，切换只影响之后的请求。",
                         fontSize = UiDimens.captionSmall,
-                        color = MiuixTheme.colorScheme.onSurface.copy(alpha = .7f),
+                        color = secondaryTextColor(),
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
                         DirectEntry.entries.forEach { entry ->
@@ -438,15 +497,12 @@ private fun NetworkSection(state: StudioUiState, viewModel: StudioViewModel, onO
                         onClick = { shownBase = Wenku8Endpoint.activeDirectBase() },
                         modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
                     )
-                }
             }
         },
         {
             // Cloudflare 验证状态：有没有浏览器验证凭证（cf_clearance）
-            Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(UiDimens.cardInset)) {
-                Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS), modifier = Modifier.padding(UiDimens.cardInset)) {
-                    Text("浏览器验证", fontWeight = FontWeight.Bold, fontSize = UiDimens.section)
-                    FieldCard(
+            StudioPanel("浏览器验证") {
+                    StudioFactRow(
                         label = "验证状态",
                         value = if (state.clearancePresent) "已有验证凭证" else "尚无（公开页可能被拦）",
                     )
@@ -454,7 +510,7 @@ private fun NetworkSection(state: StudioUiState, viewModel: StudioViewModel, onO
                         "Cloudflare 要求浏览器执行验证：WebView 能通过，App 的网络请求不行。" +
                             "用下面按钮在浏览器里验证一次，凭证会被复用；若已有凭证却仍然被拦，请配置中继。",
                         fontSize = UiDimens.captionSmall,
-                        color = MiuixTheme.colorScheme.onSurface.copy(alpha = .7f),
+                        color = secondaryTextColor(),
                     )
                     TextButton(
                         text = "打开验证页（浏览器）",
@@ -466,22 +522,19 @@ private fun NetworkSection(state: StudioUiState, viewModel: StudioViewModel, onO
                         onClick = viewModel::refreshClearanceState,
                         modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
                     )
-                }
             }
         },
         {
-            Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(UiDimens.cardInset)) {
-                Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS), modifier = Modifier.padding(UiDimens.cardInset)) {
-                    Text("连通性测试", fontWeight = FontWeight.Bold, fontSize = UiDimens.section)
+            StudioPanel("连通性测试") {
                     Text(
                         "用一个匿名公开页（articleinfo.php）测试当前公开端点；测试请求不携带会话 Cookie。",
                         fontSize = UiDimens.captionSmall,
-                        color = MiuixTheme.colorScheme.onSurface.copy(alpha = .7f),
+                        color = secondaryTextColor(),
                     )
                     Text(
                         "若公开页被 Cloudflare 拦截（提示“要求浏览器验证”），可在这里打开验证窗口，由你亲手完成官方验证；通过后窗口自动关闭，公开页即可恢复。",
                         fontSize = UiDimens.captionSmall,
-                        color = MiuixTheme.colorScheme.onSurface.copy(alpha = .7f),
+                        color = secondaryTextColor(),
                     )
                     TextButton(
                         text = "打开验证页（浏览器）",
@@ -519,7 +572,6 @@ private fun NetworkSection(state: StudioUiState, viewModel: StudioViewModel, onO
                             }
                         }
                     }
-                }
             }
         },
     ))
@@ -543,18 +595,17 @@ private fun RelaySettings(viewModel: StudioViewModel) {
         enabled -> "公开页将走 $normalized；会话链路（搜索/榜单/标签/正文）仍直连"
         else -> "端点已保存，开关关闭中；开启后公开页走中继"
     }
-    Card(modifier = Modifier.fillMaxWidth(), insideMargin = PaddingValues(UiDimens.cardInset)) {
-        Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
+    StudioPanel {
             Row(
                 modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(Modifier.weight(1f)) {
-                    Text("第三方中继（仅公开页）", fontWeight = FontWeight.Bold, fontSize = UiDimens.section)
+                    Text("第三方中继（仅公开页）", fontWeight = FontWeight.Bold, fontSize = UiDimens.bodyStrong)
                     Text(
                         "书目索引、公开榜单与封面改走中继；登录与搜索始终直连，不发送任何 Cookie。",
                         fontSize = UiDimens.captionSmall,
-                        color = MiuixTheme.colorScheme.onSurface.copy(alpha = .7f),
+                        color = secondaryTextColor(),
                     )
                 }
                 Switch(
@@ -578,9 +629,8 @@ private fun RelaySettings(viewModel: StudioViewModel) {
                 "上游声明：该中继服务由mewx.org 提供，与 wenku8 无关；仅供海外用户使用，" +
                     "可能滞后网站 24 小时以上；请勿在中国大陆使用。本项目与 MewX 无隶属关系，非官方支持。",
                 fontSize = UiDimens.captionSmall,
-                color = MiuixTheme.colorScheme.onSurface.copy(alpha = .7f),
+                color = secondaryTextColor(),
             )
-        }
     }
 }
 
@@ -600,11 +650,15 @@ private fun AppearanceSection(viewModel: StudioViewModel) {
             }
         },
         {
-            Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(UiDimens.cardInset)) {
+            Card(
+                Modifier.fillMaxWidth(),
+                cornerRadius = UiDimens.panelCorner,
+                insideMargin = PaddingValues(UiDimens.spaceM),
+            ) {
                 Row(Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text("使用系统动态色", fontWeight = FontWeight.Bold)
-                        Text("关闭后使用固定 MiuiX 配色", fontSize = UiDimens.captionSmall, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f))
+                        Text("关闭后使用固定 MiuiX 配色", fontSize = UiDimens.captionSmall, color = secondaryTextColor())
                     }
                     Switch(checked = theme.useDynamicColor, onCheckedChange = viewModel::setDynamicColor)
                 }
@@ -619,7 +673,11 @@ private fun AppearanceSection(viewModel: StudioViewModel) {
             }
         },
         {
-            Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(UiDimens.spaceS)) {
+            Card(
+                Modifier.fillMaxWidth(),
+                cornerRadius = UiDimens.panelCorner,
+                insideMargin = PaddingValues(UiDimens.spaceS),
+            ) {
                 ColorPicker(
                     color = Color(theme.accentColor),
                     onColorChanged = { viewModel.setAccentColor(it.toArgb()) },
@@ -665,48 +723,47 @@ private fun ReaderSection(state: StudioUiState, viewModel: StudioViewModel, onIm
         { Slider(settings.horizontalPaddingDp.toFloat(), { viewModel.setReaderPadding(it.toInt()) }, valueRange = 0f..48f, steps = 47) },
         { SectionTitle("翻页与显示") },
         {
-            Row(horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
-                TextButton(
-                    text = if (settings.pageTurnMode == ReaderPageTurnMode.HORIZONTAL) "左右章节" else "上下滚动",
-                    onClick = {
-                        viewModel.setReaderPageMode(
-                            if (settings.pageTurnMode == ReaderPageTurnMode.HORIZONTAL) ReaderPageTurnMode.VERTICAL else ReaderPageTurnMode.HORIZONTAL
+            StudioPanel("翻页方式") {
+                Row(horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
+                    ReaderPageTurnMode.entries.forEach { mode ->
+                        TextButton(
+                            text = if (mode == ReaderPageTurnMode.HORIZONTAL) "左右章节" else "上下滚动",
+                            onClick = { viewModel.setReaderPageMode(mode) },
+                            modifier = Modifier.weight(1f),
                         )
-                    },
-                )
+                    }
+                }
             }
         },
         {
-            ToggleRow("保持屏幕常亮", settings.keepScreenOn, viewModel::setReaderKeepScreenOn)
+            StudioPanel("阅读显示") {
+                ToggleRow("保持屏幕常亮", "阅读时不让屏幕自动熄灭", settings.keepScreenOn, viewModel::setReaderKeepScreenOn)
+                ToggleRow("沉浸模式", "隐藏系统栏，只留下正文", settings.immersiveMode, viewModel::setReaderImmersive)
+            }
         },
         {
-            ToggleRow("沉浸模式", settings.immersiveMode, viewModel::setReaderImmersive)
-        },
-        { SectionTitle("正文清洗") },
-        {
-            Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(UiDimens.cardInset)) {
-                Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXS), modifier = Modifier.padding(UiDimens.cardInset)) {
-                    ToggleRow("移除汉字间多余空格", stripGaps, viewModel::setStripCjkGaps)
+            StudioPanel("正文清洗") {
+                Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXS)) {
+                    ToggleRow("移除汉字间多余空格", "清理序列化产生的伪空格", stripGaps, viewModel::setStripCjkGaps)
                     Text(
                         "EPUB 里因序列化缩进与行内标签边界产生的汉字间空格会被抹掉。若你的书（诗歌、手稿）本就要靠汉字间距排版，关掉即可保留。",
                         fontSize = UiDimens.captionSmall,
-                        color = MiuixTheme.colorScheme.onSurface.copy(alpha = .7f),
+                        color = secondaryTextColor(),
                     )
                 }
             }
         },
-        { SectionTitle("字体") },
         {
-            Text(
-                text = settings.fontUri?.let { "当前：${it.substringAfterLast('/')}" } ?: "当前：MiSans（默认）",
-                fontSize = UiDimens.caption,
-                color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f),
-            )
-        },
-        {
-            Row(horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
-                TextButton(text = "导入字体", onClick = onImportFont, modifier = Modifier.weight(1f))
-                TextButton(text = "恢复默认", onClick = viewModel::resetReaderFont, modifier = Modifier.weight(1f))
+            StudioPanel("字体") {
+                Text(
+                    text = settings.fontUri?.let { "当前：${it.substringAfterLast('/')}" } ?: "当前：MiSans（默认）",
+                    fontSize = UiDimens.caption,
+                    color = secondaryTextColor(),
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
+                    TextButton(text = "导入字体", onClick = onImportFont, modifier = Modifier.weight(1f))
+                    TextButton(text = "恢复默认", onClick = viewModel::resetReaderFont, modifier = Modifier.weight(1f))
+                }
             }
         },
     ))
@@ -719,12 +776,10 @@ private fun CatalogSection(state: StudioUiState, viewModel: StudioViewModel, onI
         ?: "尚未更新"
     SettingsScaffold("书目缓存", viewModel::backSettings, listOf(
         {
-            Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(UiDimens.cardInset)) {
-                Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXS)) {
-                    Text("已缓存 ${state.catalogSize} 本", fontWeight = FontWeight.Bold, fontSize = UiDimens.section)
-                    Text(updated, fontSize = UiDimens.caption, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f))
-                    Text("搜索与探索均基于本地索引，断网可用。", fontSize = UiDimens.captionSmall, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .6f))
-                }
+            StudioPanel("本地索引") {
+                Text("已缓存 ${state.catalogSize} 本", fontWeight = FontWeight.Bold, fontSize = UiDimens.section)
+                Text(updated, fontSize = UiDimens.caption, color = secondaryTextColor())
+                Text("搜索与探索均基于本地索引，断网可用。", fontSize = UiDimens.captionSmall, color = tertiaryTextColor())
             }
         },
         { SectionTitle("维护") },
@@ -744,7 +799,7 @@ private fun CatalogSection(state: StudioUiState, viewModel: StudioViewModel, onI
             Text(
                 "仅访问 wenku8 对匿名访客公开的页面：书籍详情、同作者作品、年度精选与月度新书榜。抓取不携带登录 Cookie，并遵守 1 秒/请求限流与 429 退避。",
                 fontSize = UiDimens.captionSmall,
-                color = MiuixTheme.colorScheme.onSurface.copy(alpha = .7f),
+                color = secondaryTextColor(),
             )
         },
         { SectionTitle("文件") },
@@ -756,20 +811,18 @@ private fun CatalogSection(state: StudioUiState, viewModel: StudioViewModel, onI
 private fun AboutSection(viewModel: StudioViewModel) {
     SettingsScaffold("关于", viewModel::backSettings, listOf(
         {
-            Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(UiDimens.cardInset)) {
-                Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXS)) {
-                    Text("HyperReader", fontWeight = FontWeight.Bold, fontSize = UiDimens.section)
-                    Text("版本 0.7.0", fontSize = UiDimens.caption, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f))
-                    Text("Kotlin + Jetpack Compose + MiuiX", fontSize = UiDimens.caption, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f))
-                }
-            }
+            StudioHero(
+                kicker = "HYPERREADER",
+                title = "文库 EPUB 工坊",
+                description = "Kotlin + Jetpack Compose + MiuiX · v${BuildConfig.VERSION_NAME}",
+            )
         },
         { SectionTitle("使用边界") },
         {
             Text(
                 "search.php、articlelist.php、toplist.php、tags.php 由 wenku8 控制登录，应用不做任何规避。登录为可选补充手段，不是使用前提。\n\n仅支持标准无 DRM EPUB，不支持加密 EPUB。",
                 fontSize = UiDimens.captionSmall,
-                color = MiuixTheme.colorScheme.onSurface.copy(alpha = .7f),
+                color = secondaryTextColor(),
             )
         },
         { SectionTitle("参考项目") },
@@ -777,7 +830,7 @@ private fun AboutSection(viewModel: StudioViewModel) {
             Text(
                 "数据源与书架思路参考 dmzz-yyhyy/LightNovelReader；Wenku8 页面组织参考 MewX/light-novel-library_Wenku8_Android。",
                 fontSize = UiDimens.captionSmall,
-                color = MiuixTheme.colorScheme.onSurface.copy(alpha = .7f),
+                color = secondaryTextColor(),
             )
         },
     ))
@@ -799,13 +852,13 @@ internal fun SettingsScaffold(@Suppress("UNUSED_PARAMETER") title: String, @Supp
     //
     // 页名由顶栏给（`PageChrome.chromeTitle`，0.19.0-alpha05）：这里不再画一遍同名标题，
     // 返回也改由顶栏图标 + 系统返回键承载（`PageChrome.upTarget` → `CLOSE_SETTINGS`）。
-    Column(Modifier.fillMaxSize().padding(top = UiDimens.spaceL), verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
+    Column(Modifier.fillMaxSize().padding(top = UiDimens.spaceS), verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
         LazyColumn(
             modifier = Modifier.fillMaxWidth().weight(1f),
             // 左右内边距由宿主给一次（StudioApp 的 Column 已 padding(pagePadding)）：
             // 这里再写一遍会让列表里的卡片比页内标题多缩进 16dp。
-            contentPadding = PaddingValues(vertical = UiDimens.spaceXXS),
-            verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS),
+            contentPadding = PaddingValues(bottom = UiDimens.spaceXL),
+            verticalArrangement = Arrangement.spacedBy(UiDimens.spaceM),
         ) {
             items(blocks.size) { index -> blocks[index]() }
         }
@@ -818,10 +871,17 @@ internal fun SettingsScaffold(@Suppress("UNUSED_PARAMETER") title: String, @Supp
 internal fun SectionTitle(text: String) = SectionHeader(text, minRowHeight = false)
 
 @Composable
-private fun ToggleRow(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
-    Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(vertical = UiDimens.spaceXXS)) {
-        Row(Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin).padding(horizontal = UiDimens.pagePadding), verticalAlignment = Alignment.CenterVertically) {
-            Text(label, modifier = Modifier.weight(1f), fontSize = UiDimens.bodyStrong)
+private fun ToggleRow(label: String, summary: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Card(
+        Modifier.fillMaxWidth(),
+        cornerRadius = UiDimens.panelCorner,
+        insideMargin = PaddingValues(horizontal = UiDimens.spaceM, vertical = UiDimens.spaceXS),
+    ) {
+        Row(Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(label, fontSize = UiDimens.bodyStrong)
+                Text(summary, fontSize = UiDimens.captionSmall, color = secondaryTextColor())
+            }
             Switch(checked = checked, onCheckedChange = onChange)
         }
     }

@@ -1,9 +1,12 @@
 package com.example.hyperreader.ui
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -12,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -22,26 +26,26 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import com.example.hyperreader.model.BookshelfEntry
 import com.example.hyperreader.settings.ReadingProgress
 import com.example.hyperreader.ui.cover.CoverImage
-import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.LinearProgressIndicator
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
+import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.ChevronForward
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 /**
- * 阅读首页（0.19.0 起对齐 LNR `MainDestination.Reading` / `ReadingHomeScreen`）。
+ * 阅读首页。
  *
- * LNR 把「阅读」放在四个一级页面的**第一位并且是默认首屏**（`MainDestination.Reading(0, …)`），
- * 结构是：顶栏 → 「继续阅读」大卡 → 「最近阅读」横向卡片流。本屏照搬这套排布：
- *
- * - **继续阅读**：取最近读过且有断点的书，显示封面、书名、读到第几章与时间；
- *   点击直接回到阅读器（本地 EPUB → 离线阅读器，在线书 → 在线阅读器并跳到断点章）。
- * - **最近阅读**：其余有断点的书，横向滑动；「最近更新」块展示整架最近读过的书。
- * - 空态给出去探索/书架的出口，而不是一片空白。
+ * 这一屏不是「书架摘要」，而是读者回到应用后的第一落点：先给一个可继续的阅读入口，
+ * 再提供最近书目与书签。因此主卡使用完整的封面 + 大字号书名 + 阅读断点，
+ * 其余内容收敛成横向封面轨道。
  */
 @Composable
 fun ReadingHomeScreen(
@@ -59,7 +63,7 @@ fun ReadingHomeScreen(
     }
     val continueEntry = remember(withProgress) { withProgress.firstOrNull() }
     val recentWithProgress = remember(withProgress) { withProgress.drop(1) }
-    val recentlyRead = remember(bookshelf, progress) {
+    val recentlyRead = remember(bookshelf) {
         bookshelf.filter { it.lastReadAt > 0L }.sortedByDescending { it.lastReadAt }
     }
 
@@ -69,21 +73,17 @@ fun ReadingHomeScreen(
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        // 左右内边距由宿主给一次（StudioApp 的 Column 已 padding(pagePadding)），
-        // 这里再写一遍会让正文比页内标题多缩进 16dp。
-        contentPadding = PaddingValues(vertical = UiDimens.spaceM),
-        verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS),
+        contentPadding = PaddingValues(top = UiDimens.spaceS, bottom = UiDimens.spaceXL),
+        verticalArrangement = Arrangement.spacedBy(UiDimens.spaceL),
     ) {
-        item(key = "bookmarks-entry") {
-            // 页名由顶栏给（PageChrome，0.19.0-alpha05），页内不再重复画「阅读」大标题。
-            // 书签中心是全屏页而非新的一级导航（AGENTS §4.6.1 第 1 条），保留常驻入口。
+        item(key = "reading-toolbar") {
             Row(
                 modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
                 horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 TextButton(
-                    text = "书签",
+                    text = "书签中心",
                     onClick = onOpenBookmarks,
                     modifier = Modifier.heightIn(min = UiDimens.touchMin),
                 )
@@ -92,27 +92,17 @@ fun ReadingHomeScreen(
 
         if (continueEntry == null) {
             item(key = "empty") {
-                Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(UiDimens.cardInset)) {
-                    Column(
-                        modifier = Modifier.fillMaxWidth().padding(UiDimens.spaceL),
-                        verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS),
-                    ) {
-                        Text("还没有开始读", fontWeight = FontWeight.Bold, fontSize = UiDimens.section)
-                        Text(
-                            "从书架里点一本书就能开读；读过的书会自动出现在这里，随时接着往下读。",
-                            fontSize = UiDimens.caption,
-                            color = secondaryTextColor(),
-                        )
-                        Row(horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
-                            TextButton(text = "去书架", onClick = onOpenBookshelf, modifier = Modifier.heightIn(min = UiDimens.touchMin))
-                            TextButton(text = "去探索", onClick = onOpenExplore, modifier = Modifier.heightIn(min = UiDimens.touchMin))
-                        }
-                    }
+                StudioHero(
+                    kicker = "START HERE",
+                    title = "从一本书开始",
+                    description = "书架里的书会自动保存阅读位置。读过的内容会出现在这里，下次打开就能接着读。",
+                ) {
+                    TextButton(text = "打开书架", onClick = onOpenBookshelf)
+                    TextButton(text = "去探索", onClick = onOpenExplore)
                 }
             }
         } else {
             item(key = "continue") {
-                SectionHeader("继续阅读")
                 ContinueReadingCard(
                     entry = continueEntry,
                     resume = progress[continueEntry.bookId],
@@ -124,10 +114,12 @@ fun ReadingHomeScreen(
 
         if (recentWithProgress.isNotEmpty()) {
             item(key = "recent-progress") {
-                SectionHeader("最近在读")
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
-                    items(recentWithProgress, key = { it.id }) { entry ->
-                        RecentBookCard(entry = entry, resume = progress[entry.bookId], onClick = { open(entry) })
+                Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
+                    SectionHeader("继续上次")
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceM)) {
+                        items(recentWithProgress, key = { it.id }) { entry ->
+                            RecentBookCard(entry = entry, resume = progress[entry.bookId], onClick = { open(entry) })
+                        }
                     }
                 }
             }
@@ -135,12 +127,12 @@ fun ReadingHomeScreen(
 
         if (recentlyRead.isNotEmpty()) {
             item(key = "recent-read") {
-                // 这一栏取的是 `lastReadAt` 降序，是「最近读过的书」，不是源站最近更新的书——
-                // 标题过去写成「最近更新」，与内容不符。栏目内不再另取数据，只把名字改对。
-                SectionHeader("最近阅读")
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
-                    items(recentlyRead, key = { it.id }) { entry ->
-                        RecentBookCard(entry = entry, resume = progress[entry.bookId], onClick = { open(entry) })
+                Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
+                    SectionHeader("最近翻过")
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceM)) {
+                        items(recentlyRead, key = { it.id }) { entry ->
+                            RecentBookCard(entry = entry, resume = progress[entry.bookId], onClick = { open(entry) })
+                        }
                     }
                 }
             }
@@ -148,7 +140,7 @@ fun ReadingHomeScreen(
     }
 }
 
-/** 「继续阅读」大卡：左侧封面，右侧书名 / 章节断点 / 时间 / 进度条。 */
+/** 主阅读入口：封面是视觉锚点，右侧只保留读者续读需要的三条信息。 */
 @Composable
 private fun ContinueReadingCard(
     entry: BookshelfEntry,
@@ -157,50 +149,89 @@ private fun ContinueReadingCard(
     onClick: () -> Unit,
 ) {
     val interaction = remember { MutableInteractionSource() }
-    Card(
+    val colors = MiuixTheme.colorScheme
+    val shape = RoundedCornerShape(UiDimens.heroCorner)
+    Box(
         modifier = Modifier
             .fillMaxWidth()
+            .clip(shape)
+            .background(
+                Brush.linearGradient(
+                    listOf(
+                        colors.primaryContainer.copy(alpha = 0.95f),
+                        colors.surfaceContainerHigh,
+                    ),
+                ),
+            )
+            .border(BorderStroke(UiDimens.hairline, colors.outline.copy(alpha = 0.16f)), shape)
             .clickable(interactionSource = interaction, indication = null, onClick = onClick)
-            .pressableScale(interaction),
-        insideMargin = PaddingValues(UiDimens.cardInset),
+            .pressableScale(interaction)
+            .padding(UiDimens.spaceL),
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceM),
+            horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceL),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(
                 modifier = Modifier
-                    .width(LnrDimens.continueCoverWidth)
+                    .width(UiDimens.heroCoverWidth)
                     .aspectRatio(LnrDimens.POSTER_ASPECT)
-                    .clip(RoundedCornerShape(LnrDimens.posterCardCorner)),
+                    .clip(RoundedCornerShape(UiDimens.cardCorner))
+                    .background(colors.surface.copy(alpha = 0.72f)),
             ) {
                 CoverImage(
                     url = entry.coverUrl,
                     contentDescription = entry.title,
                     modifier = Modifier.fillMaxWidth().aspectRatio(LnrDimens.POSTER_ASPECT),
-                    targetWidthDp = 180,
+                    targetWidthDp = 220,
                 )
             }
             Column(
                 modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXXS),
+                verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS),
             ) {
-                Text(entry.title, fontWeight = FontWeight.Bold, fontSize = UiDimens.bodyStrong, maxLines = 2)
-                val detail = buildList {
-                    resume?.let { add("第${it.chapterIndex + 1}章 · 第${it.paragraphIndex + 1}段") }
-                    add(formatRelativeReadTime(now, entry.lastReadAt))
-                }
                 Text(
-                    detail.joinToString(" · "),
+                    "继续阅读",
+                    color = colors.primary,
                     fontSize = UiDimens.captionSmall,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    entry.title,
+                    fontSize = UiDimens.title,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    buildList {
+                        resume?.let { add("第 ${it.chapterIndex + 1} 章 · 第 ${it.paragraphIndex + 1} 段") }
+                        add(formatRelativeReadTime(now, entry.lastReadAt))
+                    }.joinToString(" · "),
+                    fontSize = UiDimens.caption,
                     color = secondaryTextColor(),
-                    maxLines = 1,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
                 )
                 resume?.let {
                     LinearProgressIndicator(
-                        progress = ((it.chapterIndex + 1).toFloat() / (entry.chapterCount.coerceAtLeast(it.chapterIndex + 1))).coerceIn(0f, 1f),
+                        progress = ((it.chapterIndex + 1).toFloat() /
+                            (entry.chapterCount.coerceAtLeast(it.chapterIndex + 1))).coerceIn(0f, 1f),
                         modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("翻开", fontSize = UiDimens.caption, fontWeight = FontWeight.Bold)
+                    Icon(
+                        imageVector = MiuixIcons.ChevronForward,
+                        contentDescription = null,
+                        tint = colors.primary,
+                        modifier = Modifier.size(UiDimens.spaceL),
                     )
                 }
             }
@@ -208,7 +239,7 @@ private fun ContinueReadingCard(
     }
 }
 
-/** 最近书目的横向小卡：封面 + 书名。 */
+/** 横向封面轨道中的一本书。 */
 @Composable
 private fun RecentBookCard(
     entry: BookshelfEntry,
@@ -218,33 +249,45 @@ private fun RecentBookCard(
     val interaction = remember { MutableInteractionSource() }
     Column(
         modifier = Modifier
-            .width(POSTER_CARD_WIDTH)
+            .width(UiDimens.recentCardWidth)
             .clickable(interactionSource = interaction, indication = null, onClick = onClick)
-            .pressableScale(interaction)
-            .padding(vertical = UiDimens.spaceXXS),
-        verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXXS),
+            .pressableScale(interaction),
+        verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXS),
     ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(LnrDimens.POSTER_ASPECT)
-                .clip(RoundedCornerShape(LnrDimens.posterCardCorner)),
+                .clip(RoundedCornerShape(UiDimens.panelCorner))
+                .background(MiuixTheme.colorScheme.surfaceContainerHigh)
+                .padding(UiDimens.spaceXXS),
         ) {
-            CoverImage(
-                url = entry.coverUrl,
-                contentDescription = entry.title,
-                modifier = Modifier.fillMaxWidth().aspectRatio(LnrDimens.POSTER_ASPECT),
-                targetWidthDp = 160,
-            )
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(RoundedCornerShape(UiDimens.panelCorner))
+                    .background(MiuixTheme.colorScheme.surface),
+            ) {
+                CoverImage(
+                    url = entry.coverUrl,
+                    contentDescription = entry.title,
+                    modifier = Modifier.fillMaxSize(),
+                    targetWidthDp = 160,
+                )
+            }
         }
-        Text(entry.title, fontSize = UiDimens.caption, maxLines = 2)
-        resume?.let {
-            Text("第${it.chapterIndex + 1}章", fontSize = UiDimens.captionSmall, color = MiuixTheme.colorScheme.primary)
-        }
+        Text(
+            entry.title,
+            fontSize = UiDimens.caption,
+            fontWeight = FontWeight.Medium,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Text(
+            resume?.let { "第 ${it.chapterIndex + 1} 章" } ?: "尚未开始",
+            fontSize = UiDimens.captionSmall,
+            color = if (resume != null) MiuixTheme.colorScheme.primary else tertiaryTextColor(),
+            maxLines = 1,
+        )
     }
 }
-
-private val POSTER_CARD_WIDTH = LnrDimens.recentCardWidth
-
-
-

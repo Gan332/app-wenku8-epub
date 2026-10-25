@@ -59,7 +59,8 @@ fun ExportProgressRow(
     val percent = progress.percent.coerceIn(0, 100)
     Card(
         modifier = Modifier.fillMaxWidth().clickable { onOpen(job.id) },
-        insideMargin = PaddingValues(UiDimens.cardInset),
+        cornerRadius = UiDimens.panelCorner,
+        insideMargin = PaddingValues(UiDimens.spaceM),
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXS)) {
             Row(

@@ -1,6 +1,7 @@
 package com.example.hyperreader.ui
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -30,6 +31,7 @@ import com.example.hyperreader.model.SearchBook
 import com.example.hyperreader.ui.cover.CoverImage
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
+import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 /**
  * 全屏榜单展开页（0.18.0，对应 LNR 的 `ExpandedPageScreen`）。
@@ -54,8 +56,13 @@ fun ExploreExpandedScreen(state: StudioUiState, viewModel: StudioViewModel, modi
         Row(
             modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.End,
+            horizontalArrangement = Arrangement.SpaceBetween,
         ) {
+            Text(
+                "共 ${books.size} 本",
+                fontSize = UiDimens.caption,
+                color = secondaryTextColor(),
+            )
             TextButton(text = if (state.exploreBusy) "刷新中…" else "刷新", onClick = viewModel::refreshExplore, enabled = !state.exploreBusy)
         }
         state.exploreMessage?.let { message -> MessageCard(message) }
@@ -67,8 +74,8 @@ fun ExploreExpandedScreen(state: StudioUiState, viewModel: StudioViewModel, modi
             else -> LazyVerticalGrid(
                 columns = GridCells.Adaptive(minSize = LnrDimens.exploreExpandedCellMin),
                 contentPadding = PaddingValues(vertical = UiDimens.spaceS),
-                horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS),
-                verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS),
+                horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceM),
+                verticalArrangement = Arrangement.spacedBy(UiDimens.spaceL),
             ) {
                 items(books, key = { it.id }) { book ->
                     ExpandedBookCell(book = book, onClick = { viewModel.openSearchBook(book) })
@@ -95,15 +102,24 @@ private fun ExpandedBookCell(book: SearchBook, onClick: () -> Unit) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .aspectRatio(EXPLORE_COVER_RATIO)
-                .clip(RoundedCornerShape(LnrDimens.posterCardCorner)),
+                .aspectRatio(UiDimens.exploreCoverWidth / UiDimens.exploreCoverHeight)
+                .clip(RoundedCornerShape(UiDimens.panelCorner))
+                .background(MiuixTheme.colorScheme.surfaceContainerHigh)
+                .padding(UiDimens.spaceXXS),
         ) {
-            CoverImage(
-                url = book.coverUrl,
-                contentDescription = book.title,
-                modifier = Modifier.fillMaxWidth(),
-                targetWidthDp = EXPANDED_COVER_TARGET_WIDTH_DP,
-            )
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(RoundedCornerShape(UiDimens.panelCorner - UiDimens.spaceXXS))
+                    .background(MiuixTheme.colorScheme.surface),
+            ) {
+                CoverImage(
+                    url = book.coverUrl,
+                    contentDescription = book.title,
+                    modifier = Modifier.fillMaxSize(),
+                    targetWidthDp = EXPANDED_COVER_TARGET_WIDTH_DP,
+                )
+            }
         }
         Text(
             book.title,
@@ -114,9 +130,6 @@ private fun ExpandedBookCell(book: SearchBook, onClick: () -> Unit) {
         )
     }
 }
-
-/** 探索各处的封面比例（宽 : 高）：与横排书卡同源（98:138）。 */
-private val EXPLORE_COVER_RATIO = LnrDimens.exploreCoverWidth / LnrDimens.exploreCoverHeight
 
 /** 下采样目标宽度（dp）：网格单元比横排书卡大，取 180dp 覆盖常见屏宽的两列布局。 */
 private const val EXPANDED_COVER_TARGET_WIDTH_DP = 180

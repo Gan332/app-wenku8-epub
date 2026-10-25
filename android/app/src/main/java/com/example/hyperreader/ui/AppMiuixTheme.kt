@@ -14,8 +14,10 @@ import com.example.hyperreader.settings.AppThemeSettings
 import top.yukonga.miuix.kmp.theme.ColorSchemeMode
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.theme.ThemeController
+import top.yukonga.miuix.kmp.theme.ThemeColorSpec
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 
 private val MiSansFont = FontFamily(Font(R.font.misansvf))
 
@@ -36,13 +38,13 @@ fun AppMiuixTheme(content: @Composable () -> Unit) {
         button = baseTextStyles.button.copy(fontFamily = MiSansFont),
         footnote1 = baseTextStyles.footnote1.copy(fontFamily = MiSansFont),
         footnote2 = baseTextStyles.footnote2.copy(fontFamily = MiSansFont),
-        headline1 = baseTextStyles.headline1.copy(fontFamily = MiSansFont),
         headline2 = baseTextStyles.headline2.copy(fontFamily = MiSansFont),
         subtitle = baseTextStyles.subtitle.copy(fontFamily = MiSansFont),
-        title1 = baseTextStyles.title1.copy(fontFamily = MiSansFont),
-        title2 = baseTextStyles.title2.copy(fontFamily = MiSansFont),
-        title3 = baseTextStyles.title3.copy(fontFamily = MiSansFont),
+        title1 = baseTextStyles.title1.copy(fontFamily = MiSansFont, fontWeight = FontWeight.SemiBold),
+        title2 = baseTextStyles.title2.copy(fontFamily = MiSansFont, fontWeight = FontWeight.SemiBold),
+        title3 = baseTextStyles.title3.copy(fontFamily = MiSansFont, fontWeight = FontWeight.SemiBold),
         title4 = baseTextStyles.title4.copy(fontFamily = MiSansFont),
+        headline1 = baseTextStyles.headline1.copy(fontFamily = MiSansFont, fontWeight = FontWeight.SemiBold),
     )
     MiuixTheme(
         controller = remember(settings.mode, settings.useDynamicColor, settings.accentColor) {
@@ -63,6 +65,7 @@ fun AppMiuixTheme(content: @Composable () -> Unit) {
                     }
                 },
                 keyColor = Color(settings.accentColor),
+                colorSpec = ThemeColorSpec.Spec2025,
             )
         },
         textStyles = textStyles,

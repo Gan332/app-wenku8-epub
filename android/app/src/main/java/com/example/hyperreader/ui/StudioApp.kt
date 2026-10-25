@@ -22,6 +22,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.animation.AnimatedContent
@@ -40,11 +42,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import top.yukonga.miuix.kmp.anim.DecelerateEasing
@@ -56,9 +60,12 @@ import top.yukonga.miuix.kmp.basic.Checkbox
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.LinearProgressIndicator
+import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.NavigationBar
 import top.yukonga.miuix.kmp.basic.NavigationBarItem
+import top.yukonga.miuix.kmp.basic.NavigationBarDefaults
 import top.yukonga.miuix.kmp.basic.Scaffold
+import top.yukonga.miuix.kmp.basic.Surface
 import top.yukonga.miuix.kmp.basic.SnackbarHost
 import top.yukonga.miuix.kmp.basic.SnackbarHostState
 import top.yukonga.miuix.kmp.basic.Switch
@@ -102,9 +109,11 @@ import com.example.hyperreader.ui.Motion
 import com.example.hyperreader.ui.ShellPage
 import com.example.hyperreader.ui.UpTarget
 import com.example.hyperreader.ui.chromeTitle
+import com.example.hyperreader.ui.chromeSubtitle
 import com.example.hyperreader.ui.shellPage
 import com.example.hyperreader.ui.upTarget
 import com.example.hyperreader.ui.UiDimens
+import com.example.hyperreader.ui.StudioBackdrop
 import com.example.hyperreader.ui.StudioTab
 import com.example.hyperreader.ui.StudioUiState
 import com.example.hyperreader.ui.StudioViewModel
@@ -209,7 +218,9 @@ private fun StudioApp(
     // 标题与返回动作都从 PageChrome 的两个纯函数读（0.19.0-alpha05）：
     // 顶栏标题、顶栏返回按钮、系统返回键三处共用同一份决策，不会各写一遍 `when`。
     val chromeTitle = state.chromeTitle()
+    val chromeSubtitle = state.chromeSubtitle()
     val upTarget = state.upTarget()
+    val scrollBehavior = MiuixScrollBehavior()
     // 根消息走 Snackbar（可滑走、自动消失），替代源站页的内联错误卡
     val snackbarHostState = remember { SnackbarHostState() }
     // 一级导航各页的滚动位置。状态必须挂在页面上层：`AnimatedContent` 切 tab 时
@@ -236,10 +247,20 @@ private fun StudioApp(
     // 底部导航是隐藏的，用户没有其它退路（0.19.0-alpha05 修）。
     val onUp: () -> Unit = { viewModel.navigateUp(upTarget) }
     BackHandler(enabled = upTarget != UpTarget.NONE, onBack = onUp)
+    LaunchedEffect(chromeTitle) {
+        scrollBehavior.state.heightOffset = 0f
+    }
     Scaffold(
         topBar = {
             TopAppBar(
                 title = chromeTitle,
+                largeTitle = chromeTitle,
+                subtitle = chromeSubtitle,
+                scrollBehavior = scrollBehavior,
+                color = MiuixTheme.colorScheme.surface,
+                titlePadding = UiDimens.pagePadding,
+                navigationIconPadding = UiDimens.spaceXS,
+                actionIconPadding = UiDimens.spaceXS,
                 // 返回图标按钮取代页内「‹ 返回」文字按钮：位置固定在左槽、措辞统一，
                 // 与 LNR（探索展开页已这么做过）和系统返回键指向同一个动作。
                 navigationIcon = {
@@ -259,46 +280,70 @@ private fun StudioApp(
             // 全屏覆盖页（详情 / 导出记录 / 榜单展开 / 搜索 / 书签中心 / 导出向导）不显示底部导航。
             // 判据与页面层级共用 `shellPage()`，避免又多一处手写条件而漂移。
             if (state.shellPage() == ShellPage.TABS) {
-                NavigationBar {
-                    // 0.19.0 起四项，对齐 LNR `MainDestination`（阅读/书架/探索/设置，顺序一致）。
-                    // 图标取 LNR 同款 Material 图标；MiuiX 图标集没有 Book/Bookshelf/Explore，
-                    // 硬套 Recent/Search 会让四个 tab 语义混淆。
-                    // AGENTS §4.6.1 第 1 条仍成立：导出继续留在书籍菜单，不占一级导航。
-                    NavigationBarItem(selected = state.tab == StudioTab.READING, onClick = { viewModel.setTab(StudioTab.READING) }, icon = ImageVector.vectorResource(R.drawable.outline_book_24px), label = "阅读")
-                    NavigationBarItem(selected = state.tab == StudioTab.BOOKSHELF, onClick = { viewModel.setTab(StudioTab.BOOKSHELF) }, icon = MiuixIcons.Recent, label = "书架")
-                    NavigationBarItem(selected = state.tab == StudioTab.EXPLORE, onClick = { viewModel.setTab(StudioTab.EXPLORE) }, icon = ImageVector.vectorResource(R.drawable.outline_explore_24px), label = "探索")
-                    NavigationBarItem(selected = state.tab == StudioTab.SETTINGS, onClick = { viewModel.setTab(StudioTab.SETTINGS) }, icon = MiuixIcons.Settings, label = "设置")
+                Surface(
+                    modifier = Modifier
+                        .padding(horizontal = UiDimens.pagePadding, vertical = UiDimens.spaceXS)
+                        .navigationBarsPadding(),
+                    color = MiuixTheme.colorScheme.surfaceContainerHigh,
+                    shadowElevation = UiDimens.navElevation,
+                    shape = RoundedCornerShape(UiDimens.navCorner),
+                ) {
+                    NavigationBar(
+                        color = Color.Transparent,
+                        showDivider = false,
+                        defaultWindowInsetsPadding = false,
+                    ) {
+                        // 0.19.0 起四项，对齐 LNR `MainDestination`（阅读/书架/探索/设置，顺序一致）。
+                        // 图标取 LNR 同款 Material 图标；MiuiX 图标集没有 Book/Bookshelf/Explore，
+                        // 硬套 Recent/Search 会让四个 tab 语义混淆。
+                        // AGENTS §4.6.1 第 1 条仍成立：导出继续留在书籍菜单，不占一级导航。
+                        val navColors = NavigationBarDefaults.navigationBarItemColors(
+                            unselectedContentColor = MiuixTheme.colorScheme.onSurfaceContainer,
+                            selectedContentColor = MiuixTheme.colorScheme.primary,
+                        )
+                        NavigationBarItem(selected = state.tab == StudioTab.READING, onClick = { viewModel.setTab(StudioTab.READING) }, icon = ImageVector.vectorResource(R.drawable.outline_book_24px), label = "阅读", colors = navColors)
+                        NavigationBarItem(selected = state.tab == StudioTab.BOOKSHELF, onClick = { viewModel.setTab(StudioTab.BOOKSHELF) }, icon = MiuixIcons.Recent, label = "书架", colors = navColors)
+                        NavigationBarItem(selected = state.tab == StudioTab.EXPLORE, onClick = { viewModel.setTab(StudioTab.EXPLORE) }, icon = ImageVector.vectorResource(R.drawable.outline_explore_24px), label = "探索", colors = navColors)
+                        NavigationBarItem(selected = state.tab == StudioTab.SETTINGS, onClick = { viewModel.setTab(StudioTab.SETTINGS) }, icon = MiuixIcons.Settings, label = "设置", colors = navColors)
+                    }
                 }
             }
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding).padding(horizontal = UiDimens.pagePadding)) {
-            // 全屏覆盖页统一转场（0.18.0）：探索详情 / 导出记录 / 榜单展开 / 搜索 / 导出向导 / tab 内容
-            // 五类全屏页互斥，用同一个 AnimatedContent 承载；时长由 Motion 按系统「移除动画」缩放。
-            val motionFast = Motion.duration(UiDimens.MOTION_FAST)
-            val motionBase = Motion.duration(UiDimens.MOTION_MEDIUM)
-            val motionSlow = Motion.duration(UiDimens.MOTION_SLOW)
-            val overlayKey = when (state.shellPage()) {
-                ShellPage.DETAIL -> "detail"
-                ShellPage.HISTORY -> "history"
-                ShellPage.EXPANDED -> "expanded"
-                ShellPage.SEARCH -> "search"
-                ShellPage.BOOKMARKS -> "bookmarks"
-                ShellPage.EXPORT -> "export"
-                ShellPage.TABS -> "tabs"
-            }
-            AnimatedContent(
-                targetState = overlayKey,
-                transitionSpec = {
-                    (fadeIn(tween(motionBase, easing = DecelerateEasing())) +
-                        slideInHorizontally(tween(motionSlow, easing = DecelerateEasing())) { it / 8 })
-                        .togetherWith(fadeOut(tween(motionFast, easing = DecelerateEasing())))
-                },
-                label = "overlayTransition",
-            ) { overlay ->
-                when (overlay) {
-                    "detail" -> ExploreDetailScreen(
+        StudioBackdrop {
+            Column(
+                Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .nestedScroll(scrollBehavior.nestedScrollConnection)
+                    .padding(horizontal = UiDimens.pagePadding),
+            ) {
+                // 全屏覆盖页统一转场（0.18.0）：探索详情 / 导出记录 / 榜单展开 / 搜索 / 导出向导 / tab 内容
+                // 五类全屏页互斥，用同一个 AnimatedContent 承载；时长由 Motion 按系统「移除动画」缩放。
+                val motionFast = Motion.duration(UiDimens.MOTION_FAST)
+                val motionBase = Motion.duration(UiDimens.MOTION_MEDIUM)
+                val motionSlow = Motion.duration(UiDimens.MOTION_SLOW)
+                val overlayKey = when (state.shellPage()) {
+                    ShellPage.DETAIL -> "detail"
+                    ShellPage.HISTORY -> "history"
+                    ShellPage.EXPANDED -> "expanded"
+                    ShellPage.SEARCH -> "search"
+                    ShellPage.BOOKMARKS -> "bookmarks"
+                    ShellPage.EXPORT -> "export"
+                    ShellPage.TABS -> "tabs"
+                }
+                AnimatedContent(
+                    targetState = overlayKey,
+                    transitionSpec = {
+                        (fadeIn(tween(motionBase, easing = DecelerateEasing())) +
+                            slideInHorizontally(tween(motionSlow, easing = DecelerateEasing())) { it / 8 })
+                            .togetherWith(fadeOut(tween(motionFast, easing = DecelerateEasing())))
+                    },
+                    label = "overlayTransition",
+                ) { overlay ->
+                    when (overlay) {
+                        "detail" -> ExploreDetailScreen(
                     seed = state.exploreDetailSeed,
                     detail = state.exploreDetail,
                     loading = state.exploreDetailLoading,
@@ -468,25 +513,26 @@ private fun StudioApp(
                             }
                         }
                     }
+                    }
                 }
-            }
 
-            // 导出向导的面包屑：只在向导内部出现，不占主导航的位置
-            if (state.exportStep != null) {
-                val steps = listOf(
-                    ExportStep.RESOLVING to "目录",
-                    ExportStep.CHAPTERS to "章节",
-                    ExportStep.PACKAGING to "打包",
-                    ExportStep.PROGRESS to "进度",
-                )
-                BreadcrumbBar(
-                    items = steps.map { BreadcrumbItem(path = it.first.name, text = it.second) },
-                    onItemClick = { },
-                    highlightIndex = steps.indexOfFirst { it.first == state.exportStep }.coerceAtLeast(0),
-                    enabled = false,
-                    // 左右内边距由宿主给一次（本文件 273 行的 Column 已 padding(pagePadding)）。
-                    modifier = Modifier.fillMaxWidth().padding(vertical = UiDimens.spaceXS),
-                )
+                // 导出向导的面包屑：只在向导内部出现，不占主导航的位置
+                if (state.exportStep != null) {
+                    val steps = listOf(
+                        ExportStep.RESOLVING to "目录",
+                        ExportStep.CHAPTERS to "章节",
+                        ExportStep.PACKAGING to "打包",
+                        ExportStep.PROGRESS to "进度",
+                    )
+                    BreadcrumbBar(
+                        items = steps.map { BreadcrumbItem(path = it.first.name, text = it.second) },
+                        onItemClick = { },
+                        highlightIndex = steps.indexOfFirst { it.first == state.exportStep }.coerceAtLeast(0),
+                        enabled = false,
+                        // 左右内边距由宿主给一次（本文件 273 行的 Column 已 padding(pagePadding)）。
+                        modifier = Modifier.fillMaxWidth().padding(vertical = UiDimens.spaceXS),
+                    )
+                }
             }
         }
     }

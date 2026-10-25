@@ -6,6 +6,9 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -30,6 +33,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.hyperreader.core.ExploreBookDetail
@@ -107,99 +111,66 @@ fun ExploreDetailScreen(
         }
 
         if (!emptyLoading) {
-            item(key = "cover") {
-                Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    Box(
-                        modifier = Modifier
-                            .width(UiDimens.coverWidth)
-                            .aspectRatio(LnrDimens.POSTER_ASPECT)
-                            .clip(RoundedCornerShape(UiDimens.cardCorner))
-                            .clickable(enabled = coverUrl != null) { showCover = true },
-                    ) {
-                        CoverImage(
-                            url = coverUrl,
-                            contentDescription = title,
-                            modifier = Modifier.fillMaxWidth().aspectRatio(LnrDimens.POSTER_ASPECT),
-                            targetWidthDp = 480,
-                        )
-                    }
-                }
-            }
-
-            item(key = "title") {
-                Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXS)) {
-                    Text(title.ifBlank { "未命名" }, fontSize = UiDimens.title, fontWeight = FontWeight.Bold)
-                    if (author.isNotBlank()) Text("作者：$author", fontSize = UiDimens.bodyStrong)
-                    if (category.isNotBlank()) {
-                        Text(category, color = MiuixTheme.colorScheme.primary, fontSize = UiDimens.captionSmall, fontWeight = FontWeight.Bold)
-                    }
-                    // 接口回来后给一个「已是最新」的轻提示；加载中显示进度，不阻塞已渲染的内容
-                    if (loading) {
-                        LoadingBlock("正在通过接口刷新详情…")
-                    }
-                }
-            }
-
-            // 书籍信息全部来自 articleinfo.php 一个接口；0.18.0 起**每个字段一张独立 Card**，
-            // 避免一屏信息挤在一张大卡里难以扫读
-            if (status.isNotBlank()) item(key = "field-status") { FieldCard("状态", status, index = 0) }
-            wordCount?.let { count ->
-                item(key = "field-word-count") { FieldCard("全文字数", "${formatWordCount(count)} 字", index = 1) }
-            }
-            if (updatedAt.isNotBlank()) item(key = "field-updated") { FieldCard("最后更新", updatedAt, index = 2) }
-            item(key = "field-chapter-count") {
-                FieldCard(
-                    label = "章节数",
-                    value = when {
-                        detail != null && detail.chapterCount > 0 -> "${detail.chapterCount}"
-                        loading -> "获取中…"
-                        else -> "未知"
-                    },
-                    index = 3,
+            item(key = "profile") {
+                BookProfile(
+                    title = title.ifBlank { "未命名" },
+                    author = author,
+                    category = category,
+                    status = status,
+                    coverUrl = coverUrl,
+                    loading = loading,
+                    onCoverClick = { showCover = true },
                 )
             }
-            item(key = "field-source") { FieldCard("来源", "Wenku8 轻小说文库", index = 4) }
+
+            item(key = "facts") {
+                StudioPanel("作品信息") {
+                    if (status.isNotBlank()) StudioFactRow("状态", status)
+                    wordCount?.let { count -> StudioFactRow("全文字数", "${formatWordCount(count)} 字") }
+                    if (updatedAt.isNotBlank()) StudioFactRow("最后更新", updatedAt)
+                    StudioFactRow(
+                        "章节数",
+                        when {
+                            detail != null && detail.chapterCount > 0 -> "${detail.chapterCount}"
+                            loading -> "获取中…"
+                            else -> "未知"
+                        },
+                    )
+                    StudioFactRow("来源", "Wenku8 轻小说文库")
+                }
+            }
 
             // 目录页单独失败：书籍信息仍可用，就地提示 + 重试，不整页报错
             if (error != null) {
                 item(key = "error") {
-                    Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(UiDimens.cardInset)) {
-                        Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
-                            Text("部分信息加载失败", fontSize = UiDimens.bodyStrong, fontWeight = FontWeight.Bold)
-                            Text(error, fontSize = UiDimens.caption, color = MiuixTheme.colorScheme.error)
-                            TextButton(
-                                text = "重试",
-                                onClick = onRetry,
-                                modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
-                            )
-                        }
+                    StudioPanel("部分信息加载失败") {
+                        Text(error, fontSize = UiDimens.caption, color = MiuixTheme.colorScheme.error)
+                        TextButton(
+                            text = "重试",
+                            onClick = onRetry,
+                            modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
+                        )
                     }
                 }
             }
 
             if (tags.isNotEmpty()) {
                 item(key = "tags") {
-                    Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(UiDimens.cardInset)) {
-                        Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXS)) {
-                            Text("标签", fontWeight = FontWeight.Bold, fontSize = UiDimens.section)
-                            LazyRow(horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
-                                items(tags) { tag -> TextButton(text = tag, onClick = { onTagClick(tag) }) }
-                            }
+                    StudioPanel("作品标签") {
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
+                            items(tags) { tag -> TextButton(text = tag, onClick = { onTagClick(tag) }) }
                         }
                     }
                 }
             }
 
             item(key = "summary") {
-                Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(UiDimens.cardInset)) {
-                    Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
-                        Text("内容简介", fontWeight = FontWeight.Bold)
-                        Text(
-                            text = summary.ifBlank { if (loading) "正在获取简介…" else "源站没有提供简介。" },
-                            color = secondaryTextColor(),
-                            fontSize = UiDimens.body,
-                        )
-                    }
+                StudioPanel("内容简介") {
+                    Text(
+                        text = summary.ifBlank { if (loading) "正在获取简介…" else "源站没有提供简介。" },
+                        color = secondaryTextColor(),
+                        fontSize = UiDimens.body,
+                    )
                 }
             }
 
@@ -213,50 +184,54 @@ fun ExploreDetailScreen(
             }
 
             item(key = "actions") {
-                Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(UiDimens.cardInset)) {
-                    Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
-                        if (detail != null || !loading) {
-                            Button(
-                                onClick = onReadOnline,
-                                enabled = bookId.isNotBlank(),
-                                modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
-                            ) { Text("在线阅读") }
+                StudioPanel("开始阅读") {
+                    if (detail != null || !loading) {
+                        Button(
+                            onClick = onReadOnline,
+                            enabled = bookId.isNotBlank(),
+                            modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
+                            cornerRadius = UiDimens.panelCorner,
+                        ) { Text("在线阅读") }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS),
+                        ) {
                             TextButton(
                                 text = "加入书架",
                                 onClick = onAddToShelf,
                                 enabled = detail != null,
-                                modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
+                                modifier = Modifier.weight(1f).heightIn(min = UiDimens.touchMin),
                             )
                             TextButton(
-                                text = "查看同作者作品",
+                                text = "同作者",
                                 onClick = onSameAuthor,
                                 enabled = detail != null,
-                                modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
+                                modifier = Modifier.weight(1f).heightIn(min = UiDimens.touchMin),
                             )
                         }
-                        // —— 两种 EPUB 导出引擎（小按钮，并排）——
-                        // 直接用本页已加载的目录建任务，不经过创建流程的选章步骤；
-                        // 引擎按任务指定，不受设置里的全局选择影响。
-                        if (detail != null && detail.chapters.isNotEmpty()) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS),
-                            ) {
-                                com.example.hyperreader.settings.EpubEngine.entries.forEach { option ->
-                                    TextButton(
-                                        text = "导出 · ${option.label}",
-                                        onClick = { onExport(option) },
-                                        modifier = Modifier.weight(1f).heightIn(min = UiDimens.touchMin),
-                                    )
-                                }
+                    }
+                    // —— 两种 EPUB 导出引擎（小按钮，并排）——
+                    // 直接用本页已加载的目录建任务，不经过创建流程的选章步骤；
+                    // 引擎按任务指定，不受设置里的全局选择影响。
+                    if (detail != null && detail.chapters.isNotEmpty()) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS),
+                        ) {
+                            com.example.hyperreader.settings.EpubEngine.entries.forEach { option ->
+                                TextButton(
+                                    text = "导出 · ${option.label}",
+                                    onClick = { onExport(option) },
+                                    modifier = Modifier.weight(1f).heightIn(min = UiDimens.touchMin),
+                                )
                             }
                         }
-                        Text(
-                            "本页面只读取源站公开信息，不经过导出解析流程。",
-                            fontSize = UiDimens.captionSmall,
-                            color = tertiaryTextColor(),
-                        )
                     }
+                    Text(
+                        "本页面只读取源站公开信息，不经过导出解析流程。",
+                        fontSize = UiDimens.captionSmall,
+                        color = tertiaryTextColor(),
+                    )
                 }
             }
         }
@@ -267,29 +242,85 @@ fun ExploreDetailScreen(
     }
 }
 
-/**
- * 单个元数据字段的独立卡片（0.18.0）。
- *
- * 字段级隔离：每张卡只承载一个「标签 + 值」，行高不低于 [UiDimens.rowMin]，便于扫读。
- */
+/** 书籍档案头：封面、书名、作者与状态在同一块浮层里建立作品身份。 */
 @Composable
-internal fun FieldCard(label: String, value: String, index: Int = 0) {
-    Card(Modifier.fillMaxWidth().staggeredEnter(index), insideMargin = PaddingValues(vertical = UiDimens.spaceXXS)) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = UiDimens.rowMin)
-                .padding(horizontal = UiDimens.cardInset, vertical = UiDimens.spaceS),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(label, color = tertiaryTextColor(), fontSize = UiDimens.body)
-            Text(
-                value,
-                modifier = Modifier.weight(1f).padding(start = UiDimens.spaceM),
-                fontSize = UiDimens.bodyStrong,
-                fontWeight = FontWeight.Medium,
-                maxLines = 2,
+private fun BookProfile(
+    title: String,
+    author: String,
+    category: String,
+    status: String,
+    coverUrl: String?,
+    loading: Boolean,
+    onCoverClick: () -> Unit,
+) {
+    val colors = MiuixTheme.colorScheme
+    val shape = RoundedCornerShape(UiDimens.heroCorner)
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(
+                Brush.linearGradient(
+                    listOf(
+                        colors.primaryContainer.copy(alpha = 0.88f),
+                        colors.surfaceContainerHigh,
+                    ),
+                ),
             )
+            .border(BorderStroke(UiDimens.hairline, colors.outline.copy(alpha = 0.16f)), shape)
+            .padding(UiDimens.spaceL),
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceL)) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceL),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .width(UiDimens.heroCoverWidth)
+                        .aspectRatio(LnrDimens.POSTER_ASPECT)
+                        .clip(RoundedCornerShape(UiDimens.cardCorner))
+                        .clickable(enabled = coverUrl != null, onClick = onCoverClick),
+                ) {
+                    CoverImage(
+                        url = coverUrl,
+                        contentDescription = title,
+                        modifier = Modifier.fillMaxWidth().aspectRatio(LnrDimens.POSTER_ASPECT),
+                        targetWidthDp = 480,
+                    )
+                }
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXS),
+                ) {
+                    if (category.isNotBlank()) {
+                        Text(
+                            category,
+                            color = colors.primary,
+                            fontSize = UiDimens.captionSmall,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
+                    Text(
+                        title,
+                        fontSize = UiDimens.title,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 3,
+                    )
+                    if (author.isNotBlank()) {
+                        Text("作者 · $author", fontSize = UiDimens.caption, color = secondaryTextColor())
+                    }
+                    if (status.isNotBlank()) {
+                        Text(
+                            status,
+                            fontSize = UiDimens.captionSmall,
+                            color = colors.primary,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    }
+                }
+            }
+            if (loading) LoadingBlock("正在通过接口刷新详情…")
         }
     }
 }
@@ -311,7 +342,11 @@ private fun ChapterTocCard(
     var expanded by remember { mutableStateOf(false) }
     val visible = remember(chapters, query, expanded) { ChapterPreview.preview(chapters, query, expanded) }
     val filteredCount = remember(chapters, query) { ChapterPreview.filter(chapters, query).size }
-    Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(UiDimens.cardInset)) {
+    Card(
+        Modifier.fillMaxWidth(),
+        cornerRadius = UiDimens.panelCorner,
+        insideMargin = PaddingValues(UiDimens.spaceM),
+    ) {
         Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
             Text("章节目录（$filteredCount）", fontWeight = FontWeight.Bold, fontSize = UiDimens.section)
             when {

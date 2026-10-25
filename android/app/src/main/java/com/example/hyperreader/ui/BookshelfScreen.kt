@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -47,16 +46,12 @@ import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Badge
 import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.HorizontalDivider
 import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.VerticalScrollBar
 import top.yukonga.miuix.kmp.basic.rememberScrollBarAdapter
 import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.Favorites
-import top.yukonga.miuix.kmp.icon.extended.ListView
 import top.yukonga.miuix.kmp.icon.extended.More
 import top.yukonga.miuix.kmp.overlay.OverlayBottomSheet
 import top.yukonga.miuix.kmp.theme.MiuixTheme
@@ -108,11 +103,27 @@ fun BookshelfScreen(
         // 页名由顶栏给（PageChrome，0.19.0-alpha05）：这里不再画一遍「书架」大标题，
         // 只留一句说明。页面标题的单一来源是 `chromeTitle()`。
         item(key = "page-caption") {
-            Text("在线书籍和本地 EPUB 都可以在这里继续阅读。", color = secondaryTextColor(), fontSize = UiDimens.caption)
+            StudioHero(
+                kicker = "YOUR LIBRARY",
+                title = if (state.bookshelf.isEmpty()) {
+                    "你的私人藏书架"
+                } else {
+                    "${state.bookshelf.size} 本书，随时回到故事里"
+                },
+                description = "在线书籍与本地 EPUB 都在这里。点书即读，详情和导出收在每本书的操作菜单里。",
+            )
         }
         item(key = "page-actions") {
-            Row(horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
-                Button(onClick = onImportEpub, modifier = Modifier.weight(1f)) { Text("导入 EPUB") }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Button(
+                    onClick = onImportEpub,
+                    modifier = Modifier.weight(1f),
+                    cornerRadius = UiDimens.panelCorner,
+                ) { Text("导入本地 EPUB") }
                 // 排序入口只在有书时出现：空书架没有可排的东西
                 if (state.bookshelf.isNotEmpty()) {
                     TextButton(
@@ -129,9 +140,6 @@ fun BookshelfScreen(
                 onOpen = { jobId -> viewModel.route(StudioViewModel.ROUTE_EXPORT_PROGRESS, jobId) },
                 onCancel = { jobId -> viewModel.cancel(jobId) },
             )
-        }
-        item(key = "page-divider") {
-            HorizontalDivider(Modifier.fillMaxWidth())
         }
         // 三态：读 DataStore 中 → 读到了且为空 → 有书。
         // 少了中间那一态，冷启动会先闪一屏「书架还是空的」再被真实列表替换。
@@ -246,24 +254,13 @@ private fun BookshelfGroupHeader(section: BookshelfSection, expanded: Boolean, o
     // stickyHeader：跟随 LNR BookshelfHomeContent 的分组头，滚动时钉在顶部。
     // 直接给 Column 上背景色，不套 `Surface`：Surface 需要额外的 contentColor 参数，
     // 缺省时会做一次颜色复制并多出一层合成，这里只需要一块不透明底色挡住滚过去的卡片。
-    Column(Modifier.fillMaxWidth().background(MiuixTheme.colorScheme.background)) {
+    Column(Modifier.fillMaxWidth().background(MiuixTheme.colorScheme.background.copy(alpha = 0.97f))) {
         Row(
             // 不加 horizontal 内边距：宿主（StudioApp 的 Column）已给过 pagePadding，
             // 再加一遍会让分组头比页内标题与卡片多缩进 16dp。
             modifier = Modifier.fillMaxWidth().height(UiDimens.rowMin).clickable(onClick = onToggle),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(
-                imageVector = when (section.group) {
-                    BookshelfGroup.Pinned -> MiuixIcons.Favorites
-                    // MiuiX 图标集没有 Bookmark；用 ListView 表示「全部」。
-                    BookshelfGroup.All -> MiuixIcons.ListView
-                },
-                contentDescription = null,
-                tint = MiuixTheme.colorScheme.primary,
-                modifier = Modifier.size(UiDimens.spaceL),
-            )
-            Spacer(Modifier.size(UiDimens.spaceS))
             Text(
                 section.group.title(section.entries.size),
                 fontSize = UiDimens.bodyStrong,
@@ -284,24 +281,13 @@ private fun BookshelfGroupHeader(section: BookshelfSection, expanded: Boolean, o
                 modifier = Modifier.size(UiDimens.spaceL).rotate(rotation),
             )
         }
-        HorizontalDivider(Modifier.fillMaxWidth())
     }
 }
 
 /**
- * 书架卡片，1:1 对齐 LNR `BookCardContent` 的排版规格（0.19.0）。
+ * 书架卡片：MiuiX 浮层行，封面更紧凑、元信息纯文本化，操作入口固定在行尾。
  *
- * 逐项对应上游：
- * - 卡片 `146dp` 高、圆角 `12dp`、内边距 `4dp` → [LnrDimens]
- * - 封面 `94×144dp`、圆角 `8dp`；封面与文字栏之间留 `12dp`
- * - 文字栏用 `Arrangement.SpaceBetween` 把四行**顶到底**（LNR 原样），
- *   本工程此前用 `spacedBy(spaceXS)`，行距被压缩后底部留白，与上游不一致
- * - 作者用 `W600` + `primary` 色；元信息行是「图标 + 文字」两组（`TagChip`），
- *   本工程此前是纯文本 `·` 拼接
- * - 断点行（「读到第 x 章」）是本工程特有，保留在文字栏最后一行（AGENTS §4.8）
- *
- * 「更多」菜单按钮仍在本工程这一侧：LNR 用长按进选择模式，本工程 0.17.0 起
- * 点卡片即读、菜单挂在行尾（AGENTS §4.6.1 第 2 条），两者交互模型不同，此处不迁就上游。
+ * 「点卡片即读、菜单挂行尾」的交互模型不变（AGENTS §4.6.1 第 2 条）。
  */
 @Composable
 private fun BookshelfCard(
@@ -316,27 +302,29 @@ private fun BookshelfCard(
     Card(
         modifier = modifier
             .fillMaxWidth()
-            .height(LnrDimens.cardHeight)
+            .heightIn(min = UiDimens.shelfCardMinHeight)
             .clickable(interactionSource = interaction, indication = null) { onOpen(entry) }
             .pressableScale(interaction),
-        insideMargin = PaddingValues(LnrDimens.cardPadding),
+        cornerRadius = UiDimens.panelCorner,
+        insideMargin = PaddingValues(UiDimens.spaceS),
     ) {
-        Row(verticalAlignment = Alignment.Top) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             CoverImage(
                 url = entry.coverUrl,
                 contentDescription = entry.title,
                 modifier = Modifier
-                    .size(LnrDimens.coverWidth, LnrDimens.coverHeight)
-                    .clip(RoundedCornerShape(LnrDimens.coverCorner)),
-                targetWidthDp = 282,
+                    .size(UiDimens.shelfCoverWidth, UiDimens.shelfCoverHeight)
+                    .clip(RoundedCornerShape(UiDimens.cardCorner)),
+                targetWidthDp = 222,
             )
             Column(
                 modifier = Modifier
-                    .fillMaxHeight()
                     .weight(1f)
-                    .padding(start = LnrDimens.textGutter),
-                // LNR 用 SpaceBetween 顶到底；换成 Top 会让末行与底边留空。
-                verticalArrangement = Arrangement.SpaceBetween,
+                    .padding(start = UiDimens.spaceM, end = UiDimens.spaceXS),
+                verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXS),
             ) {
                 Text(
                     entry.title,
@@ -346,16 +334,14 @@ private fun BookshelfCard(
                     overflow = TextOverflow.Ellipsis,
                 )
                 // 作者行：W600 + primary（与 LNR 一致），右侧可接连载状态角标。
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(LnrDimens.authorGap),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         entry.author,
                         fontSize = UiDimens.caption,
                         color = MiuixTheme.colorScheme.primary,
-                        fontWeight = FontWeight.Bold,
+                        fontWeight = FontWeight.Medium,
                         maxLines = 1,
+                        modifier = Modifier.weight(1f),
                         overflow = TextOverflow.Ellipsis,
                     )
                     if (entry.isPinned) {
@@ -367,10 +353,9 @@ private fun BookshelfCard(
                 // 元信息行：LNR 是「图标 + 文字」两组（更新日期 / 字数），本工程对应
                 // 来源与规模（章节数 / 字数）。图标底板尺寸与圆角照 LNR `TagChip`。
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(LnrDimens.metaGap),
+                    horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceXS),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    TagChip(painter = ImageVector.vectorResource(com.example.hyperreader.R.drawable.lnr_toolbar_24px))
                     Text(
                         entry.source.displayLabel(),
                         fontSize = UiDimens.captionSmall,
@@ -378,7 +363,7 @@ private fun BookshelfCard(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    TagChip(painter = ImageVector.vectorResource(com.example.hyperreader.R.drawable.lnr_read_more_24px))
+                    Text("·", color = tertiaryTextColor(), fontSize = UiDimens.captionSmall)
                     Text(
                         buildString {
                             if (entry.chapterCount > 0) append("${entry.chapterCount} 章")
@@ -393,11 +378,9 @@ private fun BookshelfCard(
                 // 末行：LNR 放简介或最新章节；本工程放「上次读到哪儿」，这是差异里
                 // 唯一必须保留的本工程语义（AGENTS §4.8 页进度是续读唯一依据）。
                 if (entry.lastReadAt > 0L) {
-                    // 两行按各自行高自然贴紧，不再叠 `spacedBy`：末行组高出来的部分
-                    // 要从上面三行里挤（`Arrangement.SpaceBetween`），卡片会显松散。
-                    Column {
+                    Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXXS)) {
                         Text(
-                            "上次阅读：${formatRelativeReadTime(now, entry.lastReadAt)}",
+                            "上次阅读 ${formatRelativeReadTime(now, entry.lastReadAt)}",
                             fontSize = UiDimens.captionSmall,
                             color = tertiaryTextColor(),
                             maxLines = 1,
@@ -405,7 +388,7 @@ private fun BookshelfCard(
                         )
                         resume?.let { progress ->
                             Text(
-                                "读到第${progress.chapterIndex + 1}章 · 第${progress.paragraphIndex + 1}段",
+                                "第 ${progress.chapterIndex + 1} 章 · 第 ${progress.paragraphIndex + 1} 段",
                                 fontSize = UiDimens.captionSmall,
                                 color = MiuixTheme.colorScheme.primary,
                                 maxLines = 1,
@@ -423,30 +406,21 @@ private fun BookshelfCard(
                     )
                 }
             }
-            IconButton(onClick = onMore, modifier = Modifier.size(UiDimens.touchMin)) {
-                Icon(MiuixIcons.More, contentDescription = "更多")
+            Box(
+                modifier = Modifier
+                    .size(UiDimens.touchMin)
+                    .clip(RoundedCornerShape(UiDimens.cardCorner))
+                    .clickable(onClick = onMore),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    MiuixIcons.More,
+                    contentDescription = "更多",
+                    tint = tertiaryTextColor(),
+                    modifier = Modifier.size(UiDimens.spaceL),
+                )
             }
         }
-    }
-}
-
-/**
- * 元信息图标底板（1:1 照搬 LNR `TagChip`：`4dp` 圆角 + `4dp/2dp` 内边距 + `15dp` 图标）。
- */
-@Composable
-private fun TagChip(painter: ImageVector) {
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(LnrDimens.metaChipCorner))
-            .background(MiuixTheme.colorScheme.background.copy(alpha = .55f))
-            .padding(horizontal = LnrDimens.metaChipPadding, vertical = UiDimens.spaceXXS),
-    ) {
-        Icon(
-            imageVector = painter,
-            contentDescription = null,
-            tint = tertiaryTextColor(),
-            modifier = Modifier.size(LnrDimens.metaChipIcon),
-        )
     }
 }
 
@@ -567,19 +541,19 @@ private fun BookshelfSkeleton() {
             Row(
                 Modifier
                     .fillMaxWidth()
-                    .height(LnrDimens.cardHeight)
-                    .padding(LnrDimens.cardPadding),
+                    .height(UiDimens.shelfCardMinHeight)
+                    .padding(UiDimens.spaceS),
             ) {
                 ShimmerBlock(
                     Modifier
-                        .size(LnrDimens.coverWidth, LnrDimens.coverHeight)
-                        .clip(RoundedCornerShape(LnrDimens.coverCorner)),
+                        .size(UiDimens.shelfCoverWidth, UiDimens.shelfCoverHeight)
+                        .clip(RoundedCornerShape(UiDimens.cardCorner)),
                 )
                 Column(
                     Modifier
                         .fillMaxHeight()
                         .weight(1f)
-                        .padding(start = LnrDimens.textGutter),
+                        .padding(start = UiDimens.spaceM),
                     verticalArrangement = Arrangement.SpaceBetween,
                 ) {
                     ShimmerLine(Modifier.fillMaxWidth(0.9f), heightDp = 40)

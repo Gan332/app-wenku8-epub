@@ -46,7 +46,11 @@ fun ReadingStatsScreen(stats: ReadingStats, onClear: () -> Unit) {
             .padding(top = UiDimens.spaceL, bottom = UiDimens.spaceXL),
         verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS),
     ) {
-        Text("阅读统计", fontSize = UiDimens.display, fontWeight = FontWeight.Bold)
+        StudioHero(
+            kicker = "READING RHYTHM",
+            title = "把阅读变成一条可见的轨迹",
+            description = "这里记录累计时长、连续天数与每本书的投入。数据只保存在本机。",
+        )
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceXS)) {
             StatCard("总时长", formatDuration(stats.totalSeconds), Modifier.weight(1f))
             StatCard("今日", formatDuration(stats.todaySeconds), Modifier.weight(1f))
@@ -55,14 +59,11 @@ fun ReadingStatsScreen(stats: ReadingStats, onClear: () -> Unit) {
             StatCard("连续天数", "${stats.currentStreak} 天", Modifier.weight(1f))
             StatCard("最长连续", "${stats.longestStreak} 天", Modifier.weight(1f))
         }
-        Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(UiDimens.cardInset)) {
-            Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXS)) {
-                Text("阅读热力图", fontWeight = FontWeight.Bold)
-                ReadingHeatmap(
-                    dailySeconds = stats.dailySeconds,
-                    onSelectDate = { selectedDate = it },
-                )
-            }
+        StudioPanel("阅读热力图") {
+            ReadingHeatmap(
+                dailySeconds = stats.dailySeconds,
+                onSelectDate = { selectedDate = it },
+            )
         }
         // 常驻 AnimatedVisibility 而非 if：点/取消某天时下方内容原地延展，不整屏跳位
         AnimatedVisibility(
@@ -73,7 +74,11 @@ fun ReadingStatsScreen(stats: ReadingStats, onClear: () -> Unit) {
             val day = selectedDate
             if (day != null) {
                 val seconds = stats.dailySeconds[day.toString()] ?: 0L
-                Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(UiDimens.cardInset)) {
+                Card(
+                    Modifier.fillMaxWidth(),
+                    cornerRadius = UiDimens.panelCorner,
+                    insideMargin = PaddingValues(UiDimens.spaceM),
+                ) {
                     Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXS)) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             // ofPattern 没有 (pattern, TextStyle, Locale) 重载，用 withLocale 单独指定。
@@ -97,7 +102,11 @@ fun ReadingStatsScreen(stats: ReadingStats, onClear: () -> Unit) {
             Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXS)) {
                 stats.bookSeconds.entries.sortedByDescending { it.value }.forEach { entry ->
                     val title = stats.bookTitles[entry.key] ?: entry.key
-                    Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(UiDimens.cardInset)) {
+                    Card(
+                        Modifier.fillMaxWidth(),
+                        cornerRadius = UiDimens.panelCorner,
+                        insideMargin = PaddingValues(UiDimens.spaceM),
+                    ) {
                         Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXXS)) {
                             Text(title, fontWeight = FontWeight.Bold, maxLines = 1)
                             Text(formatDuration(entry.value), color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f), fontSize = UiDimens.captionSmall)
@@ -113,7 +122,11 @@ fun ReadingStatsScreen(stats: ReadingStats, onClear: () -> Unit) {
 
 @Composable
 private fun StatCard(label: String, value: String, modifier: Modifier) {
-    Card(modifier, insideMargin = PaddingValues(UiDimens.cardInset)) {
+    Card(
+        modifier,
+        cornerRadius = UiDimens.panelCorner,
+        insideMargin = PaddingValues(UiDimens.spaceM),
+    ) {
         Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXXS)) {
             Text(label, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f), fontSize = UiDimens.captionSmall)
             Text(value, fontSize = UiDimens.section, fontWeight = FontWeight.Bold)
