@@ -44,10 +44,10 @@ fun SearchScreen(
     Column(Modifier.fillMaxWidth().padding(top = UiDimens.spaceL), verticalArrangement = Arrangement.spacedBy(UiDimens.spaceM)) {
         // 搜索是独立全屏页：页名与返回都由顶栏给（PageChrome，0.19.0-alpha05），
         // 页内不再画同名大标题或「‹ 返回探索」文字按钮。
-        StudioHero(
-            kicker = "FIND YOUR NEXT BOOK",
-            title = "找下一本想读的书",
-            description = "登录 wenku8 后可按书名或作者搜索站内作品；本地书目索引在断网时仍可用。",
+        Text(
+            "按书名或作者搜索；本地索引在断网时仍可用。",
+            fontSize = UiDimens.caption,
+            color = secondaryTextColor(),
         )
         if (!state.loggedIn) {
             Card(

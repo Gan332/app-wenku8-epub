@@ -100,19 +100,6 @@ fun BookshelfScreen(
         contentPadding = PaddingValues(top = UiDimens.spaceL, bottom = UiDimens.spaceL),
         verticalArrangement = Arrangement.spacedBy(UiDimens.spaceM),
     ) {
-        // 页名由顶栏给（PageChrome，0.19.0-alpha05）：这里不再画一遍「书架」大标题，
-        // 只留一句说明。页面标题的单一来源是 `chromeTitle()`。
-        item(key = "page-caption") {
-            StudioHero(
-                kicker = "YOUR LIBRARY",
-                title = if (state.bookshelf.isEmpty()) {
-                    "你的私人藏书架"
-                } else {
-                    "${state.bookshelf.size} 本书，随时回到故事里"
-                },
-                description = "在线书籍与本地 EPUB 都在这里。点书即读，详情和导出收在每本书的操作菜单里。",
-            )
-        }
         item(key = "page-actions") {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -130,6 +117,26 @@ fun BookshelfScreen(
                         text = "排序：${state.bookshelfSort.label}",
                         onClick = { sortSheet = true },
                         modifier = Modifier.heightIn(min = UiDimens.touchMin),
+                    )
+                }
+            }
+        }
+        if (state.bookshelf.isNotEmpty()) {
+            item(key = "bookshelf-summary") {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        "${state.bookshelf.size} 本书",
+                        fontSize = UiDimens.title,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        " · 点书即读，详情与导出在更多菜单",
+                        modifier = Modifier.weight(1f),
+                        fontSize = UiDimens.captionSmall,
+                        color = tertiaryTextColor(),
                     )
                 }
             }

@@ -640,12 +640,15 @@ private fun AppearanceSection(viewModel: StudioViewModel) {
     SettingsScaffold("主题与外观", viewModel::backSettings, listOf(
         { SectionTitle("配色模式") },
         {
-            Row(horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
-                AppThemeMode.entries.forEach { mode ->
-                    TextButton(
-                        text = when (mode) { AppThemeMode.SYSTEM -> "系统"; AppThemeMode.LIGHT -> "浅色"; AppThemeMode.DARK -> "深色"; AppThemeMode.MONET -> "动态色" },
-                        onClick = { viewModel.setThemeMode(mode) },
-                    )
+            StudioPanel {
+                Row(horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
+                    AppThemeMode.entries.forEach { mode ->
+                        TextButton(
+                            text = when (mode) { AppThemeMode.SYSTEM -> "系统"; AppThemeMode.LIGHT -> "浅色"; AppThemeMode.DARK -> "深色"; AppThemeMode.MONET -> "动态色" },
+                            onClick = { viewModel.setThemeMode(mode) },
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
                 }
             }
         },
@@ -721,7 +724,6 @@ private fun ReaderSection(state: StudioUiState, viewModel: StudioViewModel, onIm
         { Slider(settings.paragraphSpacingDp.toFloat(), { viewModel.setReaderSpacing(it.toInt()) }, valueRange = 0f..48f, steps = 47) },
         { SectionTitle("左右边距：${settings.horizontalPaddingDp} dp") },
         { Slider(settings.horizontalPaddingDp.toFloat(), { viewModel.setReaderPadding(it.toInt()) }, valueRange = 0f..48f, steps = 47) },
-        { SectionTitle("翻页与显示") },
         {
             StudioPanel("翻页方式") {
                 Row(horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
@@ -743,14 +745,12 @@ private fun ReaderSection(state: StudioUiState, viewModel: StudioViewModel, onIm
         },
         {
             StudioPanel("正文清洗") {
-                Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXS)) {
-                    ToggleRow("移除汉字间多余空格", "清理序列化产生的伪空格", stripGaps, viewModel::setStripCjkGaps)
-                    Text(
-                        "EPUB 里因序列化缩进与行内标签边界产生的汉字间空格会被抹掉。若你的书（诗歌、手稿）本就要靠汉字间距排版，关掉即可保留。",
-                        fontSize = UiDimens.captionSmall,
-                        color = secondaryTextColor(),
-                    )
-                }
+                ToggleRow("移除汉字间多余空格", "清理序列化产生的伪空格", stripGaps, viewModel::setStripCjkGaps)
+                Text(
+                    "EPUB 里因序列化缩进与行内标签边界产生的汉字间空格会被抹掉。若你的书（诗歌、手稿）本就要靠汉字间距排版，关掉即可保留。",
+                    fontSize = UiDimens.captionSmall,
+                    color = secondaryTextColor(),
+                )
             }
         },
         {
@@ -872,18 +872,18 @@ internal fun SectionTitle(text: String) = SectionHeader(text, minRowHeight = fal
 
 @Composable
 private fun ToggleRow(label: String, summary: String, checked: Boolean, onChange: (Boolean) -> Unit) {
-    Card(
-        Modifier.fillMaxWidth(),
-        cornerRadius = UiDimens.panelCorner,
-        insideMargin = PaddingValues(horizontal = UiDimens.spaceM, vertical = UiDimens.spaceXS),
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = UiDimens.touchMin)
+            .padding(vertical = UiDimens.spaceXS),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text(label, fontSize = UiDimens.bodyStrong)
-                Text(summary, fontSize = UiDimens.captionSmall, color = secondaryTextColor())
-            }
-            Switch(checked = checked, onCheckedChange = onChange)
+        Column(Modifier.weight(1f)) {
+            Text(label, fontSize = UiDimens.bodyStrong)
+            Text(summary, fontSize = UiDimens.captionSmall, color = secondaryTextColor())
         }
+        Switch(checked = checked, onCheckedChange = onChange)
     }
 }
 

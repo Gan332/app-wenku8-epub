@@ -53,8 +53,8 @@ import com.example.hyperreader.MessageCard
 import com.example.hyperreader.core.ExplorePage
 import com.example.hyperreader.model.SearchBook
 import com.example.hyperreader.ui.cover.CoverImage
-import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Button
+import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.PullToRefresh
@@ -217,11 +217,26 @@ private fun rememberExploreTabWidth(pages: List<ExplorePage>): Dp {
  */
 @Composable
 private fun ExploreTitleRow(onOpenSearch: () -> Unit) {
-    StudioHero(
-        kicker = "DISCOVER WENKU8",
-        title = "今天，读点新的",
-        description = "从年度精选、月度新书与作品标签出发。公开榜单无需登录，搜索会使用你自己的会话。",
+    Row(
+        modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
     ) {
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXXS),
+        ) {
+            Text(
+                "发现下一段故事",
+                fontSize = UiDimens.title,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                "公开榜单无需登录，搜索使用你自己的会话。",
+                fontSize = UiDimens.captionSmall,
+                color = secondaryTextColor(),
+            )
+        }
         Button(
             onClick = onOpenSearch,
             cornerRadius = UiDimens.panelCorner,
@@ -232,7 +247,7 @@ private fun ExploreTitleRow(onOpenSearch: () -> Unit) {
                 modifier = Modifier.size(UiDimens.spaceL),
             )
             Spacer(Modifier.size(UiDimens.spaceXS))
-            Text("搜索作品")
+            Text("搜索")
         }
     }
 }
@@ -240,32 +255,21 @@ private fun ExploreTitleRow(onOpenSearch: () -> Unit) {
 /** 未登录提示：榜单与官方标签需要会话，站内搜索同理（AGENTS §4.2）。 */
 @Composable
 private fun LoginHintCard(onLogin: () -> Unit) {
-    Card(
-        Modifier.fillMaxWidth(),
-        cornerRadius = UiDimens.panelCorner,
-        insideMargin = PaddingValues(horizontal = UiDimens.spaceM, vertical = UiDimens.spaceS),
+    Row(
+        modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(UiDimens.settingGlyph)
-                    .clip(RoundedCornerShape(UiDimens.cardCorner))
-                    .background(MiuixTheme.colorScheme.primaryContainer),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text("W", color = MiuixTheme.colorScheme.onPrimaryContainer, fontWeight = FontWeight.Bold)
-            }
-            Text(
-                "排行榜、站内搜索与官方标签需要登录",
-                modifier = Modifier.weight(1f).padding(horizontal = UiDimens.spaceS),
-                fontSize = UiDimens.caption,
-                color = secondaryTextColor(),
-            )
-            TextButton(text = "登录", onClick = onLogin, modifier = Modifier.heightIn(min = UiDimens.touchMin))
-        }
+        Text(
+            "登录后可查看排行榜、站内搜索与官方标签",
+            modifier = Modifier.weight(1f),
+            fontSize = UiDimens.caption,
+            color = secondaryTextColor(),
+        )
+        TextButton(
+            text = "登录",
+            onClick = onLogin,
+            modifier = Modifier.heightIn(min = UiDimens.touchMin),
+        )
     }
 }
 

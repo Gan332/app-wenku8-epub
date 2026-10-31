@@ -94,7 +94,7 @@ fun ExploreExpandedScreen(state: StudioUiState, viewModel: StudioViewModel, modi
 @Composable
 private fun ExpandedBookCell(book: SearchBook, onClick: () -> Unit) {
     val interaction = remember { MutableInteractionSource() }
-    val titleHeight = with(LocalDensity.current) { (UiDimens.section * LnrDimens.exploreTitleHeightFactor).toDp() }
+    val titleHeight = with(LocalDensity.current) { (UiDimens.caption * LnrDimens.exploreTitleHeightFactor).toDp() }
     Column(
         modifier = Modifier.clickable(interactionSource = interaction, indication = null, onClick = onClick).pressableScale(interaction),
         verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXS),

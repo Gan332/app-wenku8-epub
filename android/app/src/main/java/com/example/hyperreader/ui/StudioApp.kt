@@ -282,7 +282,7 @@ private fun StudioApp(
             if (state.shellPage() == ShellPage.TABS) {
                 Surface(
                     modifier = Modifier
-                        .padding(horizontal = UiDimens.pagePadding, vertical = UiDimens.spaceXS)
+                        .padding(horizontal = UiDimens.spaceS, vertical = UiDimens.spaceXS)
                         .navigationBarsPadding(),
                     color = MiuixTheme.colorScheme.surfaceContainerHigh,
                     shadowElevation = UiDimens.navElevation,
@@ -443,6 +443,7 @@ private fun StudioApp(
                 state.tab == StudioTab.READING -> ReadingHomeScreen(
                     bookshelf = state.bookshelf,
                     progress = readingProgress,
+                    bookshelfLoaded = state.bookshelfLoaded,
                     onOpenLocal = { entry ->
                         entry.localUri?.let { uri ->
                             context.startActivity(XyReaderActivity.intent(context, uri, entry.bookId, entry.title))

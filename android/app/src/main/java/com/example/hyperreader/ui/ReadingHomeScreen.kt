@@ -51,6 +51,7 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 fun ReadingHomeScreen(
     bookshelf: List<BookshelfEntry>,
     progress: Map<String, ReadingProgress>,
+    bookshelfLoaded: Boolean,
     onOpenLocal: (BookshelfEntry) -> Unit,
     onOpenRemote: (BookshelfEntry) -> Unit,
     onOpenBookshelf: () -> Unit,
@@ -63,8 +64,10 @@ fun ReadingHomeScreen(
     }
     val continueEntry = remember(withProgress) { withProgress.firstOrNull() }
     val recentWithProgress = remember(withProgress) { withProgress.drop(1) }
-    val recentlyRead = remember(bookshelf) {
-        bookshelf.filter { it.lastReadAt > 0L }.sortedByDescending { it.lastReadAt }
+    val recentlyRead = remember(bookshelf, progress) {
+        bookshelf
+            .filter { it.lastReadAt > 0L && !progress.containsKey(it.bookId) }
+            .sortedByDescending { it.lastReadAt }
     }
 
     fun open(entry: BookshelfEntry) {
@@ -90,7 +93,11 @@ fun ReadingHomeScreen(
             }
         }
 
-        if (continueEntry == null) {
+        if (!bookshelfLoaded) {
+            item(key = "loading") {
+                ReadingHomeSkeleton()
+            }
+        } else if (continueEntry == null) {
             item(key = "empty") {
                 StudioHero(
                     kicker = "START HERE",
@@ -112,7 +119,7 @@ fun ReadingHomeScreen(
             }
         }
 
-        if (recentWithProgress.isNotEmpty()) {
+        if (bookshelfLoaded && recentWithProgress.isNotEmpty()) {
             item(key = "recent-progress") {
                 Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
                     SectionHeader("继续上次")
@@ -125,7 +132,7 @@ fun ReadingHomeScreen(
             }
         }
 
-        if (recentlyRead.isNotEmpty()) {
+        if (bookshelfLoaded && recentlyRead.isNotEmpty()) {
             item(key = "recent-read") {
                 Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
                     SectionHeader("最近翻过")
@@ -135,6 +142,34 @@ fun ReadingHomeScreen(
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+/** 冷启动占位：与「继续阅读」主卡保持相近高度，避免空态闪现后整屏跳位。 */
+@Composable
+private fun ReadingHomeSkeleton() {
+    StudioPanel {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceL),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            ShimmerBlock(
+                Modifier
+                    .width(UiDimens.heroCoverWidth)
+                    .aspectRatio(LnrDimens.POSTER_ASPECT)
+                    .clip(RoundedCornerShape(UiDimens.cardCorner)),
+            )
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS),
+            ) {
+                ShimmerLine(Modifier.fillMaxWidth(0.35f), heightDp = 12)
+                ShimmerLine(Modifier.fillMaxWidth(0.88f), heightDp = 24)
+                ShimmerLine(Modifier.fillMaxWidth(), heightDp = 14)
+                ShimmerLine(Modifier.fillMaxWidth(0.7f), heightDp = 8)
             }
         }
     }
