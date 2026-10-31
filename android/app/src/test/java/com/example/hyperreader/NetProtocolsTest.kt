@@ -53,4 +53,17 @@ class NetProtocolsTest {
     fun acceptLanguageIsDeclaredAndPairedWithTheUserAgent() {
         assertTrue(Wenku8NetProtocols.ACCEPT_LANGUAGE.startsWith("zh-CN"))
     }
+
+    @Test
+    fun clientHintsMatchTheDeclaredBrowser() {
+        // UA 声称 Chrome 131 + Android，客户端提示必须同口径；缺这一组会被 WAF
+        // 当成「UA 与握手自相矛盾」的脚本客户端。
+        val headers = Wenku8NetProtocols.headers()
+        assertEquals("?1", headers["sec-ch-ua-mobile"])
+        assertEquals("\"Android\"", headers["sec-ch-ua-platform"])
+        assertTrue(headers.getValue("sec-ch-ua").contains("v=\"131\""))
+        assertTrue(Wenku8NetProtocols.USER_AGENT.contains("Chrome/131."))
+        // 顶层导航不带 Cache-Control（那是刷新请求的语义）
+        assertNull(headers["Cache-Control"])
+    }
 }

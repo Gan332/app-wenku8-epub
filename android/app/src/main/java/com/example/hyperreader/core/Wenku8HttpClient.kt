@@ -156,10 +156,17 @@ class Wenku8HttpClient(private val cacheDirectory: File, sessionCookieJar: Cooki
                 // Cloudflare 拦截页的判定：403 + 挑战页特征 → 归类为 UPSTREAM_CHALLENGE，
                 // 这样**所有**链路（探索、缓存、导出、在线阅读）都能触发验证窗口，
                 // 而不是只在解析器里针对 parseBook 生效。
+                // 诊断信息（cf-mitigated / cf-ray / 页面标题）只用于在设置页区分
+                // 「JS 挑战」与「WAF 硬拦截」：前者能用 clearance，后者换网络或中继才有用。
                 val bodyPreview = runCatching { response.peekBody(CF_PEEK_LIMIT).string() }.getOrDefault("")
+                val mitigated = response.header("cf-mitigated") ?: "无"
+                val ray = response.header("cf-ray") ?: "无"
                 response.close()
                 if (status == 403 && Wenku8Parser.looksLikeChallenge(bodyPreview)) {
-                    throw Wenku8Exception("被 Cloudflare 拦截：$current", "UPSTREAM_CHALLENGE")
+                    throw Wenku8Exception(
+                        "被 Cloudflare 拦截：$current（cf-mitigated=$mitigated；cf-ray=$ray；title=${challengeTitle(bodyPreview)}）",
+                        "UPSTREAM_CHALLENGE",
+                    )
                 }
                 throw Wenku8Exception("源站返回 HTTP $status。", "UPSTREAM_HTTP_ERROR")
             }
@@ -176,6 +183,10 @@ class Wenku8HttpClient(private val cacheDirectory: File, sessionCookieJar: Cooki
      * TLS 失败的可读化：原文 `Hostname xxx not verified: certificate: …` 是英文的内部信息，
      * 直接透出无从下手；这里保留主机名与失败种类，并给出可操作的下一步。
      */
+    private fun challengeTitle(html: String): String =
+        Regex("<title[^>]*>\\s*([^<]{1,80})", RegexOption.IGNORE_CASE)
+            .find(html)?.groupValues?.getOrNull(1)?.trim()?.take(60) ?: "无"
+
     private fun tlsError(error: Exception, url: HttpUrl, mismatch: Boolean): Wenku8Exception {
         val host = url.host
         val detail = if (mismatch) "TLS 证书与域名不匹配" else "TLS 握手未完成"

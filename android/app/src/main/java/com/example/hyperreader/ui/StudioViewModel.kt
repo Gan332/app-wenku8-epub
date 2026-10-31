@@ -565,7 +565,11 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         }.getOrElse { error ->
             val message = error.message ?: "失败"
             when {
-                (error as? Wenku8Exception)?.code == "UPSTREAM_CHALLENGE" -> "Cloudflare 拦截（挑战页）"
+                (error as? Wenku8Exception)?.code == "UPSTREAM_CHALLENGE" ->
+                    message.substringAfter("（", "").substringBefore("）")
+                        .takeIf { it.isNotBlank() }
+                        ?.let { "CF 拦截·$it" }
+                        ?: "Cloudflare 拦截（挑战页）"
                 message.contains("403") -> "HTTP 403"
                 message.contains("429") -> "HTTP 429（被限速）"
                 else -> message.take(40)

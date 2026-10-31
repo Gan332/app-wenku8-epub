@@ -53,7 +53,11 @@ object Wenku8NetProtocols {
     fun headers(): Map<String, String> = linkedMapOf(
         "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
         "Accept-Language" to ACCEPT_LANGUAGE,
-        "Cache-Control" to "max-age=0",
+        // 与 UA 配套的客户端提示：只带 Chrome 默认发送的低熵项（brands/mobile/platform），
+        // 缺这一组时「UA 声称是 Chrome、握手却不像浏览器」自相矛盾，部分 WAF 据此直接 403。
+        "sec-ch-ua" to "\"Google Chrome\";v=\"131\", \"Chromium\";v=\"131\", \"Not_A Brand\";v=\"24\"",
+        "sec-ch-ua-mobile" to "?1",
+        "sec-ch-ua-platform" to "\"Android\"",
         "Upgrade-Insecure-Requests" to "1",
         "Sec-Fetch-Dest" to "document",
         "Sec-Fetch-Mode" to "navigate",

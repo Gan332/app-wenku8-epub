@@ -607,6 +607,7 @@ private fun NetworkSection(state: StudioUiState, viewModel: StudioViewModel, onO
                                     )
                                     Text(
                                         probe.status,
+                                        modifier = Modifier.weight(1.2f),
                                         fontSize = UiDimens.captionSmall,
                                         color = if (probe.status.startsWith("OK")) MiuixTheme.colorScheme.primary else MiuixTheme.colorScheme.error,
                                     )
