@@ -182,6 +182,10 @@ OkHttp 执行不了故直接 403。浏览器通过后下发的 `cf_clearance` **
 只要OkHttp 用同一份 UA（同一个 `Wenku8NetProtocols.USER_AGENT`）并带上它即可放行——
 公开链路的 `clearanceCookieJar()` 就是干这个的。若已有凭证仍被拦，则只剩自建中继（§4.13）。
 
+凭证还**与入口域名绑定**：`Wenku8SessionStore` 按 host 分开存（键 `cf_clearance@www.wenku8.cc`），
+验证窗口打在当前直连入口（`Wenku8Endpoint.directRewire`，忽略中继）上，通过后把该入口钉住；
+换镜像后需要重新验证一次，不能把 `.net` 的 token 回放到 `.cc`。
+
 ### 4.3 状态与持久化
 
 - 设置、书架、阅读统计、阅读进度均使用 DataStore，不引入 Room

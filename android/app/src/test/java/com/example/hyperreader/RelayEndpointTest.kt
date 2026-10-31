@@ -159,6 +159,19 @@ class RelayEndpointTest {
     }
 
     @Test
+    fun challengeLinksIgnoreTheRelayAndFollowTheActiveEntry() {
+        enableRelay()
+        val relayed = Wenku8Urls.sugoi(2025)
+        assertEquals("https://relay.example.com/zt/sugoi/2025.php", relayed)
+        // 验证窗口必须打源站：cf_clearance 由源站的 Cloudflare 下发，中继域上验证拿不到凭证
+        assertEquals("https://www.wenku8.net/zt/sugoi/2025.php", Wenku8Endpoint.directRewire(relayed))
+
+        Wenku8Endpoint.setRelayEnabled(false)
+        assertTrue(Wenku8Endpoint.rotateHost())
+        assertEquals("https://www.wenku8.cc/zt/sugoi/2025.php", Wenku8Endpoint.directRewire(relayed))
+    }
+
+    @Test
     fun sessionCookiesNeverTravelToTheRelayHost() {
         enableRelay()
         // 只有wenku8 自身域名允许携带 jieqiUserInfo / PHPSESSID

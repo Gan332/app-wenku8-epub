@@ -183,7 +183,9 @@ class OnlineReaderActivity : ComponentActivity() {
                                     challengeLauncher.launch(
                                         com.example.hyperreader.auth.CfChallengeActivity.intent(
                                             this@OnlineReaderActivity,
-                                            com.example.hyperreader.core.Wenku8Urls.index(hostBookId, null),
+                                            com.example.hyperreader.core.Wenku8Endpoint.directRewire(
+                                                com.example.hyperreader.core.Wenku8Urls.index(hostBookId, null),
+                                            ),
                                         ),
                                     )
                                 },

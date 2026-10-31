@@ -7,6 +7,7 @@ import androidx.security.crypto.MasterKey
 import okhttp3.Cookie
 import okhttp3.CookieJar
 import okhttp3.HttpUrl
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import org.json.JSONObject
 
 /**
@@ -43,7 +44,7 @@ class Wenku8SessionStore(context: Context) : SessionGate {
         }.getOrDefault(emptyMap())
     }
 
-    fun saveWebViewCookies(cookieHeader: String?) {
+    fun saveWebViewCookies(cookieHeader: String?, host: String? = null) {
         val values = allCookies().toMutableMap()
         cookieHeader.orEmpty().split(';').mapNotNull { part ->
             val item = part.trim()
@@ -51,12 +52,34 @@ class Wenku8SessionStore(context: Context) : SessionGate {
             val name = item.substringBefore('=').trim()
             val value = item.substringAfter('=').trim()
             if (name.isBlank()) null else name to value
-        }.toMap().forEach { (name, value) -> values[name] = value }
+        }.toMap().forEach { (name, value) ->
+            if (name == CLEARANCE_COOKIE && host != null) {
+                // clearance 与 host 绑定：同样一枚 token 换到别的镜像上会被 Cloudflare 判无效，
+                // 必须按 host 分开存，不能再共用同一个扁平键。
+                values[clearanceKey(host)] = value
+                if (host.equals(LEGACY_CLEARANCE_HOST, ignoreCase = true)) values[CLEARANCE_COOKIE] = value
+            } else {
+                values[name] = value
+            }
+        }
         preferences.edit().putString(COOKIE_KEY, jsonObject(values).toString()).apply()
     }
 
-    fun saveWebViewSession() {
-        saveWebViewCookies(CookieManager.getInstance().getCookie(Wenku8Urls.BASE))
+    /**
+     * 把 WebView 里的 Cookie 收进加密存储。
+     *
+     * [url] 是实际完成验证的页面地址（可能是轮换后的 .cc），**不能固定只读 .net**：
+     * 否则在 .cc 上拿到的 `cf_clearance` 永远存不下来，而 .net 的旧 token 又被回放到 .cc，
+     * 表现为「验证页正常、正常抓取仍被拦」。两个地址都读（验证页所在入口在后，覆盖同名的会话 Cookie），
+     * clearance 按 host 分开存。
+     */
+    fun saveWebViewSession(url: String = Wenku8Urls.BASE) {
+        val manager = CookieManager.getInstance()
+        manager.flush()
+        val targets = if (url == Wenku8Urls.BASE) listOf(url) else listOf(Wenku8Urls.BASE, url)
+        targets.forEach { target ->
+            saveWebViewCookies(manager.getCookie(target), target.toHttpUrlOrNull()?.host)
+        }
     }
 
     override fun clear() {
@@ -65,8 +88,11 @@ class Wenku8SessionStore(context: Context) : SessionGate {
         CookieManager.getInstance().flush()
     }
 
-    /** 当前是否已通过 Cloudflare 人机验证。 */
-    fun hasClearance(): Boolean = clearanceValue(allCookies()) != null
+    /** 当前是否已通过 Cloudflare 人机验证（任一枚按 host 保存的凭证或旧版单键都算）。 */
+    fun hasClearance(): Boolean = hasClearance(allCookies())
+
+    /** 该 host 是否有自己的 clearance（不兼容旧版 .net 单键，用于判断该钉哪个入口）。 */
+    fun hasClearanceFor(host: String): Boolean = allCookies()[clearanceKey(host)]?.isNotBlank() == true
 
     /**
      * 只携带 `cf_clearance` 的 CookieJar（0.18.0）。
@@ -80,13 +106,14 @@ class Wenku8SessionStore(context: Context) : SessionGate {
             val clearance = cookies.firstOrNull { it.name == CLEARANCE_COOKIE && Wenku8Url.carriesSession(url.host) }
                 ?: return
             val values = allCookies().toMutableMap()
-            values[CLEARANCE_COOKIE] = clearance.value
+            values[clearanceKey(url.host)] = clearance.value
+            if (url.host.equals(LEGACY_CLEARANCE_HOST, ignoreCase = true)) values[CLEARANCE_COOKIE] = clearance.value
             preferences.edit().putString(COOKIE_KEY, jsonObject(values).toString()).apply()
         }
 
         override fun loadForRequest(url: HttpUrl): List<Cookie> {
-            val value = clearanceValue(allCookies()) ?: return emptyList()
             if (!Wenku8Url.carriesSession(url.host)) return emptyList()
+            val value = clearanceValue(allCookies(), url.host) ?: return emptyList()
             return listOfNotNull(Cookie.parse(url, "$CLEARANCE_COOKIE=$value"))
         }
     }
@@ -103,32 +130,71 @@ class Wenku8SessionStore(context: Context) : SessionGate {
             if (!Wenku8Url.carriesSession(url.host)) return
             val values = allCookies().toMutableMap()
             cookies.forEach { cookie ->
-                if (cookie.persistent || cookie.name == "PHPSESSID" || cookie.name == "jieqiUserInfo") values[cookie.name] = cookie.value
+                if (cookie.name == CLEARANCE_COOKIE) {
+                    values[clearanceKey(url.host)] = cookie.value
+                    if (url.host.equals(LEGACY_CLEARANCE_HOST, ignoreCase = true)) values[CLEARANCE_COOKIE] = cookie.value
+                } else if (cookie.persistent || cookie.name == "PHPSESSID" || cookie.name == "jieqiUserInfo") {
+                    values[cookie.name] = cookie.value
+                }
             }
             preferences.edit().putString(COOKIE_KEY, jsonObject(values).toString()).apply()
         }
 
         override fun loadForRequest(url: HttpUrl): List<Cookie> {
             if (!Wenku8Url.carriesSession(url.host)) return emptyList()
-            return allCookies().mapNotNull { (name, value) -> Cookie.parse(url, "$name=$value") }
+            val cookies = allCookies()
+            val clearance = clearanceValue(cookies, url.host)
+            return cookies.mapNotNull { (name, value) ->
+                if (name == CLEARANCE_COOKIE || name.startsWith(CLEARANCE_PREFIX)) return@mapNotNull null
+                Cookie.parse(url, "$name=$value")
+            } + listOfNotNull(clearance?.let { Cookie.parse(url, "$CLEARANCE_COOKIE=$it") })
         }
     }
 
     private fun jsonObject(values: Map<String, String>): JSONObject = JSONObject().apply { values.forEach { (key, value) -> put(key, value) } }
 
     /**
- * 内部常量与方法：internal 让同模块单测能直接断言 [clearanceValue]，
- * 而 [FILE_NAME]/[COOKIE_KEY] 仍保持 private（它们只是加密存储的文件名与键名，不是密钥本身）。
- */
-internal companion object {
+     * 内部常量与方法：internal 让同模块单测能直接断言 [clearanceValue]，
+     * 而 [FILE_NAME]/[COOKIE_KEY] 仍保持 private（它们只是加密存储的文件名与键名，不是密钥本身）。
+     */
+    internal companion object {
         private const val FILE_NAME = "wenku8_session"
         private const val COOKIE_KEY = "cookies"
+
+        /** 旧版本把 clearance 存成不带 host 的单键；只有 .net 请求还能安全复用它。 */
+        private const val LEGACY_CLEARANCE_HOST = "www.wenku8.net"
 
         /** 人机验证通过凭证（Cloudflare 写入）；不是账号凭据，但和会话 Cookie 存于同一处。 */
         const val CLEARANCE_COOKIE = "cf_clearance"
 
+        /** 按 host 存放 clearance 的键前缀；带 `@` 的键不会被当作普通 Cookie 发送。 */
+        const val CLEARANCE_PREFIX = "$CLEARANCE_COOKIE@"
+
+        fun clearanceKey(host: String): String = "$CLEARANCE_PREFIX${host.lowercase()}"
+
         /** 从 CookieMap 里取出 [CLEARANCE_COOKIE] 的值（companion 里以便单测直接调用）。 */
         fun clearanceValue(cookies: Map<String, String>): String? =
             cookies[CLEARANCE_COOKIE]?.takeIf { it.isNotBlank() }
+
+        /**
+         * 取与请求 host 匹配的 clearance：优先按 host 存的，其次（仅 .net）兼容旧版单键。
+         *
+         * 跨 host 回放是行不通的：`cf_clearance` 与 host/IP/UA 绑定，.net 的 token 发给 .cc
+         * 只会得到 403，所以除 .net 外不做兜底。
+         */
+        fun clearanceValue(cookies: Map<String, String>, host: String?): String? {
+            if (host != null) {
+                cookies[clearanceKey(host)]?.takeIf { it.isNotBlank() }?.let { return it }
+            }
+            return if (host == null || host.equals(LEGACY_CLEARANCE_HOST, ignoreCase = true)) {
+                clearanceValue(cookies)
+            } else {
+                null
+            }
+        }
+
+        fun hasClearance(cookies: Map<String, String>): Boolean =
+            clearanceValue(cookies) != null ||
+                cookies.any { (name, value) -> name.startsWith(CLEARANCE_PREFIX) && value.isNotBlank() }
     }
 }

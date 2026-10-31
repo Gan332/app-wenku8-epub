@@ -549,13 +549,14 @@ private fun NetworkSection(state: StudioUiState, viewModel: StudioViewModel, onO
                     )
                     Text(
                         "Cloudflare 要求浏览器执行验证：WebView 能通过，App 的网络请求不行。" +
-                            "用下面按钮在浏览器里验证一次，凭证会被复用；若已有凭证却仍然被拦，请配置中继。",
+                            "用下面按钮在当前直连入口上验证一次，凭证按入口域名分别保存；换入口后需要重新验证。" +
+                            "若已有凭证却仍然被拦，请配置中继。",
                         fontSize = UiDimens.captionSmall,
                         color = secondaryTextColor(),
                     )
                     TextButton(
                         text = "打开验证页（浏览器）",
-                        onClick = { onOpenChallenge(com.example.hyperreader.core.Wenku8Urls.sugoi(java.time.Year.now().value)) },
+                        onClick = { onOpenChallenge(com.example.hyperreader.core.Wenku8Endpoint.directRewire(com.example.hyperreader.core.Wenku8Urls.sugoi(java.time.Year.now().value))) },
                         modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
                     )
                     TextButton(
@@ -579,7 +580,7 @@ private fun NetworkSection(state: StudioUiState, viewModel: StudioViewModel, onO
                     )
                     TextButton(
                         text = "打开验证页（浏览器）",
-                        onClick = { onOpenChallenge(com.example.hyperreader.core.Wenku8Urls.sugoi(java.time.Year.now().value)) },
+                        onClick = { onOpenChallenge(com.example.hyperreader.core.Wenku8Endpoint.directRewire(com.example.hyperreader.core.Wenku8Urls.sugoi(java.time.Year.now().value))) },
                         modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
                     )
                     TextButton(

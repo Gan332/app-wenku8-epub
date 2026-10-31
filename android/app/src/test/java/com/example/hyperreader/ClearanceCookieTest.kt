@@ -25,6 +25,25 @@ class ClearanceCookieTest {
     }
 
     @Test
+    fun clearanceIsScopedToTheHostItWasIssuedFor() {
+        // 验证页可能在轮换后的 .cc 上通过；一枚 token 不能跨镜像复用
+        val cc = mapOf(Wenku8SessionStore.clearanceKey("www.wenku8.cc") to "cc-token")
+        assertEquals("cc-token", Wenku8SessionStore.clearanceValue(cc, "www.wenku8.cc"))
+        assertNull(Wenku8SessionStore.clearanceValue(cc, "www.wenku8.net"))
+        assertTrue(Wenku8SessionStore.hasClearance(cc))
+    }
+
+    @Test
+    fun legacyClearanceOnlyAppliesToTheNetEntry() {
+        // 旧版本只存过不带 host 的单键；升级后仅 .net 还能复用它
+        val legacy = mapOf("cf_clearance" to "legacy-token")
+        assertEquals("legacy-token", Wenku8SessionStore.clearanceValue(legacy, "www.wenku8.net"))
+        assertNull(Wenku8SessionStore.clearanceValue(legacy, "www.wenku8.cc"))
+        assertTrue(Wenku8SessionStore.hasClearance(legacy))
+        assertFalse(Wenku8SessionStore.hasClearance(emptyMap()))
+    }
+
+    @Test
     fun clearanceTravelsToWenku8HostsOnly() {
         // 公开链路只向 wenku8 自身域名回传 clearance
         assertTrue(Wenku8Url.carriesSession("www.wenku8.net"))

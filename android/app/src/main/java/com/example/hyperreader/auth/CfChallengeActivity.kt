@@ -20,12 +20,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import com.example.hyperreader.core.Wenku8Endpoint
 import com.example.hyperreader.core.Wenku8NetProtocols
 import com.example.hyperreader.core.Wenku8SessionStore
 import com.example.hyperreader.core.Wenku8Url
 import com.example.hyperreader.core.Wenku8Urls
 import com.example.hyperreader.ui.AppMiuixTheme
 import com.example.hyperreader.ui.UiDimens
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.Text
@@ -69,10 +71,16 @@ class CfChallengeActivity : ComponentActivity() {
         }
     }
 
-    /** 通过后：落盘会话 Cookie → 回报调用方 → 自动关闭。 */
+    /** 通过后：按验证页 host 落盘凭证 → 钉住该入口 → 回报调用方 → 自动关闭。 */
     private fun closeWithResult() {
         if (isFinishing) return
-        sessionStore.saveWebViewSession()
+        val host = targetUrl.toHttpUrlOrNull()?.host
+        sessionStore.saveWebViewSession(targetUrl)
+        // 刚验证过的是哪个镜像，后续请求就先打哪个：clearance 与 host 绑定，
+        // 换到另一个入口上会重新 403（用户看到的就是「验证了还被拦」）。
+        if (host != null && sessionStore.hasClearanceFor(host)) {
+            Wenku8Endpoint.applyPreferredHost("https://$host")
+        }
         setResult(RESULT_OK)
         finish()
     }

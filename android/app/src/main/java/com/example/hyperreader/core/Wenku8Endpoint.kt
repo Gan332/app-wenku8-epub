@@ -99,6 +99,19 @@ object Wenku8Endpoint {
         return url.replaceFirst(HOST_PREFIX, publicBase())
     }
 
+    /**
+     * 与 [rewire] 相同，但**忽略中继**，始终指向当前直连入口。
+     *
+     * 验证窗口必须打到源站而不是中继：`cf_clearance` 由源站的 Cloudflare 下发，
+     * 在中继域上验证既拿不到凭证，也会把入口偏好指向第三方。
+     */
+    fun directRewire(url: String): String {
+        val direct = restoreToDirect(url)
+        val host = runCatching { URI(direct.trim()).host }.getOrNull()
+        if (!Wenku8Url.isEntryHost(host)) return direct
+        return direct.replaceFirst(HOST_PREFIX, activeDirectBase())
+    }
+
     /** 恢复默认入口（App 启动时调用，避免上一次会话的轮换结果影响本次）。 */
     @Synchronized
     fun resetHosts() {
