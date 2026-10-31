@@ -36,8 +36,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.hyperreader.core.Wenku8Endpoint
 import com.example.hyperreader.BuildConfig
@@ -119,20 +117,59 @@ fun SettingsScreen(
 
     when (state.settingsSection) {
         SettingsSection.OVERVIEW -> SettingsOverview(state, viewModel)
-        SettingsSection.ACCOUNT -> AccountSection(state = state, viewModel = viewModel, onLogin = onLogin)
-        SettingsSection.APPEARANCE -> AppearanceSection(viewModel)
-        SettingsSection.READER -> ReaderSection(state, viewModel, onImportFont)
-        SettingsSection.NETWORK -> NetworkSection(state = state, viewModel = viewModel, onOpenChallenge = onOpenChallenge)
-        SettingsSection.STATISTICS -> ReadingStatsScreen(state.readingStats, viewModel::clearReadingStats)
-        SettingsSection.CATALOG -> CatalogSection(state, viewModel, onImportEpub)
-        SettingsSection.CONFIG -> ConfigSection(
-            state = configState,
-            onBack = viewModel::backSettings,
-            onExportRequest = onExportConfig,
-            onImportRequest = onImportConfig,
-        )
-        SettingsSection.ABOUT -> AboutSection(viewModel)
+        else -> SettingsDetailFrame(
+            section = state.settingsSection,
+            onSelect = viewModel::openSettingsSection,
+        ) {
+            when (state.settingsSection) {
+                SettingsSection.ACCOUNT -> AccountSection(state = state, viewModel = viewModel, onLogin = onLogin)
+                SettingsSection.APPEARANCE -> AppearanceSection(viewModel)
+                SettingsSection.READER -> ReaderSection(state, viewModel, onImportFont)
+                SettingsSection.NETWORK -> NetworkSection(state = state, viewModel = viewModel, onOpenChallenge = onOpenChallenge)
+                SettingsSection.STATISTICS -> ReadingStatsScreen(state.readingStats, viewModel::clearReadingStats)
+                SettingsSection.CATALOG -> CatalogSection(state, viewModel, onImportEpub)
+                SettingsSection.CONFIG -> ConfigSection(
+                    state = configState,
+                    onBack = viewModel::backSettings,
+                    onExportRequest = onExportConfig,
+                    onImportRequest = onImportConfig,
+                )
+                SettingsSection.ABOUT -> AboutSection(viewModel)
+                SettingsSection.OVERVIEW -> Unit
+            }
+        }
     }
+}
+
+/** 二级页在宽屏下保持左侧分类 rail 常驻（AGENTS §4.12），窄屏仍由顶栏返回。 */
+@Composable
+private fun SettingsDetailFrame(
+    section: SettingsSection,
+    onSelect: (SettingsSection) -> Unit,
+    content: @Composable () -> Unit,
+) {
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val wide = maxWidth >= UiDimens.wideBreakpoint
+        Row(Modifier.fillMaxSize()) {
+            if (wide) {
+                SettingsRail(
+                    current = section.toSettingsCategory(),
+                    onSelect = { onSelect(it.section) },
+                )
+            }
+            Box(Modifier.weight(1f)) { content() }
+        }
+    }
+}
+
+private fun SettingsSection.toSettingsCategory(): SettingsCategory? = when (this) {
+    SettingsSection.ACCOUNT -> SettingsCategory.ACCOUNT
+    SettingsSection.APPEARANCE -> SettingsCategory.APPEARANCE
+    SettingsSection.READER -> SettingsCategory.READING
+    SettingsSection.NETWORK -> SettingsCategory.NETWORK
+    SettingsSection.STATISTICS, SettingsSection.CATALOG, SettingsSection.CONFIG -> SettingsCategory.DATA
+    SettingsSection.ABOUT -> SettingsCategory.ABOUT
+    SettingsSection.OVERVIEW -> null
 }
 
 /**
@@ -146,7 +183,7 @@ private fun SettingsOverview(state: StudioUiState, viewModel: StudioViewModel) {
     var railOpen by remember { mutableStateOf(false) }
     var engineSheet by remember { mutableStateOf(false) }
     BoxWithConstraints(Modifier.fillMaxSize()) {
-        val wide = maxWidth >= 600.dp
+        val wide = maxWidth >= UiDimens.wideBreakpoint
         Row(Modifier.fillMaxSize()) {
             if (wide) {
                 SettingsRail(
@@ -369,7 +406,7 @@ private fun SettingsEntryRow(title: String, summary: String, glyph: String, onCl
 @Composable
 private fun SettingsRail(current: SettingsCategory?, onSelect: (SettingsCategory) -> Unit, modifier: Modifier = Modifier) {
     Column(
-        modifier = modifier.width(RAIL_WIDTH).verticalScroll(rememberScrollState()),
+        modifier = modifier.width(UiDimens.railWidth).verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXS),
     ) {
         SETTINGS_GROUPS.forEach { (_, categories) ->
@@ -406,8 +443,6 @@ private fun SettingsRail(current: SettingsCategory?, onSelect: (SettingsCategory
         }
     }
 }
-
-private val RAIL_WIDTH = 112.dp
 
 /**
  * 账号分区（0.18.0）：登录状态、登录与退出。
@@ -483,13 +518,13 @@ private fun NetworkSection(state: StudioUiState, viewModel: StudioViewModel, onO
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
                         DirectEntry.entries.forEach { entry ->
-                            TextButton(
+                            ChoiceButton(
                                 text = entry.label,
+                                selected = preferred == entry,
                                 onClick = {
                                     viewModel.setDirectEntry(entry)
                                     shownBase = entry.base
                                 },
-                                modifier = Modifier.heightIn(min = UiDimens.touchMin),
                             )
                         }
                     }
@@ -649,8 +684,9 @@ private fun AppearanceSection(viewModel: StudioViewModel) {
             StudioPanel {
                 Row(horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
                     AppThemeMode.entries.forEach { mode ->
-                        TextButton(
+                        ChoiceButton(
                             text = when (mode) { AppThemeMode.SYSTEM -> "系统"; AppThemeMode.LIGHT -> "浅色"; AppThemeMode.DARK -> "深色"; AppThemeMode.MONET -> "动态色" },
+                            selected = theme.mode == mode,
                             onClick = { viewModel.setThemeMode(mode) },
                             modifier = Modifier.weight(1f),
                         )
@@ -677,7 +713,11 @@ private fun AppearanceSection(viewModel: StudioViewModel) {
         {
             Row(horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceM)) {
                 listOf(0xFFA34B2F.toInt(), 0xFF2D6A4F.toInt(), 0xFF2563EB.toInt(), 0xFF7C3AED.toInt(), 0xFF111827.toInt()).forEach { color ->
-                    Box(Modifier.size(UiDimens.swatch).background(Color(color)).clickable { viewModel.setAccentColor(color) })
+                    ColorSwatch(
+                        color = color,
+                        selected = theme.accentColor == color,
+                        onClick = { viewModel.setAccentColor(color) },
+                    )
                 }
             }
         },
@@ -690,7 +730,7 @@ private fun AppearanceSection(viewModel: StudioViewModel) {
                 ColorPicker(
                     color = Color(theme.accentColor),
                     onColorChanged = { viewModel.setAccentColor(it.toArgb()) },
-                    modifier = Modifier.fillMaxWidth().height(180.dp),
+                    modifier = Modifier.fillMaxWidth().height(UiDimens.colorPickerHeight),
                 )
             }
         },
@@ -706,20 +746,21 @@ private fun ReaderSection(state: StudioUiState, viewModel: StudioViewModel, onIm
         {
             LazyRow(horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
                 items(ReaderBackground.entries.toList()) { background ->
-                    TextButton(
+                    ChoiceButton(
                         text = when (background) {
                             ReaderBackground.PAPER -> "米黄"; ReaderBackground.LIGHT -> "白纸"; ReaderBackground.GREEN -> "护眼"
                             ReaderBackground.DARK -> "夜间"; ReaderBackground.OLED -> "OLED"; ReaderBackground.CUSTOM -> "自定义"
                         },
+                        selected = settings.background == background,
                         onClick = { viewModel.setReaderBackground(background) },
                     )
                 }
             }
         },
         { SectionTitle("自定义背景色") },
-        { ColorSwatchRow { viewModel.setReaderBackgroundColor(it) } },
+        { ColorSwatchRow(selectedColor = if (settings.background == ReaderBackground.CUSTOM) settings.customBackgroundColor else null) { viewModel.setReaderBackgroundColor(it) } },
         { SectionTitle("文字颜色") },
-        { ColorSwatchRow { viewModel.setReaderTextColor(it) } },
+        { ColorSwatchRow(selectedColor = settings.textColor) { viewModel.setReaderTextColor(it) } },
         { SectionTitle("字号：${settings.fontSizeSp.toInt()} sp") },
         { Slider(settings.fontSizeSp, { viewModel.setReaderFontSize(it) }, valueRange = 12f..32f, steps = 19) },
         { SectionTitle("字重：${settings.fontWeight}") },
@@ -734,8 +775,9 @@ private fun ReaderSection(state: StudioUiState, viewModel: StudioViewModel, onIm
             StudioPanel("翻页方式") {
                 Row(horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
                     ReaderPageTurnMode.entries.forEach { mode ->
-                        TextButton(
+                        ChoiceButton(
                             text = if (mode == ReaderPageTurnMode.HORIZONTAL) "左右章节" else "上下滚动",
+                            selected = settings.pageTurnMode == mode,
                             onClick = { viewModel.setReaderPageMode(mode) },
                             modifier = Modifier.weight(1f),
                         )
@@ -899,18 +941,15 @@ private fun ToggleRow(label: String, summary: String, checked: Boolean, onChange
 }
 
 @Composable
-private fun ColorSwatchRow(onPicked: (Int) -> Unit) {
+private fun ColorSwatchRow(selectedColor: Int?, onPicked: (Int) -> Unit) {
     val colors = listOf(0xFFF4EFE6.toInt(), 0xFFFFFFFF.toInt(), 0xFFE7F0DF.toInt(), 0xFF17191C.toInt(), 0xFFB3261E.toInt(), 0xFF2D6A4F.toInt())
-    Row(horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS), modifier = Modifier.fillMaxWidth()) {
+    Row(horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceXXS), modifier = Modifier.fillMaxWidth()) {
         colors.forEach { color ->
-            Box(
-                Modifier.size(UiDimens.swatch).background(Color(color)).clickable { onPicked(color) }
+            ColorSwatch(
+                color = color,
+                selected = color == selectedColor,
+                onClick = { onPicked(color) },
             )
         }
     }
 }
-
-
-
-
-

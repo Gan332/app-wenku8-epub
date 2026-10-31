@@ -107,7 +107,7 @@ private fun BookmarkGroupCard(
         insideMargin = PaddingValues(UiDimens.spaceM),
     ) {
         Column(
-            modifier = Modifier.fillMaxWidth().padding(UiDimens.spaceS),
+            modifier = Modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXXS),
         ) {
             Row(
@@ -126,7 +126,7 @@ private fun BookmarkGroupCard(
                     Text(
                         "${group.bookmarks.size} 条 · ${formatRelativeReadTime(now, group.latestAt)}",
                         fontSize = UiDimens.captionSmall,
-                        color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f),
+                        color = secondaryTextColor(),
                     )
                 }
                 TextButton(
@@ -140,7 +140,7 @@ private fun BookmarkGroupCard(
                 Text(
                     "这本书已不在书架中，无法跳转。",
                     fontSize = UiDimens.captionSmall,
-                    color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f),
+                    color = secondaryTextColor(),
                 )
             }
 
@@ -182,7 +182,7 @@ private fun BookmarkRow(
             Text(
                 text = bookmark.snippet.ifBlank { "（本页无正文）" },
                 fontSize = UiDimens.captionSmall,
-                color = MiuixTheme.colorScheme.onSurface.copy(alpha = .75f),
+                color = secondaryTextColor(),
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )

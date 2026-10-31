@@ -22,6 +22,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -41,6 +42,7 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
@@ -315,7 +317,7 @@ fun ReaderScreen(
             ) {
                 Text(
                     text = state.errorMessage ?: "打开书籍失败",
-                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                    color = Color.White,
                     style = MiuixTheme.textStyles.body1,
                     textAlign = TextAlign.Center,
                 )
@@ -324,7 +326,7 @@ fun ReaderScreen(
                     text = "返回",
                     onClick = onBack,
                     colors = ButtonDefaults.textButtonColors(
-                        textColor = MiuixTheme.colorScheme.secondary,
+                        textColor = Color.White.copy(alpha = 0.85f),
                     ),
                 )
             }
@@ -844,14 +846,14 @@ private fun ReaderPagerArea(
                                 .padding(horizontal = ReaderDimens.spaceXS)
                                 .weight(1f),
                             colors = SliderDefaults.sliderColors(
-                                thumbColor = MiuixTheme.colorScheme.primary,
-                                foregroundColor = MiuixTheme.colorScheme.primary,
+                                thumbColor = Color.White,
+                                foregroundColor = Color.White,
                                 backgroundColor = Color.White.copy(alpha = 0.25f),
                             ),
                         )
                         Text(
                             text = "${(sliderBrightness * 100).roundToInt()}%",
-                            color = MiuixTheme.colorScheme.secondary,
+                            color = Color.White.copy(alpha = 0.85f),
                             style = MiuixTheme.textStyles.footnote2,
                         )
                         TextButton(
@@ -864,7 +866,7 @@ private fun ReaderPagerArea(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             text = "${shownPage + 1}/${pageCount.coerceAtLeast(1)}",
-                            color = MiuixTheme.colorScheme.secondary,
+                            color = Color.White.copy(alpha = 0.85f),
                             style = MiuixTheme.textStyles.footnote2,
                         )
                         Slider(
@@ -886,69 +888,71 @@ private fun ReaderPagerArea(
                                 .padding(start = ReaderDimens.spaceS)
                                 .weight(1f),
                             colors = SliderDefaults.sliderColors(
-                                thumbColor = MiuixTheme.colorScheme.primary,
-                                foregroundColor = MiuixTheme.colorScheme.primary,
+                                thumbColor = Color.White,
+                                foregroundColor = Color.White,
                                 backgroundColor = Color.White.copy(alpha = 0.25f),
                             ),
                         )
                     }
                 }
-                // —— 六个等宽功能按钮：上一章 / 亮度 / 设置 / 添加书签 / 目录 / 下一章 ——
+                // —— 功能按钮：上一章 / 亮度 / 设置 / 书签 / 搜索 / 复制 / 目录 / 下一章 ——
+                // 窄屏放不下 8 个 48dp 触控区，改为横向滚动而不是压缩每格宽度。
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(ReaderDimens.spaceXXS),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     ReaderBarIconButton(
                         icon = MiuixIcons.ChevronBackward,
                         desc = "上一章",
                         enabled = prevEnabled,
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier.widthIn(min = ReaderDimens.touchMin).heightIn(min = ReaderDimens.touchMin),
                         onClick = { prevTarget?.let { turnTo(it) } },
                     )
                     ReaderBarIconButton(
                         icon = ImageVector.vectorResource(R.drawable.lightbulb_24px),
                         desc = "亮度",
                         selected = barMode == "brightness",
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier.widthIn(min = ReaderDimens.touchMin).heightIn(min = ReaderDimens.touchMin),
                         onClick = { barMode = if (barMode == "brightness") "page" else "brightness" },
                     )
                     ReaderBarIconButton(
                         icon = MiuixIcons.Tune,
                         desc = "阅读设置",
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier.widthIn(min = ReaderDimens.touchMin).heightIn(min = ReaderDimens.touchMin),
                         onClick = { showSettings = true },
                     )
                     ReaderBarIconButton(
                         icon = ImageVector.vectorResource(R.drawable.outline_bookmark_24px),
                         desc = "添加书签",
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier.widthIn(min = ReaderDimens.touchMin).heightIn(min = ReaderDimens.touchMin),
                         onClick = { viewModel.addBookmark(currentPage) },
                     )
                     if (isTextNovel) {
                         ReaderBarIconButton(
                             icon = MiuixIcons.Search,
                             desc = "页内搜索",
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier.widthIn(min = ReaderDimens.touchMin).heightIn(min = ReaderDimens.touchMin),
                             onClick = { showSearchSheet = true },
                         )
                         ReaderBarIconButton(
                             icon = MiuixIcons.Copy,
                             desc = "复制文字",
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier.widthIn(min = ReaderDimens.touchMin).heightIn(min = ReaderDimens.touchMin),
                             onClick = { showCopyDialog = true },
                         )
                     }
                     ReaderBarIconButton(
                         icon = MiuixIcons.ListView,
                         desc = "目录",
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier.widthIn(min = ReaderDimens.touchMin).heightIn(min = ReaderDimens.touchMin),
                         onClick = onOpenDirectory,
                     )
                     ReaderBarIconButton(
                         icon = MiuixIcons.ChevronForward,
                         desc = "下一章",
                         enabled = nextTarget != null,
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier.widthIn(min = ReaderDimens.touchMin).heightIn(min = ReaderDimens.touchMin),
                         onClick = { nextTarget?.let { turnTo(it) } },
                     )
                 }
@@ -1271,8 +1275,8 @@ private fun ReaderBarIconButton(
             contentDescription = desc,
             tint = when {
                 !enabled -> Color.White.copy(alpha = 0.38f)
-                selected -> MiuixTheme.colorScheme.primary
-                else -> Color.White
+                selected -> Color.White
+                else -> Color.White.copy(alpha = 0.78f)
             },
         )
     }
@@ -1665,7 +1669,8 @@ private fun DirectoryDialog(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(WindowInsets.statusBars.asPaddingValues()),
+                    .padding(WindowInsets.statusBars.asPaddingValues())
+                    .padding(WindowInsets.navigationBars.asPaddingValues()),
             ) {
                 // —— 顶部：✕ 关闭 + 标题 ——
                 Row(
@@ -1941,6 +1946,6 @@ private fun FilterChip(
             MiuixTheme.colorScheme.onSurfaceVariantSummary
         },
     ) {
-        Box(Modifier.padding(horizontal = ReaderDimens.spaceM, vertical = ReaderDimens.spaceXS)) { label() }
+        Box(Modifier.padding(horizontal = ReaderDimens.spaceM, vertical = ReaderDimens.spaceM)) { label() }
     }
 }

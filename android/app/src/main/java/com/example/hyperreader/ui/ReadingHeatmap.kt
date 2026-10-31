@@ -298,8 +298,11 @@ fun ReadingHeatmap(
     }
 
     // 入场淡入；系统「移除动画」时 duration 为 0，直接显示（AGENTS §4.4）。
+    // 用 appearTarget 先 false 再 true，否则 animateFloatAsState 首帧即终值、动画不会播。
+    var appearTarget by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { appearTarget = true }
     val appear by animateFloatAsState(
-        targetValue = 1f,
+        targetValue = if (appearTarget) 1f else 0f,
         animationSpec = tween(Motion.duration(UiDimens.MOTION_SLOW), easing = FastOutSlowInEasing),
         label = "heatmapAppear",
     )

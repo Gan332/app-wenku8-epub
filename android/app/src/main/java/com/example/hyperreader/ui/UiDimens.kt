@@ -41,6 +41,22 @@ object UiDimens {
     /** 宽屏内容最大宽度：平板/横屏下避免正文被拉成整行。 */
     val contentMaxWidth: Dp = 840.dp
 
+    /** 设置页宽屏分栏断点；达到后分类侧栏常驻（AGENTS §4.12）。 */
+    val wideBreakpoint: Dp = 600.dp
+
+    /** 设置页宽屏左侧分类 rail 宽度。 */
+    val railWidth: Dp = 112.dp
+
+    /** 强调色取色器高度（Miuix ColorPicker 需要显式高度）。 */
+    val colorPickerHeight: Dp = 180.dp
+
+    /** 导出警告列表最大高度（OverlayDialog 内必须限高）。 */
+    val warningListMaxHeight: Dp = 260.dp
+
+    /** 搜索结果卡封面缩略图（3:4）。 */
+    val searchCoverWidth: Dp = 56.dp
+    val searchCoverHeight: Dp = 76.dp
+
     /** Card 内边距（MiuiX `insideMargin`）。 */
     val cardInset: Dp = 16.dp
 

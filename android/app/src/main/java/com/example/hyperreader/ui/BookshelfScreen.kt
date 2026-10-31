@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -261,7 +260,7 @@ private fun BookshelfGroupHeader(section: BookshelfSection, expanded: Boolean, o
     // stickyHeader：跟随 LNR BookshelfHomeContent 的分组头，滚动时钉在顶部。
     // 直接给 Column 上背景色，不套 `Surface`：Surface 需要额外的 contentColor 参数，
     // 缺省时会做一次颜色复制并多出一层合成，这里只需要一块不透明底色挡住滚过去的卡片。
-    Column(Modifier.fillMaxWidth().background(MiuixTheme.colorScheme.background.copy(alpha = 0.97f))) {
+    Column(Modifier.fillMaxWidth().background(MiuixTheme.colorScheme.background)) {
         Row(
             // 不加 horizontal 内边距：宿主（StudioApp 的 Column）已给过 pagePadding，
             // 再加一遍会让分组头比页内标题与卡片多缩进 16dp。
@@ -545,28 +544,32 @@ private fun BookEntryMenu(
 private fun BookshelfSkeleton() {
     Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
         repeat(2) {
-            Row(
-                Modifier
+            Card(
+                modifier = Modifier
                     .fillMaxWidth()
-                    .height(UiDimens.shelfCardMinHeight)
-                    .padding(UiDimens.spaceS),
+                    .heightIn(min = UiDimens.shelfCardMinHeight),
+                cornerRadius = UiDimens.panelCorner,
+                insideMargin = PaddingValues(UiDimens.spaceS),
             ) {
-                ShimmerBlock(
-                    Modifier
-                        .size(UiDimens.shelfCoverWidth, UiDimens.shelfCoverHeight)
-                        .clip(RoundedCornerShape(UiDimens.cardCorner)),
-                )
-                Column(
-                    Modifier
-                        .fillMaxHeight()
-                        .weight(1f)
-                        .padding(start = UiDimens.spaceM),
-                    verticalArrangement = Arrangement.SpaceBetween,
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    ShimmerLine(Modifier.fillMaxWidth(0.9f), heightDp = 40)
-                    ShimmerLine(Modifier.fillMaxWidth(0.43f), heightDp = 20)
-                    ShimmerLine(Modifier.fillMaxWidth(), heightDp = 32)
-                    ShimmerLine(Modifier.fillMaxWidth(0.7f), heightDp = 32)
+                    ShimmerBlock(
+                        Modifier
+                            .size(UiDimens.shelfCoverWidth, UiDimens.shelfCoverHeight)
+                            .clip(RoundedCornerShape(UiDimens.cardCorner)),
+                    )
+                    Column(
+                        Modifier
+                            .weight(1f)
+                            .padding(start = UiDimens.spaceM, end = UiDimens.spaceXS),
+                        verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXS),
+                    ) {
+                        ShimmerLine(Modifier.fillMaxWidth(0.9f), heightDp = 40)
+                        ShimmerLine(Modifier.fillMaxWidth(0.43f), heightDp = 18)
+                        ShimmerLine(Modifier.fillMaxWidth(0.7f), heightDp = 16)
+                    }
                 }
             }
         }

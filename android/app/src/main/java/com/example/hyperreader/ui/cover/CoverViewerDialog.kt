@@ -115,7 +115,7 @@ fun CoverViewerDialog(
                 onClick = onDismiss,
                 modifier = Modifier.align(Alignment.TopEnd).padding(UiDimens.spaceXS).size(UiDimens.touchMin),
             ) {
-                Icon(MiuixIcons.Close, contentDescription = "关闭")
+                Icon(MiuixIcons.Close, contentDescription = "关闭", tint = Color.White)
             }
         }
     }

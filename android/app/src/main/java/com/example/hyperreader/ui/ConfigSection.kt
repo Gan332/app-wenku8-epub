@@ -48,7 +48,7 @@ fun ConfigSection(
             Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(UiDimens.cardInset)) {
                 Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXS)) {
                     Text("导出内容", fontWeight = FontWeight.Bold, fontSize = UiDimens.section)
-                    Text("仅主题与阅读器设置。", fontSize = UiDimens.caption, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f))
+                    Text("仅主题与阅读器设置。", fontSize = UiDimens.caption, color = secondaryTextColor())
                 }
             }
         },
@@ -103,7 +103,7 @@ private fun ConfigBullet(text: String) {
     Text(
         text = "· $text",
         fontSize = UiDimens.captionSmall,
-        color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f),
+        color = secondaryTextColor(),
     )
 }
 

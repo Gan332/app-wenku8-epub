@@ -106,9 +106,28 @@ fun ExploreDetailScreen(
             if (emptyLoading) {
                 item(key = "loading-full") {
                     Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
-                        ShimmerLine(heightDp = 22)
-                        ShimmerLine(heightDp = 16)
-                        ShimmerLine(heightDp = 120)
+                        Card(
+                            Modifier.fillMaxWidth(),
+                            cornerRadius = UiDimens.heroCorner,
+                            insideMargin = PaddingValues(UiDimens.spaceL),
+                        ) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceL)) {
+                                ShimmerBlock(
+                                    Modifier
+                                        .width(UiDimens.heroCoverWidth)
+                                        .aspectRatio(LnrDimens.POSTER_ASPECT),
+                                )
+                                Column(
+                                    modifier = Modifier.weight(1f),
+                                    verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS),
+                                ) {
+                                    ShimmerLine(heightDp = 14, modifier = Modifier.fillMaxWidth(0.4f))
+                                    ShimmerLine(heightDp = 22)
+                                    ShimmerLine(heightDp = 16, modifier = Modifier.fillMaxWidth(0.7f))
+                                    ShimmerLine(heightDp = 16, modifier = Modifier.fillMaxWidth(0.55f))
+                                }
+                            }
+                        }
                         Text("正在获取书籍信息…", fontSize = UiDimens.caption, color = secondaryTextColor())
                     }
                 }

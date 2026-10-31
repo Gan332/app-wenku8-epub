@@ -29,7 +29,6 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -90,13 +89,13 @@ fun ExploreScreen(
      */
     listState: LazyListState,
 ) {
-    // 换页时回到顶部：否则从「今日更新」切到「新书一览」还停在上一个榜单的滚动位置。
-    val activePageId = state.activeExplorePage?.id
-    LaunchedEffect(activePageId) { listState.scrollToItem(0) }
+    // 换页不重置滚动位置：榜单切换器就在页顶，强制回顶会把用户刚点的标签滚出视野；
+    // 榜单变短时 LazyColumn 会自行夹紧滚动位置。
     // 下拉刷新：对应 LNR ExplorePage 的 PullToRefreshBox。MiuiX 0.9.4 自带 PullToRefresh，
     // 之前 ExploreExpandedScreen 注释说「没有等价组件」是误判。
     PullToRefresh(
-        isRefreshing = state.exploreBusy,
+        // 首次加载用列表内骨架，不再叠加下拉刷新指示器（避免两套加载提示）。
+        isRefreshing = state.exploreBusy && state.exploreRows.isNotEmpty(),
         // 没有选中榜单一律回落到第一个（ViewModel 里同样兜底）：首屏尚未加载时
         // activeExplorePage 还是 null，下拉手势不该静默失效。
         onRefresh = viewModel::refreshExplore,
@@ -126,7 +125,7 @@ fun ExploreScreen(
                 // 行高取触摸下限 48dp（MiuiX 默认 42dp，LNR 的 Tab 是 48dp）。
                 item(key = "page-switcher") {
                     val pages = viewModel.explorePages
-                    val selectedIndex = pages.indexOfFirst { it.id == activePageId }.coerceAtLeast(0)
+                    val selectedIndex = pages.indexOfFirst { it.id == state.activeExplorePage?.id }.coerceAtLeast(0)
                     // MiuiX TabRow 的项宽是固定值（默认 76dp），装不下「今日更新」「2026 年度精选」
                     // 这样的标签就会省略成「今日更…」。按最长标题实测后把 min/max 一起放宽，
                     // 项宽仍然统一，只是整行更宽、继续横向滚动。
@@ -152,6 +151,7 @@ fun ExploreScreen(
                     ExploreRowSection(
                         title = row.title,
                         books = row.books,
+                        loading = state.exploreBusy,
                         onOpenBook = { viewModel.openSearchBook(it) },
                         onMore = page?.let { target -> { viewModel.openExploreExpanded(target) } },
                     )
@@ -278,14 +278,21 @@ private fun LoginHintCard(onLogin: () -> Unit) {
     }
 }
 
-/** 榜单骨架：按真实书卡尺寸出图（封面 98×138 + 卡间距），数据到达时下方内容不跳位。 */
+/** 榜单骨架：分区头按 48dp 触控高度、书卡按真实封面与标题行占位，数据到达时不跳位。 */
 @Composable
 private fun ExploreRowsSkeleton() {
     Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
-        ShimmerLine(heightDp = 18)
+        ShimmerBlock(Modifier.fillMaxWidth(0.35f).height(UiDimens.touchMin))
         Row(horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceM)) {
             repeat(2) {
-                ShimmerBlock(Modifier.size(UiDimens.exploreCoverWidth, UiDimens.exploreCoverHeight))
+                Column(
+                    modifier = Modifier.width(EXPLORE_CARD_WIDTH),
+                    verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXS),
+                ) {
+                    ShimmerBlock(Modifier.fillMaxWidth().height(UiDimens.exploreCoverHeight))
+                    ShimmerLine(heightDp = 12)
+                    ShimmerLine(modifier = Modifier.fillMaxWidth(0.7f), heightDp = 12)
+                }
             }
         }
     }
@@ -351,6 +358,7 @@ private fun ExploreRowSection(
     books: List<SearchBook>,
     onOpenBook: (SearchBook) -> Unit,
     onMore: (() -> Unit)?,
+    loading: Boolean = false,
 ) {
     Column {
         Row(
@@ -382,7 +390,22 @@ private fun ExploreRowSection(
             }
         }
         if (books.isEmpty()) {
-            EmptyState(title = "这一栏暂时没有内容")
+            if (loading) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = UiDimens.spaceL),
+                    horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceM),
+                ) {
+                    repeat(3) {
+                        ShimmerBlock(
+                            Modifier
+                                .width(UiDimens.exploreCardWidth)
+                                .height(UiDimens.exploreCoverHeight),
+                        )
+                    }
+                }
+            } else {
+                EmptyState(title = "这一栏暂时没有内容")
+            }
         } else {
             val rowState = rememberLazyListState()
             LazyRow(
@@ -422,7 +445,7 @@ private fun ExploreBookCard(book: SearchBook, rank: Int, onClick: () -> Unit) {
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(UiDimens.panelCorner))
                 .background(colors.surfaceContainerHigh)
-                .border(BorderStroke(UiDimens.hairline, colors.outline.copy(alpha = 0.14f)), RoundedCornerShape(UiDimens.panelCorner))
+                .border(BorderStroke(UiDimens.hairline, colors.outline.copy(alpha = 0.22f)), RoundedCornerShape(UiDimens.panelCorner))
                 .padding(UiDimens.spaceXXS),
         ) {
             CoverImage(
@@ -439,7 +462,7 @@ private fun ExploreBookCard(book: SearchBook, rank: Int, onClick: () -> Unit) {
                     .align(Alignment.TopStart)
                     .padding(UiDimens.spaceXS)
                     .clip(RoundedCornerShape(UiDimens.cardCorner))
-                    .background(colors.surface.copy(alpha = 0.9f))
+                    .background(colors.surface)
                     .padding(horizontal = UiDimens.spaceXS, vertical = UiDimens.spaceXXS),
             ) {
                 Text(
@@ -497,7 +520,7 @@ private fun TagSection(tags: List<String>, activeTag: String?, onSelect: (String
                             BorderStroke(
                                 UiDimens.hairline,
                                 if (selected) MiuixTheme.colorScheme.primary.copy(alpha = 0.4f)
-                                else MiuixTheme.colorScheme.outline.copy(alpha = 0.12f),
+                                else MiuixTheme.colorScheme.outline.copy(alpha = 0.2f),
                             ),
                             RoundedCornerShape(UiDimens.panelCorner),
                         )

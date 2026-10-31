@@ -1,6 +1,7 @@
 package com.example.hyperreader.ui
 
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -10,13 +11,16 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
@@ -27,12 +31,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import com.example.hyperreader.MessageCard
 import com.example.hyperreader.model.SearchBook
 import com.example.hyperreader.model.SearchField
+import com.example.hyperreader.ui.cover.CoverImage
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
@@ -180,6 +186,10 @@ fun SearchScreen(
             }
         } else {
             val listState = rememberLazyListState()
+            // 新一页搜索（page 1）开始时回到顶部；加载更多（page > 1）保持阅读位置。
+            LaunchedEffect(state.searchQuery, state.searchPage) {
+                if (state.searchPage <= 1) listState.scrollToItem(0)
+            }
             // 结果数量放在列表顶上：翻到第 2 页后仍能一眼看到总量，不必回滚确认。
             Row(
                 Modifier.fillMaxWidth(),
@@ -268,42 +278,64 @@ private fun SearchResultCard(result: SearchBook, onOpen: (SearchBook) -> Unit, m
         cornerRadius = UiDimens.panelCorner,
         insideMargin = PaddingValues(UiDimens.spaceM),
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXS)) {
-            Text(
-                result.title,
-                fontSize = UiDimens.section,
-                fontWeight = FontWeight.Bold,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-            if (result.author.isNotBlank()) {
-                Text(
-                    "作者：${result.author}",
-                    fontSize = UiDimens.caption,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceM),
+            verticalAlignment = Alignment.Top,
+        ) {
+            Box(
+                modifier = Modifier
+                    .width(UiDimens.searchCoverWidth)
+                    .height(UiDimens.searchCoverHeight)
+                    .clip(RoundedCornerShape(UiDimens.cardCorner))
+                    .background(MiuixTheme.colorScheme.surfaceContainerHigh),
+            ) {
+                CoverImage(
+                    url = result.coverUrl,
+                    contentDescription = result.title,
+                    modifier = Modifier.fillMaxSize(),
+                    targetWidthDp = 180,
                 )
             }
-            val meta = buildList {
-                if (result.category.isNotBlank()) add(result.category)
-                if (result.status.isNotBlank()) add(result.status)
-                if (result.updatedAt.isNotBlank()) add("更新 ${result.updatedAt}")
-                if (result.wordCount != null) add("${result.wordCount} 字")
-            }
-            Text(
-                meta.joinToString(" · "),
-                color = secondaryTextColor(),
-                fontSize = UiDimens.captionSmall,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-            if (result.latestChapter.isNotBlank()) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXS),
+            ) {
                 Text(
-                    "最新：${result.latestChapter}",
+                    result.title,
+                    fontSize = UiDimens.section,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (result.author.isNotBlank()) {
+                    Text(
+                        "作者：${result.author}",
+                        fontSize = UiDimens.caption,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                val meta = buildList {
+                    if (result.category.isNotBlank()) add(result.category)
+                    if (result.status.isNotBlank()) add(result.status)
+                    if (result.updatedAt.isNotBlank()) add("更新 ${result.updatedAt}")
+                    if (result.wordCount != null) add("${result.wordCount} 字")
+                }
+                Text(
+                    meta.joinToString(" · "),
+                    color = secondaryTextColor(),
                     fontSize = UiDimens.captionSmall,
-                    maxLines = 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
+                if (result.latestChapter.isNotBlank()) {
+                    Text(
+                        "最新：${result.latestChapter}",
+                        fontSize = UiDimens.captionSmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
         }
     }

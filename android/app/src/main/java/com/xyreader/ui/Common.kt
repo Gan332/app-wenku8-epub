@@ -47,7 +47,7 @@ fun CapsuleTab(label: String, selected: Boolean, onClick: () -> Unit) {
     ) {
         Text(
             text = label,
-            modifier = Modifier.padding(horizontal = ReaderDimens.spaceL, vertical = ReaderDimens.spaceXS),
+            modifier = Modifier.padding(horizontal = ReaderDimens.spaceL, vertical = ReaderDimens.spaceM),
             fontSize = ReaderDimens.body,
             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
             color = if (selected) {

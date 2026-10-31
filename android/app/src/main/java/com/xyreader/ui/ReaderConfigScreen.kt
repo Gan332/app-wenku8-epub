@@ -168,7 +168,7 @@ private fun GroupPage(scrollable: Boolean = false, content: @Composable () -> Un
 /** 翻页方式 / 点击翻页开关 / 双击放大开关 / 漫画方向 */
 @Composable
 private fun PagingGroupPage(prefs: ReaderPrefs, onUpdate: ((ReaderPrefs) -> ReaderPrefs) -> Unit) {
-    GroupPage {
+    GroupPage(scrollable = true) {
         PrefCard(
             title = "翻页模式",
             options = PageMode.entries,

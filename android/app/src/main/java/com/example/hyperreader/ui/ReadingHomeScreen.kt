@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -187,7 +188,7 @@ private fun ReadingHomeSkeleton() {
 @Composable
 private fun ReadingHomeRailSkeleton() {
     Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
-        SectionHeader("最近阅读")
+        ShimmerBlock(Modifier.fillMaxWidth(0.3f).height(UiDimens.touchMin))
         Row(horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceM)) {
             repeat(3) {
                 Column(
