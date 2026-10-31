@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -51,7 +52,7 @@ fun BookmarkCenterScreen(
     val localUriByBookId = remember(bookshelf) { bookshelf.associate { it.bookId to it.localUri } }
 
     Column(
-        modifier = Modifier.fillMaxWidth().padding(top = UiDimens.spaceL),
+        modifier = Modifier.fillMaxSize().padding(top = UiDimens.spaceL),
         verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS),
     ) {
         // 页名与返回由顶栏给（PageChrome，0.19.0-alpha05）；页内不再画返回按钮。
@@ -63,7 +64,7 @@ fun BookmarkCenterScreen(
             )
         } else {
             LazyColumn(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().weight(1f),
                 verticalArrangement = Arrangement.spacedBy(UiDimens.listGap),
                 contentPadding = PaddingValues(bottom = UiDimens.spaceXL),
             ) {

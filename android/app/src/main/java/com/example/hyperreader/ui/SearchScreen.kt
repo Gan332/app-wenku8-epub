@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.clickable
@@ -44,7 +45,12 @@ fun SearchScreen(
     /** 已由顶栏返回图标与系统返回键接管（0.19.0-alpha05）；保留参数只为兼容旧调用点。 */
     onClose: (() -> Unit)? = null,
 ) {
-    Column(Modifier.fillMaxWidth().padding(top = UiDimens.spaceL), verticalArrangement = Arrangement.spacedBy(UiDimens.spaceM)) {
+    Column(
+        Modifier
+            .fillMaxSize()
+            .padding(top = UiDimens.spaceL),
+        verticalArrangement = Arrangement.spacedBy(UiDimens.spaceM),
+    ) {
         // 搜索是独立全屏页：页名与返回都由顶栏给（PageChrome，0.19.0-alpha05），
         // 页内不再画同名大标题或「‹ 返回探索」文字按钮。
         Text(
@@ -125,7 +131,11 @@ fun SearchScreen(
                 EmptyState(title = "输入关键词开始搜索", description = "支持书名与作者，按书名搜索走本地书目索引，断网也能用。")
             }
         } else {
-            LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
+            LazyColumn(
+                modifier = Modifier.fillMaxWidth().weight(1f),
+                contentPadding = PaddingValues(bottom = UiDimens.spaceXL),
+                verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS),
+            ) {
                 items(state.searchResults, key = { it.id }) { result ->
                     SearchResultCard(
                         result,

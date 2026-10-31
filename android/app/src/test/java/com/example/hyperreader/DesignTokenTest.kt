@@ -131,6 +131,29 @@ class DesignTokenTest {
     }
 
     /**
+     * 带 `weight(1f)` 的页面根容器必须有高度预算。
+     *
+     * Column 只有在**有界高度**下才会给 weight 子项分配空间；根 Column 只写
+     * `fillMaxWidth()` 时，列表/操作区在横屏与小屏上可能被裁掉。用文件级断言锁定
+     * 搜索、书签中心与导出向导这几条长列表路径。
+     */
+    @Test
+    fun weightedScrollAreasHaveBoundedParentHeight() {
+        val sourceRoot = generateSequence(File(requireNotNull(System.getProperty("user.dir")))) { it.parentFile }
+            .flatMap { dir -> sequenceOf(File(dir, "src/main/java"), File(dir, "app/src/main/java")) }
+            .firstOrNull { it.isDirectory }
+        requireNotNull(sourceRoot) { "未找到 src/main/java" }
+        val files = listOf("SearchScreen.kt", "BookmarkCenterScreen.kt", "StudioApp.kt")
+        val offenders = mutableListOf<String>()
+        files.forEach { name ->
+            val source = File(sourceRoot, "com/example/hyperreader/ui/$name").readText()
+            assertTrue("$name 缺少 fillMaxSize 根布局", source.contains("fillMaxSize()"))
+            assertTrue("$name 的滚动区缺少 weight", source.contains("weight(1f)"))
+        }
+        assertTrue("长列表页面缺少有界高度：${offenders.joinToString()}", offenders.isEmpty())
+    }
+
+    /**
      * LNR 排版规格的回归守卫（0.19.0）。
      *
      * `LnrDimens` 里的数字全部来自 LNR 上游源码的字面值（`BookCardContent` /

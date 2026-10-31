@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -564,7 +565,7 @@ private fun ExportWizardScreen(state: StudioUiState, viewModel: StudioViewModel)
 @Composable
 private fun ResolvingScreen(state: StudioUiState, viewModel: StudioViewModel) {
     Column(
-        Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(top = UiDimens.spaceL),
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(top = UiDimens.spaceL),
         verticalArrangement = Arrangement.spacedBy(UiDimens.spaceM),
     ) {
         // 关闭由顶栏返回图标 + 系统返回键给（PageChrome → CLOSE_EXPORT）。
@@ -596,7 +597,10 @@ private fun ResolvingScreen(state: StudioUiState, viewModel: StudioViewModel) {
  */
 @Composable
 private fun JobHistoryScreen(state: StudioUiState, viewModel: StudioViewModel) {
-    Column(Modifier.fillMaxWidth().padding(top = UiDimens.spaceL), verticalArrangement = Arrangement.spacedBy(UiDimens.spaceM)) {
+    Column(
+        Modifier.fillMaxSize().padding(top = UiDimens.spaceL),
+        verticalArrangement = Arrangement.spacedBy(UiDimens.spaceM),
+    ) {
         // 返回由顶栏图标 + 系统返回键给（PageChrome → CLOSE_HISTORY，0.19.0-alpha05）。
         HistoryScreen(state.jobs, viewModel)
     }
@@ -609,16 +613,34 @@ private fun ChaptersScreen(state: StudioUiState, viewModel: StudioViewModel) {
     val visible = remember(state.search, index) {
         index.chapters.filter { state.search.isBlank() || it.title.contains(state.search, true) || it.volume.contains(state.search, true) }
     }
-    Column(Modifier.fillMaxWidth().padding(top = UiDimens.spaceL), verticalArrangement = Arrangement.spacedBy(UiDimens.spaceM)) {
+    Column(Modifier.fillMaxSize()) {
         BookHeader(book.title, book.author, book.category, index.chapters.size, state.selectedIds.size)
-        TextField(value = state.search, onValueChange = viewModel::setSearch, label = "搜索章节标题", useLabelAsPlaceholder = true, modifier = Modifier.fillMaxWidth())
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(vertical = UiDimens.spaceS),
+            horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            TextField(
+                value = state.search,
+                onValueChange = viewModel::setSearch,
+                label = "搜索章节标题",
+                useLabelAsPlaceholder = true,
+                modifier = Modifier.weight(1f),
+            )
             TextButton(text = "全选", onClick = viewModel::selectAll)
-            Spacer(Modifier.width(UiDimens.spaceXS))
             TextButton(text = "清空", onClick = viewModel::clearSelection)
         }
-        Text("已选择 ${state.selectedIds.size} / ${index.chapters.size} 章", color = MiuixTheme.colorScheme.primary, fontSize = UiDimens.caption)
-        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXS)) {
+        Text(
+            "已选择 ${state.selectedIds.size} / ${index.chapters.size} 章",
+            modifier = Modifier.padding(bottom = UiDimens.spaceS),
+            color = MiuixTheme.colorScheme.primary,
+            fontSize = UiDimens.caption,
+        )
+        LazyColumn(
+            modifier = Modifier.fillMaxWidth().weight(1f),
+            contentPadding = PaddingValues(bottom = UiDimens.spaceXL),
+            verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXS),
+        ) {
             items(visible, key = { it.id }) { chapter -> ChapterRow(chapter, chapter.id in state.selectedIds) { viewModel.toggleChapter(chapter.id) } }
         }
         Button(onClick = viewModel::toExport, enabled = state.selectedIds.isNotEmpty(), modifier = Modifier.fillMaxWidth()) { Text("继续导出设置") }
@@ -630,7 +652,7 @@ private fun ExportScreen(state: StudioUiState, viewModel: StudioViewModel) {
     val book = state.book ?: return
     val selected = state.index?.chapters?.count { it.id in state.selectedIds } ?: 0
     Column(
-        Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(top = UiDimens.spaceL),
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(top = UiDimens.spaceL),
         verticalArrangement = Arrangement.spacedBy(UiDimens.spaceM),
     ) {
         BookHeader(book.title, book.author, book.category, selected, selected)
@@ -657,7 +679,10 @@ private fun ExportScreen(state: StudioUiState, viewModel: StudioViewModel) {
 private fun ProgressScreen(state: StudioUiState, viewModel: StudioViewModel) {
     val job = state.jobs.firstOrNull { it.id == state.activeJobId } ?: state.jobs.firstOrNull { it.status == JobStatus.running }
     if (job == null) {
-        Column(Modifier.fillMaxWidth().padding(top = UiDimens.spaceL), verticalArrangement = Arrangement.spacedBy(UiDimens.spaceM)) {
+        Column(
+            Modifier.fillMaxSize().padding(top = UiDimens.spaceL),
+            verticalArrangement = Arrangement.spacedBy(UiDimens.spaceM),
+        ) {
             Text("任务状态已更新。", color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f))
             TextButton(text = "查看导出记录", onClick = { viewModel.closeExport(); viewModel.setShowJobHistory(true) })
         }
@@ -671,7 +696,7 @@ private fun ProgressContent(job: ExportJob, viewModel: StudioViewModel) {
     var showWarnings by remember { mutableStateOf(false) }
     val progress = job.progress.percent / 100f
     Column(
-        Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(top = UiDimens.spaceL),
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(top = UiDimens.spaceL),
         verticalArrangement = Arrangement.spacedBy(UiDimens.spaceM),
     ) {
         Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(UiDimens.cardInset)) {
@@ -735,7 +760,11 @@ private fun HistoryScreen(jobs: List<ExportJob>, viewModel: StudioViewModel) {
         )
         return
     }
-    LazyColumn(Modifier.fillMaxWidth().padding(top = UiDimens.spaceL), verticalArrangement = Arrangement.spacedBy(UiDimens.spaceM)) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(bottom = UiDimens.spaceXL),
+        verticalArrangement = Arrangement.spacedBy(UiDimens.spaceM),
+    ) {
         items(jobs, key = { it.id }) { job ->
             Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(UiDimens.cardInset)) {
                 Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXS)) {
