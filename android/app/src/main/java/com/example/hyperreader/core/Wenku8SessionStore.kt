@@ -94,6 +94,50 @@ class Wenku8SessionStore(context: Context) : SessionGate {
     /** 该 host 是否有自己的 clearance（不兼容旧版 .net 单键，用于判断该钉哪个入口）。 */
     fun hasClearanceFor(host: String): Boolean = allCookies()[clearanceKey(host)]?.isNotBlank() == true
 
+    internal fun saveClearanceFromResponse(url: HttpUrl, cookies: List<Cookie>) {
+        val clearance = cookies.firstOrNull { it.name == CLEARANCE_COOKIE && Wenku8Url.carriesSession(url.host) }
+            ?: return
+        val values = allCookies().toMutableMap()
+        values[clearanceKey(url.host)] = clearance.value
+        if (url.host.equals(LEGACY_CLEARANCE_HOST, ignoreCase = true)) values[CLEARANCE_COOKIE] = clearance.value
+        preferences.edit().putString(COOKIE_KEY, jsonObject(values).toString()).apply()
+    }
+
+    internal fun loadClearanceCookies(url: HttpUrl): List<Cookie> {
+        if (!Wenku8Url.carriesSession(url.host)) return emptyList()
+        val value = clearanceValue(allCookies(), url.host) ?: return emptyList()
+        return listOfNotNull(Cookie.parse(url, "$CLEARANCE_COOKIE=$value"))
+    }
+
+    /** 只删某一个 host 的凭证（带该 token 反而被 403 时用）。 */
+    fun removeClearanceFor(host: String) {
+        val current = allCookies()
+        val key = clearanceKey(host)
+        val renameLegacy = host.equals(LEGACY_CLEARANCE_HOST, ignoreCase = true)
+        val remaining = current.filterKeys { it != key && !(renameLegacy && it == CLEARANCE_COOKIE) }
+        if (remaining.size == current.size) return
+        preferences.edit().putString(COOKIE_KEY, jsonObject(remaining).toString()).apply()
+    }
+
+    /** 当前存有凭证的 host 列表（诊断用）。 */
+    fun clearanceHosts(): List<String> = allCookies().keys
+        .filter { it.startsWith(CLEARANCE_PREFIX) }
+        .map { it.removePrefix(CLEARANCE_PREFIX) }
+
+    /**
+     * 清除所有 host 的 `cf_clearance`（含旧版单键）。
+     *
+     * 凭证会过期，也会因为 UA / 出口 IP 变化被 Cloudflare 判为无效；此时**带着旧 token**
+     * 反而可能被硬拦（403 Attention Required），而不带 token 的请求是 200。
+     * 所以「验证过仍被拦」时先清掉再试，而不是反复打开验证页（页面正常时不会重发 token）。
+     */
+    fun removeClearance() {
+        val current = allCookies()
+        val remaining = current.filterKeys { it != CLEARANCE_COOKIE && !it.startsWith(CLEARANCE_PREFIX) }
+        if (remaining.size == current.size) return
+        preferences.edit().putString(COOKIE_KEY, jsonObject(remaining).toString()).apply()
+    }
+
     /**
      * 只携带 `cf_clearance` 的 CookieJar（0.18.0）。
      *
@@ -101,22 +145,7 @@ class Wenku8SessionStore(context: Context) : SessionGate {
      * 否则公开页永远是 403（我们实测过）。它与 [cookieJar] 的区别是**只给这一枚**——
      * `jieqiUserInfo` / `PHPSESSID` 绝不外泄，符合 AGENTS §4.2「免登录链路不得携带会话」。
      */
-    fun clearanceCookieJar(): CookieJar = object : CookieJar {
-        override fun saveFromResponse(url: HttpUrl, cookies: List<Cookie>) {
-            val clearance = cookies.firstOrNull { it.name == CLEARANCE_COOKIE && Wenku8Url.carriesSession(url.host) }
-                ?: return
-            val values = allCookies().toMutableMap()
-            values[clearanceKey(url.host)] = clearance.value
-            if (url.host.equals(LEGACY_CLEARANCE_HOST, ignoreCase = true)) values[CLEARANCE_COOKIE] = clearance.value
-            preferences.edit().putString(COOKIE_KEY, jsonObject(values).toString()).apply()
-        }
-
-        override fun loadForRequest(url: HttpUrl): List<Cookie> {
-            if (!Wenku8Url.carriesSession(url.host)) return emptyList()
-            val value = clearanceValue(allCookies(), url.host) ?: return emptyList()
-            return listOfNotNull(Cookie.parse(url, "$CLEARANCE_COOKIE=$value"))
-        }
-    }
+    fun clearanceCookieJar(): ClearanceCookieJar = ClearanceCookieJar(this)
 
     fun cookieJar(): CookieJar = object : CookieJar {
         /**
@@ -196,5 +225,41 @@ class Wenku8SessionStore(context: Context) : SessionGate {
         fun hasClearance(cookies: Map<String, String>): Boolean =
             clearanceValue(cookies) != null ||
                 cookies.any { (name, value) -> name.startsWith(CLEARANCE_PREFIX) && value.isNotBlank() }
+    }
+}
+
+/**
+ * 只携带 `cf_clearance` 的 CookieJar（0.18.0 起；0.19.0 起按 host 存）。
+ *
+ * 除存取之外还提供「临时挂起」：Cloudflare 在凭证失效时会硬拦携带旧 token 的请求
+ * （403 Attention Required），而不带 token 的请求反而可能 200。客户端在
+ * `Wenku8HttpClient` 里 403 后会先挂起该 host 的 token 重试一次，成功即判定 token 有害并删除。
+ */
+internal class ClearanceCookieJar(private val store: Wenku8SessionStore) : CookieJar {
+    private val suspended = java.util.Collections.synchronizedSet(mutableSetOf<String>())
+
+    override fun saveFromResponse(url: HttpUrl, cookies: List<Cookie>) =
+        store.saveClearanceFromResponse(url, cookies)
+
+    override fun loadForRequest(url: HttpUrl): List<Cookie> {
+        if (suspended.contains(url.host)) return emptyList()
+        return store.loadClearanceCookies(url)
+    }
+
+    /** 该 host 有 token 时临时不发送；返回是否真的挂起了。 */
+    fun suspendFor(host: String): Boolean {
+        if (Wenku8SessionStore.clearanceValue(store.allCookies(), host) == null) return false
+        suspended.add(host)
+        return true
+    }
+
+    fun resumeFor(host: String) {
+        suspended.remove(host)
+    }
+
+    /** 不带 token 也能过：旧 token 是有害的，删掉。 */
+    fun forget(host: String) {
+        suspended.remove(host)
+        store.removeClearanceFor(host)
     }
 }

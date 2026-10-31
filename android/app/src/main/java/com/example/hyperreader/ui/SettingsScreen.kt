@@ -564,6 +564,18 @@ private fun NetworkSection(state: StudioUiState, viewModel: StudioViewModel, onO
                         onClick = viewModel::refreshClearanceState,
                         modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
                     )
+                    TextButton(
+                        text = "清除验证凭证（403 时先试这个）",
+                        onClick = viewModel::clearClearance,
+                        modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
+                    )
+                    Text(
+                        "验证凭证会过期，也会因换网络 / UA 失效；失效后带着旧 token 反而被直接 403，" +
+                            "而不带 token 的请求可能是 200。所以「验证过仍被拦」时先清凭证重试；" +
+                            "验证页只在下发新凭证时有用（页面正常加载时不会再发）。",
+                        fontSize = UiDimens.captionSmall,
+                        color = secondaryTextColor(),
+                    )
             }
         },
         {

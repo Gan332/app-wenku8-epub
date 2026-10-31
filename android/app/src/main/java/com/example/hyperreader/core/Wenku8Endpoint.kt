@@ -56,6 +56,9 @@ object Wenku8Endpoint {
     /** 当前使用的直连入口（设置页展示用）。 */
     fun activeDirectBase(): String = entries[hostIndex]
 
+    /** 当前入口的 host（如 `www.wenku8.net`），用于按 host 取验证凭证。 */
+    fun activeDirectHost(): String = java.net.URI(entries[hostIndex]).host
+
     /**
      * 应用用户偏好的首个直连入口；传空/非法值回落到 `.net`。
      *

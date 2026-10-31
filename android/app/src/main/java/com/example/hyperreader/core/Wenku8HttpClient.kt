@@ -20,7 +20,7 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import kotlin.math.max
 
-class Wenku8HttpClient(private val cacheDirectory: File, sessionCookieJar: CookieJar? = null) {
+class Wenku8HttpClient(private val cacheDirectory: File, private val sessionCookieJar: CookieJar? = null) {
     private val activeCalls = ConcurrentHashMap<String, MutableSet<Call>>()
     private val client = OkHttpClient.Builder()
         // 协议与 TLS 口径集中在 Wenku8NetProtocols（HTTP/2 优先 + TLS 1.3，见该文件 KDoc）
@@ -77,13 +77,32 @@ class Wenku8HttpClient(private val cacheDirectory: File, sessionCookieJar: Cooki
         mode: HttpRateLimiter.Mode = HttpRateLimiter.Mode.BATCH,
         image: Boolean = false,
     ): HttpResult {
+        // 图片：先钉回 CDN 主机与 https，再交给入口改写（图片不是入口，不会被改写）
+        val target = if (image) Wenku8Url.canonicalizeImage(rawUrl) else rawUrl
         var rotated = false
+        val clearanceChecked = mutableSetOf<String>()
         while (true) {
             try {
-                // 图片：先钉回 CDN 主机与 https，再交给入口改写（图片不是入口，不会被改写）
-                val target = if (image) Wenku8Url.canonicalizeImage(rawUrl) else rawUrl
                 return executeOnce(Wenku8Endpoint.rewire(target), jobId, maxBytes, referer, mode, image)
             } catch (error: Wenku8Exception) {
+                // 凭证失效时 Cloudflare 会硬拦「带旧 token」的请求，而不带 token 未必被拦。
+                // 先挂起当前入口的 token 重试一次：成功说明 token 有害，直接删掉；失败则恢复。
+                val host = Wenku8Endpoint.activeDirectHost()
+                if (error.code == "UPSTREAM_CHALLENGE" && clearanceChecked.add(host)) {
+                    val jar = sessionCookieJar as? ClearanceCookieJar
+                    if (jar != null && jar.suspendFor(host)) {
+                        val withoutToken = try {
+                            executeOnce(Wenku8Endpoint.rewire(target), jobId, maxBytes, referer, mode, image)
+                        } catch (retryError: Wenku8Exception) {
+                            null
+                        }
+                        if (withoutToken != null) {
+                            jar.forget(host)
+                            return withoutToken
+                        }
+                        jar.resumeFor(host)
+                    }
+                }
                 // 证书/握手失败同样可能只发生在某一个边缘入口（各镜像证书配置独立），
                 // 因此与 Cloudflare 挑战一样换一个入口重试一次；图片不走入口轮换。
                 val retryable = error.code == "UPSTREAM_CHALLENGE" ||

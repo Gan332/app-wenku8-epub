@@ -44,6 +44,22 @@ class ClearanceCookieTest {
     }
 
     @Test
+    fun clearanceKeyIsLowercasedAndPerHost() {
+        assertEquals("cf_clearance@www.wenku8.cc", Wenku8SessionStore.clearanceKey("WWW.Wenku8.CC"))
+    }
+
+    @Test
+    fun scopedTokenDoesNotLeakAcrossEntriesWhenLegacyTokenExists() {
+        val mixed = mapOf(
+            "cf_clearance" to "legacy-net",
+            Wenku8SessionStore.clearanceKey("www.wenku8.cc") to "cc-token",
+        )
+        assertEquals("legacy-net", Wenku8SessionStore.clearanceValue(mixed, "www.wenku8.net"))
+        assertEquals("cc-token", Wenku8SessionStore.clearanceValue(mixed, "www.wenku8.cc"))
+        assertNull(Wenku8SessionStore.clearanceValue(mixed, "www.wenku8.com"))
+    }
+
+    @Test
     fun clearanceTravelsToWenku8HostsOnly() {
         // 公开链路只向 wenku8 自身域名回传 clearance
         assertTrue(Wenku8Url.carriesSession("www.wenku8.net"))

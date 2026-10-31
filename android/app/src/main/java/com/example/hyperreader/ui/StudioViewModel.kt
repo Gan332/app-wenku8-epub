@@ -513,6 +513,23 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     /** 刷新验证状态读数（是否存在 `cf_clearance`）。 */
     fun refreshClearanceState() = mutable.update { it.copy(clearancePresent = app.sessionStore.hasClearance()) }
 
+    /**
+     * 弃用当前验证凭证并重试公开页。
+     *
+     * 与「打开验证页」的区别：验证页只在 Cloudflare 真的下发新 token 时有用；
+     * 若旧 token 已失效（换网络/UA 后常见），带着它反而被硬拦，清掉后请求立刻恢复正常。
+     */
+    fun clearClearance() {
+        app.sessionStore.removeClearance()
+        mutable.update {
+            it.copy(
+                clearancePresent = false,
+                message = "已清除验证凭证，正在重试公开页…",
+            )
+        }
+        state.value.activeExplorePage?.let { page -> loadExplore(page) }
+    }
+
     /** 403 / 挑战页时的统一提示：说明这是「浏览器 JS 挑战」而非可点击的验证。 */
     fun challengeHint(): String =
         if (state.value.clearancePresent) "当前网络下 Cloudflare 仍在拦截本客户端。" else "Cloudflare 要求浏览器执行验证；验证一次后即可继续。"
