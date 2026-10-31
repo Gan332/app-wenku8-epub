@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -89,153 +90,158 @@ fun ExploreDetailScreen(
 
     var showCover by remember { mutableStateOf(false) }
 
-    LazyColumn(
-        modifier = modifier.fillMaxSize(),
-        // 左右内边距由宿主给一次（StudioApp 的 Column 已 padding(pagePadding)）。
-        contentPadding = PaddingValues(top = UiDimens.spaceS, bottom = UiDimens.spaceXL),
-        verticalArrangement = Arrangement.spacedBy(UiDimens.spaceM),
-    ) {
-        // 加载中且还没有任何数据：只渲染 loading 卡片，避免闪一屏空卡片。
-        // 用条件分支包住后续 item，而不是 `return@LazyColumn` —— 后者的标签
-        // 指向 LazyListScope 的非内联 lambda，写起来脆且不利于阅读。
-        val emptyLoading = loading && detail == null && seed == null
-        if (emptyLoading) {
-            item(key = "loading-full") {
-                Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
-                    ShimmerLine(heightDp = 22)
-                    ShimmerLine(heightDp = 16)
-                    ShimmerLine(heightDp = 120)
-                    Text("正在获取书籍信息…", fontSize = UiDimens.caption, color = secondaryTextColor())
+    val listState = rememberLazyListState()
+    Box(modifier.fillMaxSize()) {
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.fillMaxSize(),
+            // 左右内边距由宿主给一次（StudioApp 的 Column 已 padding(pagePadding)）。
+            contentPadding = PaddingValues(top = UiDimens.spaceS, bottom = UiDimens.spaceXL),
+            verticalArrangement = Arrangement.spacedBy(UiDimens.spaceM),
+        ) {
+            // 加载中且还没有任何数据：只渲染 loading 卡片，避免闪一屏空卡片。
+            // 用条件分支包住后续 item，而不是 `return@LazyColumn` —— 后者的标签
+            // 指向 LazyListScope 的非内联 lambda，写起来脆且不利于阅读。
+            val emptyLoading = loading && detail == null && seed == null
+            if (emptyLoading) {
+                item(key = "loading-full") {
+                    Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
+                        ShimmerLine(heightDp = 22)
+                        ShimmerLine(heightDp = 16)
+                        ShimmerLine(heightDp = 120)
+                        Text("正在获取书籍信息…", fontSize = UiDimens.caption, color = secondaryTextColor())
+                    }
                 }
             }
-        }
 
-        if (!emptyLoading) {
-            item(key = "profile") {
-                BookProfile(
-                    title = title.ifBlank { "未命名" },
-                    author = author,
-                    category = category,
-                    status = status,
-                    coverUrl = coverUrl,
-                    // 有 seed 时已先渲染可读内容，不再在作品档案头里重复显示转圈。
-                    loading = loading && detail == null,
-                    onCoverClick = { showCover = true },
-                )
-            }
-
-            item(key = "facts") {
-                StudioPanel("作品信息") {
-                    if (status.isNotBlank()) StudioFactRow("状态", status)
-                    wordCount?.let { count -> StudioFactRow("全文字数", "${formatWordCount(count)} 字") }
-                    if (updatedAt.isNotBlank()) StudioFactRow("最后更新", updatedAt)
-                    StudioFactRow(
-                        "章节数",
-                        when {
-                            detail != null && detail.chapterCount > 0 -> "${detail.chapterCount}"
-                            loading -> "获取中…"
-                            else -> "未知"
-                        },
+            if (!emptyLoading) {
+                item(key = "profile") {
+                    BookProfile(
+                        title = title.ifBlank { "未命名" },
+                        author = author,
+                        category = category,
+                        status = status,
+                        coverUrl = coverUrl,
+                        // 有 seed 时已先渲染可读内容，不再在作品档案头里重复显示转圈。
+                        loading = loading && detail == null,
+                        onCoverClick = { showCover = true },
                     )
-                    StudioFactRow("来源", "Wenku8 轻小说文库")
                 }
-            }
 
-            // 目录页单独失败：书籍信息仍可用，就地提示 + 重试，不整页报错
-            if (error != null) {
-                item(key = "error") {
-                    StudioPanel("部分信息加载失败") {
-                        Text(error, fontSize = UiDimens.caption, color = MiuixTheme.colorScheme.error)
-                        TextButton(
-                            text = "重试",
-                            onClick = onRetry,
-                            modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
+                item(key = "facts") {
+                    StudioPanel("作品信息") {
+                        if (status.isNotBlank()) StudioFactRow("状态", status)
+                        wordCount?.let { count -> StudioFactRow("全文字数", "${formatWordCount(count)} 字") }
+                        if (updatedAt.isNotBlank()) StudioFactRow("最后更新", updatedAt)
+                        StudioFactRow(
+                            "章节数",
+                            when {
+                                detail != null && detail.chapterCount > 0 -> "${detail.chapterCount}"
+                                loading -> "获取中…"
+                                else -> "未知"
+                            },
+                        )
+                        StudioFactRow("来源", "Wenku8 轻小说文库")
+                    }
+                }
+
+                // 目录页单独失败：书籍信息仍可用，就地提示 + 重试，不整页报错
+                if (error != null) {
+                    item(key = "error") {
+                        StudioPanel("部分信息加载失败") {
+                            Text(error, fontSize = UiDimens.caption, color = MiuixTheme.colorScheme.error)
+                            TextButton(
+                                text = "重试",
+                                onClick = onRetry,
+                                modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
+                            )
+                        }
+                    }
+                }
+
+                if (tags.isNotEmpty()) {
+                    item(key = "tags") {
+                        StudioPanel("作品标签") {
+                            LazyRow(horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
+                                items(tags) { tag -> TextButton(text = tag, onClick = { onTagClick(tag) }) }
+                            }
+                        }
+                    }
+                }
+
+                item(key = "summary") {
+                    StudioPanel("内容简介") {
+                        Text(
+                            text = summary.ifBlank { if (loading) "正在获取简介…" else "源站没有提供简介。" },
+                            color = secondaryTextColor(),
+                            fontSize = UiDimens.body,
                         )
                     }
                 }
-            }
 
-            if (tags.isNotEmpty()) {
-                item(key = "tags") {
-                    StudioPanel("作品标签") {
-                        LazyRow(horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
-                            items(tags) { tag -> TextButton(text = tag, onClick = { onTagClick(tag) }) }
-                        }
-                    }
-                }
-            }
-
-            item(key = "summary") {
-                StudioPanel("内容简介") {
-                    Text(
-                        text = summary.ifBlank { if (loading) "正在获取简介…" else "源站没有提供简介。" },
-                        color = secondaryTextColor(),
-                        fontSize = UiDimens.body,
+                // —— 章节目录（0.18.0）：默认预览前20 章，可搜索/展开，点章直接在线读 ——
+                item(key = "toc") {
+                    ChapterTocCard(
+                        chapters = detail?.chapters.orEmpty(),
+                        loading = loading && detail == null,
+                        onReadChapter = onReadChapter,
                     )
                 }
-            }
 
-            // —— 章节目录（0.18.0）：默认预览前20 章，可搜索/展开，点章直接在线读 ——
-            item(key = "toc") {
-                ChapterTocCard(
-                    chapters = detail?.chapters.orEmpty(),
-                    loading = loading && detail == null,
-                    onReadChapter = onReadChapter,
-                )
-            }
-
-            item(key = "actions") {
-                StudioPanel("开始阅读") {
-                    if (detail != null || !loading) {
-                        Button(
-                            onClick = onReadOnline,
-                            enabled = bookId.isNotBlank(),
-                            modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
-                            cornerRadius = UiDimens.panelCorner,
-                        ) { Text("在线阅读") }
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS),
-                        ) {
-                            TextButton(
-                                text = "加入书架",
-                                onClick = onAddToShelf,
-                                enabled = detail != null,
-                                modifier = Modifier.weight(1f).heightIn(min = UiDimens.touchMin),
-                            )
-                            TextButton(
-                                text = "同作者",
-                                onClick = onSameAuthor,
-                                enabled = detail != null,
-                                modifier = Modifier.weight(1f).heightIn(min = UiDimens.touchMin),
-                            )
-                        }
-                    }
-                    // —— 两种 EPUB 导出引擎（小按钮，并排）——
-                    // 直接用本页已加载的目录建任务，不经过创建流程的选章步骤；
-                    // 引擎按任务指定，不受设置里的全局选择影响。
-                    if (detail != null && detail.chapters.isNotEmpty()) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS),
-                        ) {
-                            com.example.hyperreader.settings.EpubEngine.entries.forEach { option ->
+                item(key = "actions") {
+                    StudioPanel("开始阅读") {
+                        if (detail != null || !loading) {
+                            Button(
+                                onClick = onReadOnline,
+                                enabled = bookId.isNotBlank(),
+                                modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
+                                cornerRadius = UiDimens.panelCorner,
+                            ) { Text("在线阅读") }
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS),
+                            ) {
                                 TextButton(
-                                    text = "导出 · ${option.label}",
-                                    onClick = { onExport(option) },
+                                    text = "加入书架",
+                                    onClick = onAddToShelf,
+                                    enabled = detail != null,
+                                    modifier = Modifier.weight(1f).heightIn(min = UiDimens.touchMin),
+                                )
+                                TextButton(
+                                    text = "同作者",
+                                    onClick = onSameAuthor,
+                                    enabled = detail != null,
                                     modifier = Modifier.weight(1f).heightIn(min = UiDimens.touchMin),
                                 )
                             }
                         }
+                        // —— 两种 EPUB 导出引擎（小按钮，并排）——
+                        // 直接用本页已加载的目录建任务，不经过创建流程的选章步骤；
+                        // 引擎按任务指定，不受设置里的全局选择影响。
+                        if (detail != null && detail.chapters.isNotEmpty()) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS),
+                            ) {
+                                com.example.hyperreader.settings.EpubEngine.entries.forEach { option ->
+                                    TextButton(
+                                        text = "导出 · ${option.label}",
+                                        onClick = { onExport(option) },
+                                        modifier = Modifier.weight(1f).heightIn(min = UiDimens.touchMin),
+                                    )
+                                }
+                            }
+                        }
+                        Text(
+                            "本页面只读取源站公开信息，不经过导出解析流程。",
+                            fontSize = UiDimens.captionSmall,
+                            color = tertiaryTextColor(),
+                        )
                     }
-                    Text(
-                        "本页面只读取源站公开信息，不经过导出解析流程。",
-                        fontSize = UiDimens.captionSmall,
-                        color = tertiaryTextColor(),
-                    )
                 }
             }
         }
+        AppScrollBar(listState)
     }
 
     if (showCover && coverUrl != null) {

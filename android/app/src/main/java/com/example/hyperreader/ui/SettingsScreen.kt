@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -156,109 +157,114 @@ private fun SettingsOverview(state: StudioUiState, viewModel: StudioViewModel) {
                     },
                 )
             }
-            LazyColumn(
-                modifier = Modifier.weight(1f),
-                contentPadding = PaddingValues(top = UiDimens.spaceS, bottom = UiDimens.spaceXL),
-                verticalArrangement = Arrangement.spacedBy(UiDimens.spaceL),
-            ) {
-                item(key = "settings-hero") {
-                    StudioHero(
-                        kicker = "MAKE IT YOURS",
-                        title = "把阅读调到最舒服",
-                        description = "主题、排版、网络与本地数据都收在这里。修改会即时保存，不需要额外确认。",
-                    )
-                }
-                if (!wide) {
-                    // 页名由顶栏给（PageChrome，0.19.0-alpha05）：页内不再重复画「设置」大标题
-                    // 与同义图标槽；窄屏只保留「分类」抽屉入口。
-                    item(key = "categories") {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(min = UiDimens.touchMin),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(
-                                "选择一个分类快速跳转",
-                                fontSize = UiDimens.captionSmall,
-                                color = tertiaryTextColor(),
-                            )
-                            TextButton(text = "分类", onClick = { railOpen = true }, modifier = Modifier.heightIn(min = UiDimens.touchMin))
-                        }
-                    }
-                }
-                SETTINGS_GROUPS.forEach { (groupTitle, categories) ->
-                    // 分组标题：LNR `SectionHeader` 用 24dp 左右外边距、10dp 上下外边距。
-                    item(key = "group-$groupTitle") {
-                        Text(
-                            groupTitle,
-                            modifier = Modifier.padding(
-                                horizontal = UiDimens.spaceXS,
-                                vertical = UiDimens.spaceXXS,
-                            ),
-                            fontSize = UiDimens.captionSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = secondaryTextColor(),
+            val overviewListState = rememberLazyListState()
+            Box(Modifier.weight(1f)) {
+                LazyColumn(
+                    state = overviewListState,
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(top = UiDimens.spaceS, bottom = UiDimens.spaceXL),
+                    verticalArrangement = Arrangement.spacedBy(UiDimens.spaceL),
+                ) {
+                    item(key = "settings-hero") {
+                        StudioHero(
+                            kicker = "MAKE IT YOURS",
+                            title = "把阅读调到最舒服",
+                            description = "主题、排版、网络与本地数据都收在这里。修改会即时保存，不需要额外确认。",
                         )
                     }
-                    // 一个分组 = **一张**圆角组卡，组内多行（不是每分类一张卡）：
-                    // LNR `SettingsCategory` 就是这个形状 —— 16dp 圆角容器 + 2dp 行距。
-                    item(key = "groupcard-$groupTitle") {
-                        Card(
-                            Modifier
-                                .fillMaxWidth()
-                                .padding(bottom = UiDimens.spaceXS),
-                            cornerRadius = UiDimens.heroCorner,
-                            insideMargin = PaddingValues(UiDimens.spaceXS),
-                        ) {
-                            Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXXS)) {
-                                categories.forEach { category ->
-                                    SettingsEntryRow(
-                                        title = category.title,
-                                        summary = category.summary,
-                                        glyph = category.glyph,
-                                        onClick = { viewModel.openSettingsSection(category.section) },
-                                    )
-                                }
-                                // 组内追加的直达成项（LNR 把这类编辑项放在 `DisplaySettingsList` 等列表里，同属组内一行）：
-                                // 用「是否包含某分类」判断而非分组名字符串比较——改 SETTINGS_GROUPS 的分组名时不会静默失效。
-                                if (categories.any { it == SettingsCategory.ABOUT }) {
-                                    SettingsEntryRow(
-                                        title = "配置备份",
-                                        summary = "主题与阅读器设置的备份与迁移。",
-                                        glyph = "备",
-                                        onClick = { viewModel.openSettingsSection(SettingsSection.CONFIG) },
-                                    )
-                                    SettingsEntryRow(
-                                        title = "阅读统计",
-                                        summary = "阅读时长、连续天数与每本书排行。",
-                                        glyph = "时",
-                                        onClick = { viewModel.openSettingsSection(SettingsSection.STATISTICS) },
-                                    )
-                                }
-                                if (categories.any { it == SettingsCategory.DATA }) {
-                                    HorizontalDivider(Modifier.fillMaxWidth())
-                                    val engine by viewModel.exportEngine.collectAsStateWithLifecycle(
-                                        initialValue = com.example.hyperreader.settings.EpubEngine.CLASSIC,
-                                    )
-                                    SettingsEntryRow(
-                                        title = "EPUB 导出引擎",
-                                        summary = "${engine.label} · ${engine.summary}",
-                                        glyph = "出",
-                                        onClick = { engineSheet = true },
-                                    )
-                                    SettingsEntryRow(
-                                        title = "导出记录",
-                                        summary = "历史导出任务，可保存或分享已生成的 EPUB。",
-                                        glyph = "记",
-                                        onClick = { viewModel.setShowJobHistory(true) },
-                                    )
+                    if (!wide) {
+                        // 页名由顶栏给（PageChrome，0.19.0-alpha05）：页内不再重复画「设置」大标题
+                        // 与同义图标槽；窄屏只保留「分类」抽屉入口。
+                        item(key = "categories") {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = UiDimens.touchMin),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    "选择一个分类快速跳转",
+                                    fontSize = UiDimens.captionSmall,
+                                    color = tertiaryTextColor(),
+                                )
+                                TextButton(text = "分类", onClick = { railOpen = true }, modifier = Modifier.heightIn(min = UiDimens.touchMin))
+                            }
+                        }
+                    }
+                    SETTINGS_GROUPS.forEach { (groupTitle, categories) ->
+                        // 分组标题：LNR `SectionHeader` 用 24dp 左右外边距、10dp 上下外边距。
+                        item(key = "group-$groupTitle") {
+                            Text(
+                                groupTitle,
+                                modifier = Modifier.padding(
+                                    horizontal = UiDimens.spaceXS,
+                                    vertical = UiDimens.spaceXXS,
+                                ),
+                                fontSize = UiDimens.captionSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = secondaryTextColor(),
+                            )
+                        }
+                        // 一个分组 = **一张**圆角组卡，组内多行（不是每分类一张卡）：
+                        // LNR `SettingsCategory` 就是这个形状 —— 16dp 圆角容器 + 2dp 行距。
+                        item(key = "groupcard-$groupTitle") {
+                            Card(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = UiDimens.spaceXS),
+                                cornerRadius = UiDimens.heroCorner,
+                                insideMargin = PaddingValues(UiDimens.spaceXS),
+                            ) {
+                                Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXXS)) {
+                                    categories.forEach { category ->
+                                        SettingsEntryRow(
+                                            title = category.title,
+                                            summary = category.summary,
+                                            glyph = category.glyph,
+                                            onClick = { viewModel.openSettingsSection(category.section) },
+                                        )
+                                    }
+                                    // 组内追加的直达成项（LNR 把这类编辑项放在 `DisplaySettingsList` 等列表里，同属组内一行）：
+                                    // 用「是否包含某分类」判断而非分组名字符串比较——改 SETTINGS_GROUPS 的分组名时不会静默失效。
+                                    if (categories.any { it == SettingsCategory.ABOUT }) {
+                                        SettingsEntryRow(
+                                            title = "配置备份",
+                                            summary = "主题与阅读器设置的备份与迁移。",
+                                            glyph = "备",
+                                            onClick = { viewModel.openSettingsSection(SettingsSection.CONFIG) },
+                                        )
+                                        SettingsEntryRow(
+                                            title = "阅读统计",
+                                            summary = "阅读时长、连续天数与每本书排行。",
+                                            glyph = "时",
+                                            onClick = { viewModel.openSettingsSection(SettingsSection.STATISTICS) },
+                                        )
+                                    }
+                                    if (categories.any { it == SettingsCategory.DATA }) {
+                                        HorizontalDivider(Modifier.fillMaxWidth())
+                                        val engine by viewModel.exportEngine.collectAsStateWithLifecycle(
+                                            initialValue = com.example.hyperreader.settings.EpubEngine.CLASSIC,
+                                        )
+                                        SettingsEntryRow(
+                                            title = "EPUB 导出引擎",
+                                            summary = "${engine.label} · ${engine.summary}",
+                                            glyph = "出",
+                                            onClick = { engineSheet = true },
+                                        )
+                                        SettingsEntryRow(
+                                            title = "导出记录",
+                                            summary = "历史导出任务，可保存或分享已生成的 EPUB。",
+                                            glyph = "记",
+                                            onClick = { viewModel.setShowJobHistory(true) },
+                                        )
+                                    }
                                 }
                             }
                         }
                     }
                 }
+                AppScrollBar(overviewListState)
             }
         }
         if (!wide && railOpen) {
@@ -286,7 +292,7 @@ private fun SettingsOverview(state: StudioUiState, viewModel: StudioViewModel) {
                     Text(
                         "只影响之后创建的导出任务；已导出的文件不受影响。",
                         fontSize = UiDimens.captionSmall,
-                        color = MiuixTheme.colorScheme.onSurface.copy(alpha = .7f),
+                        color = secondaryTextColor(),
                     )
                     com.example.hyperreader.settings.EpubEngine.entries.forEach { option ->
                         TextButton(
@@ -853,14 +859,19 @@ internal fun SettingsScaffold(@Suppress("UNUSED_PARAMETER") title: String, @Supp
     // 页名由顶栏给（`PageChrome.chromeTitle`，0.19.0-alpha05）：这里不再画一遍同名标题，
     // 返回也改由顶栏图标 + 系统返回键承载（`PageChrome.upTarget` → `CLOSE_SETTINGS`）。
     Column(Modifier.fillMaxSize().padding(top = UiDimens.spaceS), verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
-        LazyColumn(
-            modifier = Modifier.fillMaxWidth().weight(1f),
-            // 左右内边距由宿主给一次（StudioApp 的 Column 已 padding(pagePadding)）：
-            // 这里再写一遍会让列表里的卡片比页内标题多缩进 16dp。
-            contentPadding = PaddingValues(bottom = UiDimens.spaceXL),
-            verticalArrangement = Arrangement.spacedBy(UiDimens.spaceM),
-        ) {
-            items(blocks.size) { index -> blocks[index]() }
+        val listState = rememberLazyListState()
+        Box(Modifier.fillMaxWidth().weight(1f)) {
+            LazyColumn(
+                state = listState,
+                modifier = Modifier.fillMaxSize(),
+                // 左右内边距由宿主给一次（StudioApp 的 Column 已 padding(pagePadding)）：
+                // 这里再写一遍会让列表里的卡片比页内标题多缩进 16dp。
+                contentPadding = PaddingValues(bottom = UiDimens.spaceXL),
+                verticalArrangement = Arrangement.spacedBy(UiDimens.spaceM),
+            ) {
+                items(blocks.size) { index -> blocks[index]() }
+            }
+            AppScrollBar(listState)
         }
         // 返回/页名已由顶栏接管；设置页自身的 BackHandler 也删了，统一走 StudioApp。
     }

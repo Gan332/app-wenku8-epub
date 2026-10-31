@@ -13,11 +13,11 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -32,6 +32,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import com.example.hyperreader.model.BookshelfEntry
 import com.example.hyperreader.settings.ReadingProgress
 import com.example.hyperreader.ui.cover.CoverImage
+import kotlin.math.roundToInt
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.LinearProgressIndicator
 import top.yukonga.miuix.kmp.basic.Text
@@ -41,22 +42,36 @@ import top.yukonga.miuix.kmp.icon.extended.ChevronForward
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 /**
+ * 「读了多少」的百分比：按**章节**估算（页进度依赖字号，不能跨设备换算，AGENTS §4.8）。
+ *
+ * 有进度时至少显示 1%，避免刚读到第 1 章时出现「0%」被误读成没开始读；
+ * 章节总数未知时同样给 1%——按「第 1 章 / 1 章」算成 100% 会被误读成已读完。
+ */
+internal fun readingPercent(progress: ReadingProgress?, chapterCount: Int): Int {
+    if (progress == null) return 0
+    if (chapterCount <= 0) return 1
+    val total = chapterCount.coerceAtLeast(progress.chapterIndex + 1)
+    return (((progress.chapterIndex + 1).toFloat() / total) * 100).roundToInt().coerceIn(1, 100)
+}
+
+/**
  * 阅读首页。
  *
  * 这一屏不是「书架摘要」，而是读者回到应用后的第一落点：先给一个可继续的阅读入口，
- * 再提供最近书目与书签。因此主卡使用完整的封面 + 大字号书名 + 阅读断点，
- * 其余内容收敛成横向封面轨道。
+ * 再提供最近书目。因此主卡使用完整的封面 + 大字号书名 + 阅读断点，
+ * 其余内容收敛成横向封面轨道；书签中心收在顶栏右槽。
  */
 @Composable
 fun ReadingHomeScreen(
     bookshelf: List<BookshelfEntry>,
     progress: Map<String, ReadingProgress>,
     bookshelfLoaded: Boolean,
+    /** 滚动位置由宿主按 tab 缓存（同书架 / 探索），切走再回来不会跳回顶部。 */
+    listState: LazyListState,
     onOpenLocal: (BookshelfEntry) -> Unit,
     onOpenRemote: (BookshelfEntry) -> Unit,
     onOpenBookshelf: () -> Unit,
     onOpenExplore: () -> Unit,
-    onOpenBookmarks: () -> Unit,
 ) {
     val now = remember(bookshelf, progress) { System.currentTimeMillis() }
     val withProgress = remember(bookshelf, progress) {
@@ -74,79 +89,69 @@ fun ReadingHomeScreen(
         if (entry.localUri != null) onOpenLocal(entry) else onOpenRemote(entry)
     }
 
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(top = UiDimens.spaceS, bottom = UiDimens.spaceXL),
-        verticalArrangement = Arrangement.spacedBy(UiDimens.spaceL),
-    ) {
-        item(key = "reading-toolbar") {
-            Row(
-                modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
-                horizontalArrangement = Arrangement.End,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                TextButton(
-                    text = "书签中心",
-                    onClick = onOpenBookmarks,
-                    modifier = Modifier.heightIn(min = UiDimens.touchMin),
-                )
-            }
-        }
-
-        if (!bookshelfLoaded) {
-            item(key = "loading") {
-                Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceL)) {
-                    ReadingHomeSkeleton()
-                    ReadingHomeRailSkeleton()
+    Box(Modifier.fillMaxSize()) {
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(top = UiDimens.spaceS, bottom = UiDimens.spaceXL),
+            verticalArrangement = Arrangement.spacedBy(UiDimens.spaceL),
+        ) {
+            if (!bookshelfLoaded) {
+                item(key = "loading") {
+                    Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceL)) {
+                        ReadingHomeSkeleton()
+                        ReadingHomeRailSkeleton()
+                    }
+                }
+            } else if (continueEntry == null) {
+                item(key = "empty") {
+                    StudioHero(
+                        kicker = "START HERE",
+                        title = "从一本书开始",
+                        description = "书架里的书会自动保存阅读位置。读过的内容会出现在这里，下次打开就能接着读。",
+                    ) {
+                        TextButton(text = "打开书架", onClick = onOpenBookshelf)
+                        TextButton(text = "去探索", onClick = onOpenExplore)
+                    }
+                }
+            } else {
+                item(key = "continue") {
+                    ContinueReadingCard(
+                        entry = continueEntry,
+                        resume = progress[continueEntry.bookId],
+                        now = now,
+                        onClick = { open(continueEntry) },
+                    )
                 }
             }
-        } else if (continueEntry == null) {
-            item(key = "empty") {
-                StudioHero(
-                    kicker = "START HERE",
-                    title = "从一本书开始",
-                    description = "书架里的书会自动保存阅读位置。读过的内容会出现在这里，下次打开就能接着读。",
-                ) {
-                    TextButton(text = "打开书架", onClick = onOpenBookshelf)
-                    TextButton(text = "去探索", onClick = onOpenExplore)
+
+            if (bookshelfLoaded && recentWithProgress.isNotEmpty()) {
+                item(key = "recent-progress") {
+                    Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
+                        SectionHeader("继续上次")
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceM)) {
+                            items(recentWithProgress, key = { it.id }) { entry ->
+                                RecentBookCard(entry = entry, resume = progress[entry.bookId], onClick = { open(entry) })
+                            }
+                        }
+                    }
                 }
             }
-        } else {
-            item(key = "continue") {
-                ContinueReadingCard(
-                    entry = continueEntry,
-                    resume = progress[continueEntry.bookId],
-                    now = now,
-                    onClick = { open(continueEntry) },
-                )
-            }
-        }
 
-        if (bookshelfLoaded && recentWithProgress.isNotEmpty()) {
-            item(key = "recent-progress") {
-                Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
-                    SectionHeader("继续上次")
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceM)) {
-                        items(recentWithProgress, key = { it.id }) { entry ->
-                            RecentBookCard(entry = entry, resume = progress[entry.bookId], onClick = { open(entry) })
+            if (bookshelfLoaded && recentlyRead.isNotEmpty()) {
+                item(key = "recent-read") {
+                    Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
+                        SectionHeader("最近翻过")
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceM)) {
+                            items(recentlyRead, key = { it.id }) { entry ->
+                                RecentBookCard(entry = entry, resume = progress[entry.bookId], onClick = { open(entry) })
+                            }
                         }
                     }
                 }
             }
         }
-
-        if (bookshelfLoaded && recentlyRead.isNotEmpty()) {
-            item(key = "recent-read") {
-                Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
-                    SectionHeader("最近翻过")
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceM)) {
-                        items(recentlyRead, key = { it.id }) { entry ->
-                            RecentBookCard(entry = entry, resume = progress[entry.bookId], onClick = { open(entry) })
-                        }
-                    }
-                }
-            }
-        }
+        AppScrollBar(listState)
     }
 }
 
@@ -277,12 +282,24 @@ private fun ContinueReadingCard(
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
-                resume?.let {
-                    LinearProgressIndicator(
-                        progress = ((it.chapterIndex + 1).toFloat() /
-                            (entry.chapterCount.coerceAtLeast(it.chapterIndex + 1))).coerceIn(0f, 1f),
+                resume?.let { progress ->
+                    val percent = readingPercent(progress, entry.chapterCount)
+                    Row(
                         modifier = Modifier.fillMaxWidth(),
-                    )
+                        horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        LinearProgressIndicator(
+                            progress = percent / 100f,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Text(
+                            "$percent%",
+                            fontSize = UiDimens.captionSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = colors.primary,
+                        )
+                    }
                 }
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -347,7 +364,7 @@ private fun RecentBookCard(
             overflow = TextOverflow.Ellipsis,
         )
         Text(
-            resume?.let { "第 ${it.chapterIndex + 1} 章" } ?: "尚未开始",
+            resume?.let { "第 ${it.chapterIndex + 1} 章 · ${readingPercent(it, entry.chapterCount)}%" } ?: "尚未开始",
             fontSize = UiDimens.captionSmall,
             color = if (resume != null) MiuixTheme.colorScheme.primary else tertiaryTextColor(),
             maxLines = 1,

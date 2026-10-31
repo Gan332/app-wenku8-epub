@@ -587,7 +587,9 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     fun closeExploreExpanded() = mutable.update { it.copy(exploreExpanded = false) }
 
     fun refreshExplore() {
-        state.value.activeExplorePage?.let { page -> loadExplore(page) }
+        // 没有选中榜单一律回落到第一个：首屏尚未加载时 activeExplorePage 还是 null，
+        // 下拉手势不该因此静默失效。
+        loadExplore(state.value.activeExplorePage ?: explorePages.first())
     }
 
     fun loadExplore(page: ExplorePage = explorePages.first()) {

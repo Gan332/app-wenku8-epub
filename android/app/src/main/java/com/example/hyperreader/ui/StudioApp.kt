@@ -276,6 +276,20 @@ private fun StudioApp(
                         }
                     }
                 },
+                // 阅读首页的「书签中心」从页内按钮移到顶栏右槽（0.19.0 UI 优化）：
+                // 页内那一行只有这一个按钮，却独占一整行高度；放进顶栏后与返回/搜索
+                // 等页面级动作位置一致，也不再随列表滚走。
+                actions = {
+                    if (state.shellPage() == ShellPage.TABS && state.tab == StudioTab.READING) {
+                        IconButton(onClick = viewModel::openBookmarkCenter, modifier = Modifier.size(UiDimens.touchMin)) {
+                            Icon(
+                                imageVector = ImageVector.vectorResource(R.drawable.lnr_outline_bookmark_24px),
+                                contentDescription = "书签中心",
+                                tint = MiuixTheme.colorScheme.onSurface,
+                            )
+                        }
+                    }
+                },
             )
         },
         bottomBar = {
@@ -449,6 +463,7 @@ private fun StudioApp(
                     bookshelf = state.bookshelf,
                     progress = readingProgress,
                     bookshelfLoaded = state.bookshelfLoaded,
+                    listState = tabListState(StudioTab.READING),
                     onOpenLocal = { entry ->
                         entry.localUri?.let { uri ->
                             context.startActivity(XyReaderActivity.intent(context, uri, entry.bookId, entry.title))
@@ -469,13 +484,13 @@ private fun StudioApp(
                     },
                     onOpenBookshelf = { viewModel.setTab(StudioTab.BOOKSHELF) },
                     onOpenExplore = { viewModel.setTab(StudioTab.EXPLORE) },
-                    onOpenBookmarks = viewModel::openBookmarkCenter,
                 )
                 state.tab == StudioTab.BOOKSHELF -> BookshelfScreen(
                     state = state,
                     viewModel = viewModel,
                     onImportEpub = onImportEpub,
                     listState = tabListState(StudioTab.BOOKSHELF),
+                    onOpenExplore = { viewModel.setTab(StudioTab.EXPLORE) },
                     onOpenLocal = { entry ->
                         entry.localUri?.let { uri ->
                             context.startActivity(XyReaderActivity.intent(context, uri, entry.bookId, entry.title))

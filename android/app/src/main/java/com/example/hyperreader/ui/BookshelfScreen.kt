@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -49,8 +50,6 @@ import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
-import top.yukonga.miuix.kmp.basic.VerticalScrollBar
-import top.yukonga.miuix.kmp.basic.rememberScrollBarAdapter
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.More
 import top.yukonga.miuix.kmp.overlay.OverlayBottomSheet
@@ -66,6 +65,8 @@ fun BookshelfScreen(
     onOpenRemote: (BookshelfEntry) -> Unit,
     /** 远程书的详情：复用探索详情那条公开数据通路（0.17.0 起菜单项「查看详情」）。 */
     onOpenDetail: (BookshelfEntry) -> Unit,
+    /** 空书架时「去探索」的出口（0.19.0 UI 优化）：空态给下一步动作，而不是只留一句说明。 */
+    onOpenExplore: () -> Unit,
     /**
      * 书架滚动位置由宿主持有（`StudioApp` 按 tab 缓存）。
      * 在本屏内 `remember` 的话，切走 tab 时列表会离开组合、位置被丢弃，
@@ -96,7 +97,7 @@ fun BookshelfScreen(
     // （insets 仍由 Scaffold 在 StudioApp 消费一次，这里只管页内间距）。
     LazyColumn(
         state = listState,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(top = UiDimens.spaceL, bottom = UiDimens.spaceL),
         verticalArrangement = Arrangement.spacedBy(UiDimens.spaceM),
     ) {
@@ -157,6 +158,8 @@ fun BookshelfScreen(
                 EmptyState(
                     title = "书架还是空的",
                     description = "可以从「探索」加入 Wenku8 书籍，或导入本地 EPUB。",
+                    actionLabel = "去探索",
+                    onAction = onOpenExplore,
                 )
             }
         } else {
@@ -209,10 +212,7 @@ fun BookshelfScreen(
             }
         }
     }
-    VerticalScrollBar(
-        rememberScrollBarAdapter(listState),
-        Modifier.fillMaxHeight(),
-    )
+    AppScrollBar(listState)
     // 排序选择：与设置页「EPUB 导出引擎」同一套轻量 Sheet 范式（AGENTS §4.12）
     if (sortSheet) {
         OverlayBottomSheet(show = true, onDismissRequest = { sortSheet = false }) {

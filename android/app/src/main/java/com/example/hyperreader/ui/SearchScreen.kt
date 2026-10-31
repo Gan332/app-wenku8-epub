@@ -1,22 +1,26 @@
 package com.example.hyperreader.ui
 
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.clickable
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -25,17 +29,23 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
-import top.yukonga.miuix.kmp.basic.Button
-import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.SearchBar
-import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
-import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.basic.TextButton
-import top.yukonga.miuix.kmp.basic.TextField
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import androidx.compose.ui.text.style.TextOverflow
 import com.example.hyperreader.MessageCard
 import com.example.hyperreader.model.SearchBook
 import com.example.hyperreader.model.SearchField
+import top.yukonga.miuix.kmp.basic.Button
+import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
+import top.yukonga.miuix.kmp.basic.Icon
+import top.yukonga.miuix.kmp.basic.IconButton
+import top.yukonga.miuix.kmp.basic.SearchBar
+import top.yukonga.miuix.kmp.basic.TabRow
+import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.basic.TextButton
+import top.yukonga.miuix.kmp.basic.TextField
+import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.Search
+import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 @Composable
 fun SearchScreen(
@@ -64,19 +74,36 @@ fun SearchScreen(
                 cornerRadius = UiDimens.panelCorner,
                 insideMargin = PaddingValues(UiDimens.spaceM),
             ) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
                     Text("搜索需要 wenku8 登录", fontSize = UiDimens.body)
                     TextButton(text = "登录", onClick = onLogin)
                 }
             }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
-            TextButton(text = "按书名", onClick = { viewModel.setSearchField(SearchField.TITLE) })
-            TextButton(text = "按作者", onClick = { viewModel.setSearchField(SearchField.AUTHOR) })
-        }
+        // 字段切换用 TabRow：两个平铺 TextButton 没有选中态，用户看不出当前按哪个字段搜。
+        TabRow(
+            tabs = listOf("按书名", "按作者"),
+            selectedTabIndex = if (state.searchField == SearchField.TITLE) 0 else 1,
+            onTabSelected = { index ->
+                viewModel.setSearchField(if (index == 0) SearchField.TITLE else SearchField.AUTHOR)
+            },
+            modifier = Modifier.fillMaxWidth(),
+            height = UiDimens.touchMin,
+        )
         // MiuiX SearchBar 容器：输入框常驻、历史词作为展开内容。
-        // 初始展开 = 与旧布局等价（历史词常驻），即使不触发收起也不产生回归。
         var searchExpanded by remember { mutableStateOf(true) }
+        val hasHistory = state.searchHistory.isNotEmpty()
+        // 搜出结果后自动收起历史词，把屏幕让给结果；清空关键词再展开。
+        LaunchedEffect(state.searchResults.isNotEmpty()) {
+            if (state.searchResults.isNotEmpty()) searchExpanded = false
+        }
+        LaunchedEffect(state.searchQuery.isBlank()) {
+            if (state.searchQuery.isBlank()) searchExpanded = true
+        }
         SearchBar(
             inputField = {
                 TextField(
@@ -94,15 +121,39 @@ fun SearchScreen(
                             }
                         },
                     ),
+                    // 搜索动作收进输入框尾部：原先输入框下方还有一整行「搜索」按钮，
+                    // 与键盘的搜索键重复，也白占一行高度。
+                    trailingIcon = {
+                        IconButton(
+                            onClick = {
+                                if (!state.searchBusy && state.searchQuery.isNotBlank()) viewModel.searchBooks()
+                            },
+                            modifier = Modifier.size(UiDimens.touchMin),
+                        ) {
+                            Icon(
+                                imageVector = MiuixIcons.Search,
+                                contentDescription = "搜索",
+                                tint = if (state.searchQuery.isNotBlank()) {
+                                    MiuixTheme.colorScheme.primary
+                                } else {
+                                    tertiaryTextColor()
+                                },
+                            )
+                        }
+                    },
                 )
             },
-            expanded = searchExpanded,
+            expanded = searchExpanded && hasHistory,
             onExpandedChange = { searchExpanded = it },
             modifier = Modifier.fillMaxWidth(),
             content = {
-                if (state.searchHistory.isNotEmpty()) {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("最近搜索", fontSize = UiDimens.caption, color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f))
+                if (hasHistory) {
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text("最近搜索", fontSize = UiDimens.caption, color = secondaryTextColor())
                         TextButton(text = "清空", onClick = viewModel::clearSearchHistory)
                     }
                     // 历史词是可变长度内容：普通 Row 装不下第 3 个词就会把后面的裁掉，
@@ -117,9 +168,6 @@ fun SearchScreen(
                 }
             },
         )
-        Button(onClick = viewModel::searchBooks, enabled = !state.searchBusy && state.searchQuery.isNotBlank(), modifier = Modifier.fillMaxWidth()) {
-            Text(if (state.searchBusy) "搜索中…" else "搜索")
-        }
         state.searchMessage?.let { MessageCard(it) }
         if (state.searchResults.isEmpty() && state.searchBusy) {
             // 原先这里只有一个无提示的孤立转圈，全项目唯一没有说明文字的加载态
@@ -131,50 +179,73 @@ fun SearchScreen(
                 EmptyState(title = "输入关键词开始搜索", description = "支持书名与作者，按书名搜索走本地书目索引，断网也能用。")
             }
         } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxWidth().weight(1f),
-                contentPadding = PaddingValues(bottom = UiDimens.spaceXL),
-                verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS),
+            val listState = rememberLazyListState()
+            // 结果数量放在列表顶上：翻到第 2 页后仍能一眼看到总量，不必回滚确认。
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceXS),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                items(state.searchResults, key = { it.id }) { result ->
-                    SearchResultCard(
-                        result,
-                        viewModel::openSearchBook,
-                        Modifier.animateItem(
-                            fadeInSpec = tween(Motion.duration()),
-                            placementSpec = tween(Motion.duration()),
-                            fadeOutSpec = tween(Motion.duration(UiDimens.MOTION_FAST)),
-                        ),
-                    )
-                }
-                item {
-                    Column(
-                        Modifier.fillMaxWidth().padding(vertical = UiDimens.spaceXS),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS),
-                    ) {
-                        if (state.searchHasNextPage) {
-                            Button(
-                                onClick = viewModel::loadMoreSearchResults,
-                                enabled = !state.searchLoadingMore && !state.searchBusy,
-                                modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
-                            ) {
-                                if (state.searchLoadingMore) {
-                                    Text("加载中…")
-                                } else {
-                                    Text("加载更多")
+                Text(
+                    "找到 ${state.searchResults.size} 本",
+                    modifier = Modifier.weight(1f),
+                    fontSize = UiDimens.caption,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    if (state.searchHasNextPage) "还有更多" else "已全部加载",
+                    fontSize = UiDimens.captionSmall,
+                    color = secondaryTextColor(),
+                )
+            }
+            Box(Modifier.fillMaxWidth().weight(1f)) {
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(bottom = UiDimens.spaceXL),
+                    verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS),
+                ) {
+                    items(state.searchResults, key = { it.id }) { result ->
+                        SearchResultCard(
+                            result,
+                            viewModel::openSearchBook,
+                            Modifier.animateItem(
+                                fadeInSpec = tween(Motion.duration()),
+                                placementSpec = tween(Motion.duration()),
+                                fadeOutSpec = tween(Motion.duration(UiDimens.MOTION_FAST)),
+                            ),
+                        )
+                    }
+                    item {
+                        Column(
+                            Modifier.fillMaxWidth().padding(vertical = UiDimens.spaceXS),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS),
+                        ) {
+                            if (state.searchHasNextPage) {
+                                Button(
+                                    onClick = viewModel::loadMoreSearchResults,
+                                    enabled = !state.searchLoadingMore && !state.searchBusy,
+                                    modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
+                                ) {
+                                    if (state.searchLoadingMore) {
+                                        Text("加载中…")
+                                    } else {
+                                        Text("加载更多")
+                                    }
                                 }
+                                if (state.searchLoadingMore) CircularProgressIndicator(size = UiDimens.indicator)
+                            } else if (state.searchPage > 0) {
+                                Text(
+                                    "已加载第 ${state.searchPage} 页",
+                                    color = secondaryTextColor(),
+                                    fontSize = UiDimens.caption,
+                                )
                             }
-                            if (state.searchLoadingMore) CircularProgressIndicator(size = UiDimens.indicator)
-                        } else if (state.searchPage > 0) {
-                            Text(
-                                "已加载第 ${state.searchPage} 页",
-                                color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f),
-                                fontSize = UiDimens.caption,
-                            )
                         }
                     }
                 }
+                AppScrollBar(listState)
             }
         }
     }
@@ -198,16 +269,42 @@ private fun SearchResultCard(result: SearchBook, onOpen: (SearchBook) -> Unit, m
         insideMargin = PaddingValues(UiDimens.spaceM),
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXS)) {
-            Text(result.title, fontSize = UiDimens.section, fontWeight = FontWeight.Bold, maxLines = 2)
-            if (result.author.isNotBlank()) Text("作者：${result.author}", fontSize = UiDimens.caption)
+            Text(
+                result.title,
+                fontSize = UiDimens.section,
+                fontWeight = FontWeight.Bold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (result.author.isNotBlank()) {
+                Text(
+                    "作者：${result.author}",
+                    fontSize = UiDimens.caption,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
             val meta = buildList {
                 if (result.category.isNotBlank()) add(result.category)
                 if (result.status.isNotBlank()) add(result.status)
                 if (result.updatedAt.isNotBlank()) add("更新 ${result.updatedAt}")
                 if (result.wordCount != null) add("${result.wordCount} 字")
             }
-            Text(meta.joinToString(" · "), color = MiuixTheme.colorScheme.onSurface.copy(alpha = .72f), fontSize = UiDimens.captionSmall)
-            if (result.latestChapter.isNotBlank()) Text("最新：${result.latestChapter}", fontSize = UiDimens.captionSmall, maxLines = 1)
+            Text(
+                meta.joinToString(" · "),
+                color = secondaryTextColor(),
+                fontSize = UiDimens.captionSmall,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (result.latestChapter.isNotBlank()) {
+                Text(
+                    "最新：${result.latestChapter}",
+                    fontSize = UiDimens.captionSmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
     }
 }

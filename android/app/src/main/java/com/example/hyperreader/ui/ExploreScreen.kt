@@ -97,87 +97,92 @@ fun ExploreScreen(
     // 之前 ExploreExpandedScreen 注释说「没有等价组件」是误判。
     PullToRefresh(
         isRefreshing = state.exploreBusy,
-        onRefresh = { state.activeExplorePage?.let(viewModel::loadExplore) },
+        // 没有选中榜单一律回落到第一个（ViewModel 里同样兜底）：首屏尚未加载时
+        // activeExplorePage 还是 null，下拉手势不该静默失效。
+        onRefresh = viewModel::refreshExplore,
     ) {
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            state = listState,
-            // 左右内边距由宿主给一次（StudioApp 的 Column 已 padding(pagePadding)）。
-            // 这里再写一遍的话实际左右各 32dp，与书架页的 16dp 不一致。
-            contentPadding = PaddingValues(vertical = UiDimens.spaceL),
-            verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS),
-        ) {
-            item(key = "header") { ExploreTitleRow(onOpenSearch = onOpenSearch) }
+        Box(Modifier.fillMaxSize()) {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                state = listState,
+                // 左右内边距由宿主给一次（StudioApp 的 Column 已 padding(pagePadding)）。
+                // 这里再写一遍的话实际左右各 32dp，与书架页的 16dp 不一致。
+                contentPadding = PaddingValues(vertical = UiDimens.spaceL),
+                verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS),
+            ) {
+                item(key = "header") { ExploreTitleRow(onOpenSearch = onOpenSearch) }
 
-            item(key = "catalog") {
-                CatalogSectionCard(state = state, onGoToCatalog = onGoToCatalog)
-            }
+                item(key = "catalog") {
+                    CatalogSectionCard(state = state, onGoToCatalog = onGoToCatalog)
+                }
 
-            if (!state.loggedIn) {
-                item(key = "login-hint") { LoginHintCard(onLogin = onLogin) }
-            }
+                if (!state.loggedIn) {
+                    item(key = "login-hint") { LoginHintCard(onLogin = onLogin) }
+                }
 
-            // 榜单切换用 TabRow（对应 LNR 的 PrimaryTabRow）。
-            // 形状差异：LNR 的 Material TabRow 用「下划线指示器」，MiuiX TabRow 用
-            // 「选中项胶囊高亮」且没有指示器插槽，本工程界面统一 MiuiX，故不复刻下划线；
-            // 行高取触摸下限 48dp（MiuiX 默认 42dp，LNR 的 Tab 是 48dp）。
-            item(key = "page-switcher") {
-                val pages = viewModel.explorePages
-                val selectedIndex = pages.indexOfFirst { it.id == activePageId }.coerceAtLeast(0)
-                // MiuiX TabRow 的项宽是固定值（默认 76dp），装不下「今日更新」「2026 年度精选」
-                // 这样的标签就会省略成「今日更…」。按最长标题实测后把 min/max 一起放宽，
-                // 项宽仍然统一，只是整行更宽、继续横向滚动。
-                val tabWidth = rememberExploreTabWidth(pages)
-                TabRow(
-                    tabs = pages.map { it.title },
-                    selectedTabIndex = selectedIndex,
-                    onTabSelected = { pages.getOrNull(it)?.let(viewModel::loadExplore) },
-                    modifier = Modifier.fillMaxWidth(),
-                    minWidth = tabWidth,
-                    maxWidth = tabWidth,
-                    height = UiDimens.touchMin,
-                )
-            }
-
-            if (state.exploreBusy && state.exploreRows.isEmpty()) {
-                item(key = "explore-loading") { ExploreRowsSkeleton() }
-            }
-
-            items(state.exploreRows, key = { it.title }) { row ->
-                val page = row.expandedPageId?.let { id -> viewModel.explorePages.firstOrNull { it.id == id } }
-                    ?: state.activeExplorePage
-                ExploreRowSection(
-                    title = row.title,
-                    books = row.books,
-                    onOpenBook = { viewModel.openSearchBook(it) },
-                    onMore = page?.let { target -> { viewModel.openExploreExpanded(target) } },
-                )
-            }
-
-            if (!state.exploreBusy && state.exploreRows.isEmpty() && state.catalogSize == 0) {
-                item(key = "empty") {
-                    EmptyState(
-                        title = "还没有可浏览的内容",
-                        description = "更新本地书目缓存，或在设置里配置中继后再来。",
-                        actionLabel = "前往设置",
-                        onAction = onGoToCatalog,
+                // 榜单切换用 TabRow（对应 LNR 的 PrimaryTabRow）。
+                // 形状差异：LNR 的 Material TabRow 用「下划线指示器」，MiuiX TabRow 用
+                // 「选中项胶囊高亮」且没有指示器插槽，本工程界面统一 MiuiX，故不复刻下划线；
+                // 行高取触摸下限 48dp（MiuiX 默认 42dp，LNR 的 Tab 是 48dp）。
+                item(key = "page-switcher") {
+                    val pages = viewModel.explorePages
+                    val selectedIndex = pages.indexOfFirst { it.id == activePageId }.coerceAtLeast(0)
+                    // MiuiX TabRow 的项宽是固定值（默认 76dp），装不下「今日更新」「2026 年度精选」
+                    // 这样的标签就会省略成「今日更…」。按最长标题实测后把 min/max 一起放宽，
+                    // 项宽仍然统一，只是整行更宽、继续横向滚动。
+                    val tabWidth = rememberExploreTabWidth(pages)
+                    TabRow(
+                        tabs = pages.map { it.title },
+                        selectedTabIndex = selectedIndex,
+                        onTabSelected = { pages.getOrNull(it)?.let(viewModel::loadExplore) },
+                        modifier = Modifier.fillMaxWidth(),
+                        minWidth = tabWidth,
+                        maxWidth = tabWidth,
+                        height = UiDimens.touchMin,
                     )
                 }
-            }
 
-            // —— 标签浏览（0.14.x 起，官方标签需登录，未登录回落到本地索引）——
-            if (state.exploreTags.isNotEmpty()) {
-                item(key = "tags") {
-                    TagSection(
-                        tags = state.exploreTags,
-                        activeTag = state.activeTag,
-                        onSelect = viewModel::selectTag,
-                        onClear = viewModel::clearTag,
+                if (state.exploreBusy && state.exploreRows.isEmpty()) {
+                    item(key = "explore-loading") { ExploreRowsSkeleton() }
+                }
+
+                items(state.exploreRows, key = { it.title }) { row ->
+                    val page = row.expandedPageId?.let { id -> viewModel.explorePages.firstOrNull { it.id == id } }
+                        ?: state.activeExplorePage
+                    ExploreRowSection(
+                        title = row.title,
+                        books = row.books,
+                        onOpenBook = { viewModel.openSearchBook(it) },
+                        onMore = page?.let { target -> { viewModel.openExploreExpanded(target) } },
                     )
                 }
-            }
 
-            state.exploreMessage?.let { message -> item(key = "explore-message") { MessageCard(message) } }
+                if (!state.exploreBusy && state.exploreRows.isEmpty() && state.catalogSize == 0) {
+                    item(key = "empty") {
+                        EmptyState(
+                            title = "还没有可浏览的内容",
+                            description = "更新本地书目缓存，或在设置里配置中继后再来。",
+                            actionLabel = "前往设置",
+                            onAction = onGoToCatalog,
+                        )
+                    }
+                }
+
+                // —— 标签浏览（0.14.x 起，官方标签需登录，未登录回落到本地索引）——
+                if (state.exploreTags.isNotEmpty()) {
+                    item(key = "tags") {
+                        TagSection(
+                            tags = state.exploreTags,
+                            activeTag = state.activeTag,
+                            onSelect = viewModel::selectTag,
+                            onClear = viewModel::clearTag,
+                        )
+                    }
+                }
+
+                state.exploreMessage?.let { message -> item(key = "explore-message") { MessageCard(message) } }
+            }
+            AppScrollBar(listState)
         }
     }
 }
