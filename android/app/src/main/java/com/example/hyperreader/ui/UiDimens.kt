@@ -38,6 +38,9 @@ object UiDimens {
     /** 页面左右内边距。 */
     val pagePadding: Dp = 16.dp
 
+    /** 宽屏内容最大宽度：平板/横屏下避免正文被拉成整行。 */
+    val contentMaxWidth: Dp = 840.dp
+
     /** Card 内边距（MiuiX `insideMargin`）。 */
     val cardInset: Dp = 16.dp
 

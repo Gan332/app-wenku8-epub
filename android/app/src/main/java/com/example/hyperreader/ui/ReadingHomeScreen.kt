@@ -95,7 +95,10 @@ fun ReadingHomeScreen(
 
         if (!bookshelfLoaded) {
             item(key = "loading") {
-                ReadingHomeSkeleton()
+                Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceL)) {
+                    ReadingHomeSkeleton()
+                    ReadingHomeRailSkeleton()
+                }
             }
         } else if (continueEntry == null) {
             item(key = "empty") {
@@ -170,6 +173,31 @@ private fun ReadingHomeSkeleton() {
                 ShimmerLine(Modifier.fillMaxWidth(0.88f), heightDp = 24)
                 ShimmerLine(Modifier.fillMaxWidth(), heightDp = 14)
                 ShimmerLine(Modifier.fillMaxWidth(0.7f), heightDp = 8)
+            }
+        }
+    }
+}
+
+/** 最近阅读横向轨道的占位：数据返回时不会从一张主卡突然长出一行封面。 */
+@Composable
+private fun ReadingHomeRailSkeleton() {
+    Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
+        SectionHeader("最近阅读")
+        Row(horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceM)) {
+            repeat(3) {
+                Column(
+                    modifier = Modifier.width(UiDimens.recentCardWidth),
+                    verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXS),
+                ) {
+                    ShimmerBlock(
+                        Modifier
+                            .fillMaxWidth()
+                            .aspectRatio(LnrDimens.POSTER_ASPECT)
+                            .clip(RoundedCornerShape(UiDimens.panelCorner)),
+                    )
+                    ShimmerLine(Modifier.fillMaxWidth(0.88f), heightDp = 14)
+                    ShimmerLine(Modifier.fillMaxWidth(0.45f), heightDp = 10)
+                }
             }
         }
     }

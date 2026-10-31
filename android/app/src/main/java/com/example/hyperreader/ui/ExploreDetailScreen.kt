@@ -118,7 +118,8 @@ fun ExploreDetailScreen(
                     category = category,
                     status = status,
                     coverUrl = coverUrl,
-                    loading = loading,
+                    // 有 seed 时已先渲染可读内容，不再在作品档案头里重复显示转圈。
+                    loading = loading && detail == null,
                     onCoverClick = { showCover = true },
                 )
             }
