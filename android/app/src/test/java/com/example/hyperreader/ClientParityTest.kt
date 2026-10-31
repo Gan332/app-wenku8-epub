@@ -66,16 +66,14 @@ class ClientParityTest {
     }
 
     @Test
-    fun hostsRotateOnBlockAndExhaustAfterThreeTries() {
+    fun hostsRotateOnBlockAndExhaustAfterTwoTries() {
         Wenku8Endpoint.resetHosts()
         assertEquals("初始应为 wenku8.net", "https://www.wenku8.net", Wenku8Endpoint.publicBase())
         assertTrue("第一次轮换应成功", Wenku8Endpoint.rotateHost())
-        assertEquals("第二次应换到 .cc", "https://www.wenku8.cc", Wenku8Endpoint.publicBase())
-        assertTrue("第二次轮换应成功", Wenku8Endpoint.rotateHost())
-        assertEquals("第三次应换到 .com", "https://www.wenku8.com", Wenku8Endpoint.publicBase())
-        // 三个入口都试过：不再轮换（避免把全部镜像打进风控）
+        assertEquals("第一次应换到 .cc", "https://www.wenku8.cc", Wenku8Endpoint.publicBase())
+        // .com 已停放（证书 CN=s1.n9z.net）不再作为入口，两个候选都试过后停止轮换
         assertFalse("耗尽后不应再轮换", Wenku8Endpoint.rotateHost())
-        assertEquals("耗尽后保持 .com", "https://www.wenku8.com", Wenku8Endpoint.publicBase())
+        assertEquals("耗尽后保持 .cc", "https://www.wenku8.cc", Wenku8Endpoint.publicBase())
         // 重置回到默认入口
         Wenku8Endpoint.resetHosts()
         assertEquals("重置后回到 .net", "https://www.wenku8.net", Wenku8Endpoint.publicBase())

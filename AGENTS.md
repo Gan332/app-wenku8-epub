@@ -148,10 +148,13 @@ android/app/src/main/java/io/nightfish/lightnovelreader/api/   ← LNR 书源抽
 - **不要手加 `Accept-Encoding: br`**（OkHttp 只自动处理 gzip）；
 - **User-Agent 使用标准浏览器 UA**（与平台一致的 Android Chrome 形态）——但 UA **不用于**绕过任何访问控制，登录墙与验证页照旧按§4.2 处理；
 - **编码**：源站声明 gbk/gb2312 但实际输出 GB18030，一律按 **GB18030** 解码（`Wenku8Encoding`，LNR issue #485）；
-- **直连入口轮换**：`.net → .cc → .com`，遇到 CF 拦截换一个边缘入口重试一次（`Wenku8Endpoint.rotateHost`），
-  三个都试过则原样抛出，避免把全部镜像打进风控。**起始入口**可在「设置 → 网络 → 直连入口」里选
+- **直连入口轮换**：`.net → .cc`，遇到 CF 拦截或 TLS 证书异常换一个边缘入口重试一次
+  （`Wenku8Endpoint.rotateHost`），两个都试过则原样抛出，避免把全部镜像打进风控。
+  **起始入口**可在「设置 → 网络 → 直连入口」里选
   （`DirectEntry` / `Wenku8Endpoint.applyPreferredHost`，默认 `.net`）——只影响第一次请求打哪个镜像，
   规范 URL、书架与 EPUB 内链永远是 `www.wenku8.net`；
+  `wenku8.com` **不再是入口**：该域 2026 年起已停放（DNS `47.243.247.59`、证书 `CN=s1.n9z.net`），
+  请求必然报 `Hostname www.wenku8.com not verified`，白名单里仅为兼容历史链接保留；
 - **图片域不参与任何改写**：入口轮换（`rewire`）与中继（`toRelayUrl`）只改写**入口域**
   （`Wenku8Url.isEntryHost`）。改到图片 CDN 的 host 上会让请求落到主站并不存在的
   `/image/…`（实测 404），封面与插图会静默消失。
@@ -165,7 +168,7 @@ android/app/src/main/java/io/nightfish/lightnovelreader/api/   ← LNR 书源抽
   插图在 2026 年迁到新图床 `pic.777743.xyz`（同样不经 CF），按 §4.2 的图片白名单放行；
   页面给的图片常是相对路径或明文 http，解析出口必须走 `Wenku8Url.normalizeImage`
   （相对 `/image/…` → `img.wenku8.com`、`/pictures/…` → `pic.wenku8.com`、http → https）；
-- `wenku8.com` 镜像当前长期无响应，白名单里留着但不要指望。
+- `wenku8.com` 镜像已停放（证书 `CN=s1.n9z.net`，TLS 主机名不匹配），白名单里留着但**不要请求**。
 
 应用侧无需为 403 改解析逻辑：`Wenku8Parser.looksLikeChallenge()` 会转成 `UPSTREAM_CHALLENGE`。
 遇到该错误时**不自动弹窗**（403 是常态策略，不是需要点击的挑战，自动打断无意义）；
@@ -446,7 +449,7 @@ MiuiX 化对照（上游全是 material3，本项目禁止 material，有守卫�
   `SettingsSection` 二级页；`SETTINGS_GROUPS` 决定索引页的分组标题；
 - 分类侧栏：宽屏常驻左侧 rail（`SettingsRail`），窄屏用 `OverlayBottomSheet` 抽屉；
 - **编辑型设置用Sheet 轻量编辑**（如 EPUB 导出引擎）；长内容（阅读器、外观）仍走二级页；
-  网络分区里「直连入口」是三项选择（`.net` / `.cc` / `.com`），单一职责：决定第一次请求打哪个镜像；
+  网络分区里「直连入口」是两项选择（`.net` / `.cc`），单一职责：决定第一次请求打哪个镜像；
 - 新增分类必须在 `SettingsSection` 加枚举 + 在 `CoreSmokeTest.settingsSectionsCoverEveryCategory`
   更新计数（该测试会卡住遗漏）。
 

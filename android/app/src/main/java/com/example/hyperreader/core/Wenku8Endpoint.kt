@@ -26,11 +26,15 @@ object Wenku8Endpoint {
     /**
      * 直连候选边缘入口（按 403 轮换；对照 LNR `Wenku8Api.hosts`）。
      *
-     * 起始用 `wenku8.net`，用户可在设置 → 网络改成 `.cc` / `.com`（[applyPreferredHost]）；
-     * 遇到 Cloudflare 拦截时 [rotateHost] 依次换到下一个——换的是**边缘入口**而非接口语义，
+     * 起始用 `wenku8.net`，用户可在设置 → 网络改成 `.cc`（[applyPreferredHost]）；
+     * 遇到 Cloudflare 拦截时 [rotateHost] 换到另一个——换的是**边缘入口**而非接口语义，
      * 白名单与合规边界不变。
+     *
+     * `wenku8.com` 自 2026 年起已停放：DNS 指向 `47.243.247.59`，TLS 证书为
+     * `CN=s1.n9z.net`，请求必然报 `Hostname www.wenku8.com not verified`。
+     * 因此它**不再作为入口**，只在 [Wenku8Url] 白名单里保留以兼容历史链接。
      */
-    val DIRECT_HOSTS: List<String> = listOf(DIRECT_BASE, "https://www.wenku8.cc", "https://www.wenku8.com")
+    val DIRECT_HOSTS: List<String> = listOf(DIRECT_BASE, "https://www.wenku8.cc")
 
     /**
      * 入口尝试顺序：用户偏好的入口排在最前（设置 → 网络），其余保持 [DIRECT_HOSTS] 的顺序。
@@ -43,7 +47,7 @@ object Wenku8Endpoint {
     @Volatile
     private var hostIndex: Int = 0
 
-    /** 本会话已试过的直连入口；全部试过则不再轮换（避免把三个域都打进风控）。 */
+    /** 本会话已试过的直连入口；全部试过则不再轮换（避免把两个域都打进风控）。 */
     private val triedHosts = LinkedHashSet<Int>()
 
     /** 公开页基址：中继优先（仅在开关开且端点合法时），否则当前直连入口。 */

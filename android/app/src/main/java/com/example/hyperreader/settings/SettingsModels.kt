@@ -117,7 +117,6 @@ enum class EpubEngine(val label: String, val summary: String) {
 enum class DirectEntry(val label: String, val base: String) {
     NET("wenku8.net", "https://www.wenku8.net"),
     CC("wenku8.cc", "https://www.wenku8.cc"),
-    COM("wenku8.com", "https://www.wenku8.com"),
     ;
 
     companion object {

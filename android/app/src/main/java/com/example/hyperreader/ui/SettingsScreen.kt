@@ -506,28 +506,28 @@ private fun NetworkSection(state: StudioUiState, viewModel: StudioViewModel, onO
         {
             // 直连入口：首次打哪个镜像由用户选（0.19.0），被拦时仍自动轮换
             StudioPanel("直连入口") {
-                    val preferred by viewModel.directEntry.collectAsStateWithLifecycle(initialValue = DirectEntry.NET)
-                    var shownBase by remember { mutableStateOf(Wenku8Endpoint.activeDirectBase()) }
-                    StudioFactRow(label = "当前入口", value = shownBase)
-                    Text(
-                        "首次请求打哪个镜像；被 Cloudflare 拦截时仍按 .net → .cc → .com 轮换一次" +
-                            "（三个都试过则不再换，避免全部镜像被打进风控）。" +
-                            "书目、书架与 EPUB 内链始终是 www.wenku8.net，切换只影响之后的请求。",
-                        fontSize = UiDimens.captionSmall,
-                        color = secondaryTextColor(),
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
-                        DirectEntry.entries.forEach { entry ->
-                            ChoiceButton(
-                                text = entry.label,
-                                selected = preferred == entry,
-                                onClick = {
-                                    viewModel.setDirectEntry(entry)
-                                    shownBase = entry.base
-                                },
-                            )
-                        }
+                val preferred by viewModel.directEntry.collectAsStateWithLifecycle(initialValue = DirectEntry.NET)
+                var shownBase by remember { mutableStateOf(Wenku8Endpoint.activeDirectBase()) }
+                StudioFactRow(label = "当前入口", value = shownBase)
+                Text(
+                    "首次请求打哪个镜像；被 Cloudflare 拦截或证书异常时仍按 .net → .cc 轮换一次" +
+                        "（两个都试过则不再换，避免全部镜像被打进风控）。" +
+                        "书目、书架与 EPUB 内链始终是 www.wenku8.net，切换只影响之后的请求。",
+                    fontSize = UiDimens.captionSmall,
+                    color = secondaryTextColor(),
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
+                    DirectEntry.entries.forEach { entry ->
+                        ChoiceButton(
+                            text = entry.label,
+                            selected = preferred == entry,
+                            onClick = {
+                                viewModel.setDirectEntry(entry)
+                                shownBase = entry.base
+                            },
+                        )
                     }
+                }
                     Text(
                         "当前首选：${preferred.label}（源自社区实现实测：不同网络下被拦的镜像并不相同）",
                         fontSize = UiDimens.captionSmall,

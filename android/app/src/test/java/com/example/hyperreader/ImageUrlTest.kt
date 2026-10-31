@@ -204,9 +204,9 @@ class ImageUrlTest {
         assertEquals("https://www.wenku8.cc", Wenku8Endpoint.publicBase())
         assertTrue(Wenku8Endpoint.rotateHost())
         assertEquals("https://www.wenku8.net", Wenku8Endpoint.activeDirectBase())
-        assertTrue(Wenku8Endpoint.rotateHost())
-        assertEquals("https://www.wenku8.com", Wenku8Endpoint.activeDirectBase())
+        // .com 已停放（证书 CN=s1.n9z.net）不再作为候选，两个入口试完即停止
         assertFalse(Wenku8Endpoint.rotateHost())
+        assertEquals("https://www.wenku8.net", Wenku8Endpoint.activeDirectBase())
 
         // 规范 URL 始终是 .net：书架、EPUB 内链与缓存键都以它为准
         assertEquals("https://www.wenku8.net", Wenku8Endpoint.DIRECT_BASE)
@@ -215,7 +215,7 @@ class ImageUrlTest {
         // 非法值回落 .net，不改变候选集合
         Wenku8Endpoint.applyPreferredHost("https://evil.com")
         assertEquals(Wenku8Endpoint.DIRECT_BASE, Wenku8Endpoint.activeDirectBase())
-        assertEquals(3, Wenku8Endpoint.DIRECT_HOSTS.size)
+        assertEquals(2, Wenku8Endpoint.DIRECT_HOSTS.size)
     }
 
     /** 设置项与端点常量必须一一对应，改了一处而漏了另一处会静默换错镜像。 */

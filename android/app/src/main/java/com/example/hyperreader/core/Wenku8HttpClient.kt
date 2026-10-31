@@ -13,6 +13,8 @@ import okhttp3.Request
 import java.io.File
 import java.io.FileOutputStream
 import java.net.InetAddress
+import javax.net.ssl.SSLHandshakeException
+import javax.net.ssl.SSLPeerUnverifiedException
 import java.nio.charset.Charset
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
@@ -62,10 +64,10 @@ class Wenku8HttpClient(private val cacheDirectory: File, sessionCookieJar: Cooki
     }
 
     /**
-     * 执行请求；遇到 Cloudflare 拦截时**换一个直连边缘入口重试一次**（.net → .cc → .com）。
+     * 执行请求；遇到 Cloudflare 拦截或 TLS 证书异常时**换一个直连边缘入口重试一次**（.net → .cc）。
      *
      * 换的是边缘入口而不是接口语义：端点集合、白名单、限流与退避都不变。
-     * 三个入口都试过则原样抛出，避免把全部镜像都打进风控。
+     * 两个入口都试过则原样抛出，避免把全部镜像都打进风控。
      */
     private fun execute(
         rawUrl: String,
@@ -82,7 +84,11 @@ class Wenku8HttpClient(private val cacheDirectory: File, sessionCookieJar: Cooki
                 val target = if (image) Wenku8Url.canonicalizeImage(rawUrl) else rawUrl
                 return executeOnce(Wenku8Endpoint.rewire(target), jobId, maxBytes, referer, mode, image)
             } catch (error: Wenku8Exception) {
-                if (error.code != "UPSTREAM_CHALLENGE" || rotated) throw error
+                // 证书/握手失败同样可能只发生在某一个边缘入口（各镜像证书配置独立），
+                // 因此与 Cloudflare 挑战一样换一个入口重试一次；图片不走入口轮换。
+                val retryable = error.code == "UPSTREAM_CHALLENGE" ||
+                    (error.code == "UPSTREAM_TLS" && !image)
+                if (!retryable || rotated) throw error
                 if (!Wenku8Endpoint.rotateHost()) throw error
                 rotated = true
             }
@@ -113,7 +119,15 @@ class Wenku8HttpClient(private val cacheDirectory: File, sessionCookieJar: Cooki
                 .build()
             val call = client.newCall(request)
             activeCalls.computeIfAbsent(jobId) { ConcurrentHashMap.newKeySet() }.add(call)
-            val response = try { call.execute() } finally { activeCalls[jobId]?.remove(call) }
+            val response = try {
+                call.execute()
+            } catch (error: SSLPeerUnverifiedException) {
+                throw tlsError(error, current, mismatch = true)
+            } catch (error: SSLHandshakeException) {
+                throw tlsError(error, current, mismatch = false)
+            } finally {
+                activeCalls[jobId]?.remove(call)
+            }
             val status = response.code
             if (status in REDIRECT_CODES) {
                 val location = response.header("Location")
@@ -156,6 +170,23 @@ class Wenku8HttpClient(private val cacheDirectory: File, sessionCookieJar: Cooki
             return result
         }
         throw Wenku8Exception("资源重定向次数过多。", "TOO_MANY_REDIRECTS")
+    }
+
+    /**
+     * TLS 失败的可读化：原文 `Hostname xxx not verified: certificate: …` 是英文的内部信息，
+     * 直接透出无从下手；这里保留主机名与失败种类，并给出可操作的下一步。
+     */
+    private fun tlsError(error: Exception, url: HttpUrl, mismatch: Boolean): Wenku8Exception {
+        val host = url.host
+        val detail = if (mismatch) "TLS 证书与域名不匹配" else "TLS 握手未完成"
+        val hint = when {
+            Wenku8Endpoint.isRelayActive() && host == Wenku8Endpoint.relayHost() ->
+                "中继端点的证书异常，请检查设置 → 网络里的中继地址，或暂时关闭中继。"
+            Wenku8Url.isEntryHost(host) ->
+                "可在设置 → 网络更换直连入口，或使用第三方中继后重试。"
+            else -> "请检查网络代理、系统证书或图片域名解析后重试。"
+        }
+        return Wenku8Exception("与 $host 的安全连接失败：$detail。$hint", "UPSTREAM_TLS", error)
     }
 
     private fun validateUrl(raw: String, image: Boolean = false): HttpUrl {
