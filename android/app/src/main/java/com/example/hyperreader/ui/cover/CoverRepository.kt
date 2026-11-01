@@ -53,15 +53,22 @@ class CoverRepository(context: Context) {
     fun cacheFile(url: String): File = File(directory, "${url.hashCode().toUInt().toString(16)}-${url.length}.cover")
 
     /** 命中内存或磁盘时返回，未命中返回 null（不触发网络）。 */
-    fun cached(url: String): ImageBitmap? {
+    fun cached(url: String, targetWidthPx: Int = 0): ImageBitmap? {
         val key = normalize(url)
-        memory.get(key)?.let { return it }
+        memory.get(memoryKey(key, targetWidthPx))?.let { return it }
         val file = cacheFile(key)
         if (!file.isFile) return null
-        return runCatching { BitmapFactory.decodeFile(file.absolutePath)?.asImageBitmap() }
+        return runCatching { decode(file, targetWidthPx) }
             .getOrNull()
-            ?.also { memory.put(key, it) }
+            ?.also { memory.put(memoryKey(key, targetWidthPx), it) }
     }
+
+    /**
+     * 内存缓存按「URL + 目标宽度」分键：列表小图与全屏大图共用一张位图会让
+     * 小图把原图常驻在 LRU 里，占满 12 MB 后其余封面反复重解。
+     */
+    private fun memoryKey(key: String, targetWidthPx: Int): String =
+        if (targetWidthPx > 0) "$key@$targetWidthPx" else key
 
     /**
      * 加载封面。优先内存/磁盘缓存，其次网络。
@@ -69,12 +76,13 @@ class CoverRepository(context: Context) {
      */
     suspend fun load(url: String, targetWidthPx: Int = 0): ImageBitmap? = withContext(Dispatchers.IO) {
         val key = normalize(url)
-        memory.get(key)?.let { return@withContext it }
+        val memKey = memoryKey(key, targetWidthPx)
+        memory.get(memKey)?.let { return@withContext it }
 
         val file = cacheFile(key)
         if (file.isFile) {
             runCatching { decode(file, targetWidthPx) }.getOrNull()?.let { decoded ->
-                memory.put(key, decoded)
+                memory.put(memKey, decoded)
                 return@withContext decoded
             }
         }
@@ -112,7 +120,7 @@ class CoverRepository(context: Context) {
             file.writeBytes(bytes)
             trimCoverDirectory(directory, DISK_LIMIT_BYTES, DISK_TARGET_BYTES)
         }
-        memory.put(key, bitmap)
+        memory.put(memoryKey(key, targetWidthPx), bitmap)
         return bitmap
     }
 

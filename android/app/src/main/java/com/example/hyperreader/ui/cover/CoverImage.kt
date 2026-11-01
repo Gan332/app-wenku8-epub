@@ -50,13 +50,7 @@ fun CoverImage(
 
     LaunchedEffect(url, targetPx) {
         if (url.isNullOrBlank()) return@LaunchedEffect
-        val cached = repository.cached(url)
-        if (cached != null) {
-            bitmap = cached
-            failed = false
-            return@LaunchedEffect
-        }
-        bitmap = null
+        // 不在组合期同步解码（大图首帧会卡主线程）；load 在 IO 线程先查内存再查磁盘。
         val loaded = repository.load(url, targetPx)
         bitmap = loaded
         failed = loaded == null
