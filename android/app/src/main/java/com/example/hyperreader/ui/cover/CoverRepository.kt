@@ -113,7 +113,7 @@ class CoverRepository(context: Context) {
             trimCoverDirectory(directory, DISK_LIMIT_BYTES, DISK_TARGET_BYTES)
         }
         memory.put(key, bitmap)
-        bitmap
+        return bitmap
     }
 
     /**
