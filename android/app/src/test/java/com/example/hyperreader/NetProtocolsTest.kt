@@ -4,6 +4,7 @@ import com.example.hyperreader.core.Wenku8NetProtocols
 import okhttp3.Protocol
 import okhttp3.TlsVersion
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -65,5 +66,13 @@ class NetProtocolsTest {
         assertTrue(Wenku8NetProtocols.USER_AGENT.contains("Chrome/131."))
         // 顶层导航不带 Cache-Control（那是刷新请求的语义）
         assertNull(headers["Cache-Control"])
+    }
+
+    @Test
+    fun http1PreferenceIsLearnedPerHost() {
+        val host = "http1-probe-" + System.nanoTime() + ".example"
+        assertFalse(Wenku8NetProtocols.prefersHttp1(host))
+        Wenku8NetProtocols.rememberHttp1(host)
+        assertTrue(Wenku8NetProtocols.prefersHttp1(host))
     }
 }

@@ -73,4 +73,18 @@ object Wenku8NetProtocols {
         "Sec-Fetch-Mode" to "no-cors",
         "Sec-Fetch-Site" to "same-origin",
     )
+
+    /**
+     * 运行期学到的「这个 host 只有 HTTP/1.1 才过」偏好（进程内，重启后重新试探）。
+     *
+     * 起因：实测同一网络下桌面 curl（HTTP/1.1）带同一组头能 200，而 App（HTTP/2）被 403。
+     * 云端风控可能按 HTTP/2 帧特征区分客户端；遇到 403 时降到 1.1 重试一次，成功后记住。
+     */
+    private val http1Hosts = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+
+    fun prefersHttp1(host: String): Boolean = http1Hosts.contains(host)
+
+    fun rememberHttp1(host: String) {
+        http1Hosts.add(host)
+    }
 }

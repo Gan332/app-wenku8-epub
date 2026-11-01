@@ -9,6 +9,7 @@ import okhttp3.CookieJar
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
+import okhttp3.Protocol
 import okhttp3.Request
 import java.io.File
 import java.io.FileOutputStream
@@ -32,6 +33,11 @@ class Wenku8HttpClient(private val cacheDirectory: File, private val sessionCook
         .followRedirects(false)
         .followSslRedirects(false)
         .build()
+
+    /** 降级用的 HTTP/1.1 客户端（参数相同，只改协议；遇到 403 时按需启用）。 */
+    private val http1Client by lazy {
+        client.newBuilder().protocols(listOf(Protocol.HTTP_1_1)).build()
+    }
 
     suspend fun fetchText(url: String, jobId: String, referer: String? = null): TextResource = withContext(Dispatchers.IO) {
         val result = execute(url, jobId, 16 * 1024 * 1024, referer)
@@ -81,19 +87,21 @@ class Wenku8HttpClient(private val cacheDirectory: File, private val sessionCook
         val target = if (image) Wenku8Url.canonicalizeImage(rawUrl) else rawUrl
         var rotated = false
         val clearanceChecked = mutableSetOf<String>()
+        val http1Tried = mutableSetOf<String>()
         while (true) {
+            val host = Wenku8Endpoint.activeDirectHost()
+            val useHttp1 = Wenku8NetProtocols.prefersHttp1(host)
             try {
-                return executeOnce(Wenku8Endpoint.rewire(target), jobId, maxBytes, referer, mode, image)
+                return executeOnce(Wenku8Endpoint.rewire(target), jobId, maxBytes, referer, mode, image, useHttp1)
             } catch (error: Wenku8Exception) {
                 // 凭证失效时 Cloudflare 会硬拦「带旧 token」的请求，而不带 token 未必被拦。
                 // 先挂起当前入口的 token 重试一次：成功说明 token 有害，直接删掉；失败则恢复。
-                val host = Wenku8Endpoint.activeDirectHost()
                 if (error.code == "UPSTREAM_CHALLENGE" && clearanceChecked.add(host)) {
                     val jar = sessionCookieJar as? ClearanceCookieJar
                     if (jar != null && jar.suspendFor(host)) {
                         val withoutToken = try {
-                            executeOnce(Wenku8Endpoint.rewire(target), jobId, maxBytes, referer, mode, image)
-                        } catch (retryError: Wenku8Exception) {
+                            executeOnce(Wenku8Endpoint.rewire(target), jobId, maxBytes, referer, mode, image, useHttp1)
+                        } catch (_: Wenku8Exception) {
                             null
                         }
                         if (withoutToken != null) {
@@ -101,6 +109,19 @@ class Wenku8HttpClient(private val cacheDirectory: File, private val sessionCook
                             return withoutToken
                         }
                         jar.resumeFor(host)
+                    }
+                }
+                // 实测同一网络下桌面 curl（HTTP/1.1）带同一组头 200，而 App（HTTP/2）403；
+                // 风控可能按 H2 帧特征区分客户端。降级 1.1 再试一次，成功即记住该 host。
+                if (error.code == "UPSTREAM_CHALLENGE" && !useHttp1 && http1Tried.add(host)) {
+                    val downgraded = try {
+                        executeOnce(Wenku8Endpoint.rewire(target), jobId, maxBytes, referer, mode, image, true)
+                    } catch (_: Wenku8Exception) {
+                        null
+                    }
+                    if (downgraded != null) {
+                        Wenku8NetProtocols.rememberHttp1(host)
+                        return downgraded
                     }
                 }
                 // 证书/握手失败同样可能只发生在某一个边缘入口（各镜像证书配置独立），
@@ -121,6 +142,7 @@ class Wenku8HttpClient(private val cacheDirectory: File, private val sessionCook
         referer: String?,
         mode: HttpRateLimiter.Mode,
         image: Boolean,
+        http1: Boolean,
     ): HttpResult {
         var current = validateUrl(rawUrl, image)
         var redirects = 0
@@ -136,7 +158,7 @@ class Wenku8HttpClient(private val cacheDirectory: File, private val sessionCook
                 }
                 .apply { if (!referer.isNullOrBlank()) header("Referer", referer) }
                 .build()
-            val call = client.newCall(request)
+            val call = if (http1) http1Client.newCall(request) else client.newCall(request)
             activeCalls.computeIfAbsent(jobId) { ConcurrentHashMap.newKeySet() }.add(call)
             val response = try {
                 call.execute()
