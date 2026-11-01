@@ -235,7 +235,7 @@ class Wenku8SessionStore(context: Context) : SessionGate {
  * （403 Attention Required），而不带 token 的请求反而可能 200。客户端在
  * `Wenku8HttpClient` 里 403 后会先挂起该 host 的 token 重试一次，成功即判定 token 有害并删除。
  */
-internal class ClearanceCookieJar(private val store: Wenku8SessionStore) : CookieJar {
+class ClearanceCookieJar internal constructor(private val store: Wenku8SessionStore) : CookieJar {
     private val suspended = java.util.Collections.synchronizedSet(mutableSetOf<String>())
 
     override fun saveFromResponse(url: HttpUrl, cookies: List<Cookie>) =
