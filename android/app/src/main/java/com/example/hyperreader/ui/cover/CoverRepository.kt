@@ -9,8 +9,12 @@ import com.example.hyperreader.core.Wenku8Endpoint
 import com.example.hyperreader.core.Wenku8HttpClient
 import com.example.hyperreader.core.Wenku8Url
 import java.io.File
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.concurrent.ConcurrentHashMap
 
@@ -32,6 +36,13 @@ class CoverRepository(context: Context) {
     private val client = Wenku8HttpClient(File(context.cacheDir, "wenku8-covers"))
     /** 同一 URL 的并发加载合并成一次：列表里同一本书的封面常被多屏同时请求。 */
     private val inflight = ConcurrentHashMap<String, CompletableDeferred<ImageBitmap?>>()
+    /** 下载与清理互斥：trim 与写入并发时会按过期总量继续删，把刚写好的封面删掉。 */
+    private val diskLock = Any()
+    /**
+     * 下载自己跑：调用方离开组合只代表没人再等结果，不该让一次已经发出的请求作废，
+     * 也不该把「被取消」当成「下载失败」传给同一 URL 的其他等待者。
+     */
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val memory = object : LruCache<String, ImageBitmap>(MEMORY_BYTES) {
         override fun sizeOf(key: String, value: ImageBitmap): Int = value.width * value.height * 4
     }
@@ -52,17 +63,6 @@ class CoverRepository(context: Context) {
 
     fun cacheFile(url: String): File = File(directory, "${url.hashCode().toUInt().toString(16)}-${url.length}.cover")
 
-    /** 命中内存或磁盘时返回，未命中返回 null（不触发网络）。 */
-    fun cached(url: String, targetWidthPx: Int = 0): ImageBitmap? {
-        val key = normalize(url)
-        memory.get(memoryKey(key, targetWidthPx))?.let { return it }
-        val file = cacheFile(key)
-        if (!file.isFile) return null
-        return runCatching { decode(file, targetWidthPx) }
-            .getOrNull()
-            ?.also { memory.put(memoryKey(key, targetWidthPx), it) }
-    }
-
     /**
      * 内存缓存按「URL + 目标宽度」分键：列表小图与全屏大图共用一张位图会让
      * 小图把原图常驻在 LRU 里，占满 12 MB 后其余封面反复重解。
@@ -72,6 +72,9 @@ class CoverRepository(context: Context) {
 
     /**
      * 加载封面。优先内存/磁盘缓存，其次网络。
+     *
+     * 并发去重按 URL：一次下载，多种宽度共用；后来者拿到共享结果后按**自己的**宽度
+     * 从磁盘重新解码。直接把领先者的位图交给别人会让 480dp 的详情封面顶替全屏原图。
      * @param targetWidthPx 目标宽度（像素），用于下采样避免 OOM；<=0 表示原图。
      */
     suspend fun load(url: String, targetWidthPx: Int = 0): ImageBitmap? = withContext(Dispatchers.IO) {
@@ -87,23 +90,29 @@ class CoverRepository(context: Context) {
             }
         }
 
-        // 并发去重：后来者等领先者一次下载的结果，避免同一封面同时打多次网络
-        // （限流是 1 秒/请求，重复下载会直接把首屏拖长）。
         val gate = CompletableDeferred<ImageBitmap?>()
         inflight.putIfAbsent(key, gate)?.let { leader ->
-            return@withContext runCatching { leader.await() }.getOrNull()
+            val shared = awaitShared(leader) ?: return@withContext null
+            val own = runCatching { decode(file, targetWidthPx) }.getOrNull()
+            return@withContext (own ?: shared).also { memory.put(memKey, it) }
         }
-        try {
-            val result = fetchRemote(key, file, targetWidthPx)
+        scope.launch {
+            val result = runCatching { fetchRemote(key, file, targetWidthPx) }.getOrNull()
             gate.complete(result)
-            result
-        } catch (error: Throwable) {
-            gate.completeExceptionally(error)
-            null
-        } finally {
             inflight.remove(key, gate)
         }
+        awaitShared(gate)
     }
+
+    /** 等待共享结果；调用方被取消时向上抛，不能被当成「下载失败」。 */
+    private suspend fun awaitShared(gate: CompletableDeferred<ImageBitmap?>): ImageBitmap? =
+        try {
+            gate.await()
+        } catch (cancel: CancellationException) {
+            throw cancel
+        } catch (_: Throwable) {
+            null
+        }
 
     private suspend fun fetchRemote(key: String, file: File, targetWidthPx: Int): ImageBitmap? {
         val downloaded = runCatching {
@@ -117,8 +126,8 @@ class CoverRepository(context: Context) {
 
         val bitmap = decodeBytes(bytes, targetWidthPx) ?: return null
         runCatching {
-            file.writeBytes(bytes)
-            trimCoverDirectory(directory, DISK_LIMIT_BYTES, DISK_TARGET_BYTES)
+            writeCache(file, bytes)
+            trimDisk()
         }
         memory.put(memoryKey(key, targetWidthPx), bitmap)
         return bitmap
@@ -138,8 +147,8 @@ class CoverRepository(context: Context) {
         File(downloaded.path).delete()
         bytes?.takeIf { it.isNotEmpty() }?.also {
             runCatching {
-                file.writeBytes(it)
-                trimCoverDirectory(directory, DISK_LIMIT_BYTES, DISK_TARGET_BYTES)
+                writeCache(file, it)
+                trimDisk()
             }
         }
     }
@@ -172,18 +181,45 @@ class CoverRepository(context: Context) {
     }
 
     fun clear() {
-        memory.evictAll()
-        directory.listFiles()?.forEach { it.delete() }
+        synchronized(diskLock) {
+            memory.evictAll()
+            directory.listFiles()?.forEach { it.delete() }
+        }
+    }
+
+    /** 先写临时文件再改名：中途被杀不会留下半张图被当成缓存命中。 */
+    private fun writeCache(file: File, bytes: ByteArray) {
+        val staging = File(file.parentFile, file.name + PART_SUFFIX)
+        staging.writeBytes(bytes)
+        val renamed = staging.renameTo(file)
+        if (!renamed) {
+            file.writeBytes(bytes)
+            staging.delete()
+        }
+    }
+
+    private fun trimDisk() = synchronized(diskLock) {
+        // 进程被杀会留下 .part：不参与容量统计，但也不能永远占着磁盘。
+        val now = System.currentTimeMillis()
+        directory.listFiles()
+            ?.filter { it.isFile && it.name.endsWith(PART_SUFFIX) && now - it.lastModified() > STALE_PART_MS }
+            ?.forEach { it.delete() }
+        trimCoverDirectory(directory, DISK_LIMIT_BYTES, DISK_TARGET_BYTES)
     }
 
     /** 磁盘缓存的占用（字节）；设置页展示与清理前确认用。 */
-    fun diskUsageBytes(): Long = directory.listFiles()?.filter { it.isFile }?.sumOf { it.length() } ?: 0L
+    fun diskUsageBytes(): Long = directory.listFiles()
+        ?.filter { it.isFile && !it.name.endsWith(PART_SUFFIX) }
+        ?.sumOf { it.length() }
+        ?: 0L
 
     private companion object {
         const val MEMORY_BYTES = 12 * 1024 * 1024
         const val DISK_LIMIT_BYTES = 128L * 1024 * 1024
         const val DISK_TARGET_BYTES = 96L * 1024 * 1024
         const val REFERER = "https://www.wenku8.net/"
+        const val PART_SUFFIX = ".part"
+        const val STALE_PART_MS = 60L * 60 * 1000
     }
 }
 
@@ -194,7 +230,9 @@ class CoverRepository(context: Context) {
  * 但不会替我们控制水位，低存储设备上容易先被系统当作“占用大户”。
  */
 internal fun trimCoverDirectory(directory: File, limitBytes: Long, targetBytes: Long) {
-    val files = directory.listFiles()?.filter { it.isFile } ?: return
+    val files = directory.listFiles()
+        ?.filter { it.isFile && !it.name.endsWith(".part") }
+        ?: return
     var total = files.sumOf { it.length() }
     if (total <= limitBytes) return
     for (file in files.sortedBy { it.lastModified() }) {

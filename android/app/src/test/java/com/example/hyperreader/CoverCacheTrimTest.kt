@@ -51,6 +51,54 @@ class CoverCacheTrimTest {
         assertEquals(false, directory.exists())
     }
 
+    /** 写入中的 `.part` 不参与容量统计，也不能被 trim 当成旧缓存删掉。 */
+    @Test
+    fun stagingFilesAreNeitherCountedNorDeleted() {
+        val directory = Files.createTempDirectory("covers-staging").toFile()
+        try {
+            (1..3).forEach { index ->
+                File(directory, "cover$index").apply {
+                    writeBytes(ByteArray(100))
+                    setLastModified(BASE_TIME + index * 1_000L)
+                }
+            }
+            val staging = File(directory, "cover4.part").apply {
+                writeBytes(ByteArray(1_000))
+                setLastModified(BASE_TIME)
+            }
+
+            trimCoverDirectory(directory, limitBytes = 250, targetBytes = 150)
+
+            assertEquals(true, staging.isFile)
+            val remaining = directory.listFiles().orEmpty().filter { it.isFile && !it.name.endsWith(".part") }
+            assertEquals(1, remaining.size)
+        } finally {
+            directory.deleteRecursively()
+        }
+    }
+
+    /** 重复调用收敛：第二次不该再删任何东西（仓库层靠这一点避免并发 trim 越删越旧）。 */
+    @Test
+    fun repeatedTrimsAreStable() {
+        val directory = Files.createTempDirectory("covers-stable").toFile()
+        try {
+            (1..4).forEach { index ->
+                File(directory, "cover$index").apply {
+                    writeBytes(ByteArray(100))
+                    setLastModified(BASE_TIME + index * 1_000L)
+                }
+            }
+
+            trimCoverDirectory(directory, limitBytes = 300, targetBytes = 200)
+            val afterFirst = directory.listFiles().orEmpty().map { it.name }.sorted()
+            trimCoverDirectory(directory, limitBytes = 300, targetBytes = 200)
+
+            assertEquals(afterFirst, directory.listFiles().orEmpty().map { it.name }.sorted())
+        } finally {
+            directory.deleteRecursively()
+        }
+    }
+
     private companion object {
         const val BASE_TIME = 1_700_000_000_000L
     }

@@ -54,7 +54,7 @@ fun CoverViewerDialog(
 
     LaunchedEffect(url) {
         if (url.isNullOrBlank()) return@LaunchedEffect
-        bitmap = repository.cached(url) ?: repository.load(url)
+        bitmap = repository.load(url)
         failed = bitmap == null
     }
 

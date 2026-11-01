@@ -46,7 +46,7 @@ fun CoverImage(
     val targetPx = if (targetWidthDp > 0) with(density) { targetWidthDp.dp.roundToPx() } else 0
 
     var bitmap by remember(url, targetPx) { mutableStateOf<ImageBitmap?>(null) }
-    var failed by remember(url) { mutableStateOf(false) }
+    var failed by remember(url, targetPx) { mutableStateOf(false) }
 
     LaunchedEffect(url, targetPx) {
         if (url.isNullOrBlank()) return@LaunchedEffect

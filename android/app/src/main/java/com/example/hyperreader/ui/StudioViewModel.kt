@@ -772,8 +772,15 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
 
     fun clearCoverCache() {
         viewModelScope.launch(Dispatchers.IO) {
-            runCatching { app.coverRepository.clear() }
-            mutable.update { it.copy(coverCacheBytes = 0L, message = "封面缓存已清理") }
+            val cleared = runCatching { app.coverRepository.clear() }
+            // 清完重新量一次：在途下载可能已经又写回了文件，直接写 0 会与磁盘不符。
+            val bytes = runCatching { app.coverRepository.diskUsageBytes() }.getOrDefault(0L)
+            mutable.update {
+                it.copy(
+                    coverCacheBytes = bytes,
+                    message = if (cleared.isSuccess) "封面缓存已清理" else "清理失败，请稍后重试",
+                )
+            }
         }
     }
 
