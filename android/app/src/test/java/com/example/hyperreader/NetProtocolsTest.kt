@@ -81,9 +81,12 @@ class NetProtocolsTest {
 
     @Test
     fun truncatedCompressedBodyStillYieldsTheDecodedPrefix() {
-        // 403 拦截页只 peek 前 2KB，压缩流必然是截断的；标题必须仍能读出来
-        val raw = gzip(ByteArray(16 * 1024) { 'a'.code.toByte() }).copyOfRange(0, 64)
-        val decoded = String(decodeHttpContent(raw, "gzip"))
+        // 403 拦截页只 peek 前 2KB，压缩流必然是截断的；标题必须仍能读出来。
+        // 尾部的随机字节让压缩结果足够长，前 200 字节只覆盖开头的重复段。
+        val payload = "a".repeat(8192).toByteArray() + ByteArray(4096).also { java.util.Random(7).nextBytes(it) }
+        val compressed = gzip(payload)
+        val truncated = compressed.copyOfRange(0, minOf(200, compressed.size - 1))
+        val decoded = String(decodeHttpContent(truncated, "gzip"))
         assertTrue(decoded.startsWith("aaaa"))
     }
 
