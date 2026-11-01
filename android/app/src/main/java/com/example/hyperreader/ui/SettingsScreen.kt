@@ -545,12 +545,12 @@ private fun NetworkSection(state: StudioUiState, viewModel: StudioViewModel, onO
             StudioPanel("浏览器验证") {
                     StudioFactRow(
                         label = "验证状态",
-                        value = if (state.clearancePresent) "已有验证凭证" else "尚无（公开页可能被拦）",
+                        value = if (state.clearancePresent) "已有兜底凭证" else "未使用（公开页直连）",
                     )
                     Text(
-                        "Cloudflare 要求浏览器执行验证：WebView 能通过，App 的网络请求不行。" +
-                            "用下面按钮在当前直连入口上验证一次，凭证按入口域名分别保存；换入口后需要重新验证。" +
-                            "若已有凭证却仍然被拦，请配置中继。",
+                        "公开页现在按浏览器的压缩口径直连，通常不需要这一步。" +
+                            "若仍被 Cloudflare 挑战，可在当前直连入口上验证一次：凭证按入口域名分别保存，换入口后需要重新验证。" +
+                            "验证窗口走的是浏览器链路，能打开不代表 App 的请求一定放行；两条都失败时请配置中继。",
                         fontSize = UiDimens.captionSmall,
                         color = secondaryTextColor(),
                     )

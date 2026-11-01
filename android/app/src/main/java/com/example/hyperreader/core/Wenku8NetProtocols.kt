@@ -15,8 +15,12 @@ import okhttp3.TlsVersion
  * 1. **HTTP/2 优先**，靠 ALPN 协商；服务端不支持时回落 HTTP/1.1；
  * 2. **TLS 1.3 优先**、回落 1.2；minSdk 26 的旧设备没有完整 1.3，由 TLS 栈自动回落，
  *    不需要我们做版本判断；
- * 3. **不要手加 `Accept-Encoding: br`**：OkHttp 只自动处理 gzip，声明 br 会拿到
- *    压不动的响应体（这是协议协商，不是压缩偏好）；
+ * 3. **`Accept-Encoding` 必须显式声明为 `gzip, deflate`**（见 [headers]）。OkHttp 默认只发
+ *    `Accept-Encoding: gzip`，而 Cloudflare 对「声称是 Chrome、却只声明 gzip」的请求一律下发
+ *    managed challenge（实测：同网络同头组，仅把该头从 `gzip` 改成 `gzip, deflate` 就从
+ *    `403 cf-mitigated=challenge` 变成 `200`）。不能声明 `br`/`zstd`：OkHttp 解不了，
+ *    服务端会真的返回 `br`/`zstd`。显式声明会关闭 OkHttp 的透明解压，
+ *    因此 [Wenku8HttpClient] 按 `Content-Encoding` 自行解压。
  * 4. **User-Agent 使用标准浏览器 UA**（平台一致的 Android Chrome 形态），让请求在
  *    Cloudflare 侧看起来是常规客户端而不是脚本工具。
  *
@@ -53,6 +57,9 @@ object Wenku8NetProtocols {
     fun headers(): Map<String, String> = linkedMapOf(
         "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
         "Accept-Language" to ACCEPT_LANGUAGE,
+        // 关键：只写 gzip 会被 Cloudflare 判为「非浏览器」并下发 JS 挑战。
+        // 浏览器发的是 gzip, deflate, br, zstd；我们只能解开前两种，所以声明前两种。
+        "Accept-Encoding" to "gzip, deflate",
         // 与 UA 配套的客户端提示：只带 Chrome 默认发送的低熵项（brands/mobile/platform），
         // 缺这一组时「UA 声称是 Chrome、握手却不像浏览器」自相矛盾，部分 WAF 据此直接 403。
         "sec-ch-ua" to "\"Google Chrome\";v=\"131\", \"Chromium\";v=\"131\", \"Not_A Brand\";v=\"24\"",

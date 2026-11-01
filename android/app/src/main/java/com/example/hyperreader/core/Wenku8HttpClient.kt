@@ -13,7 +13,10 @@ import okhttp3.Protocol
 import okhttp3.Request
 import java.io.File
 import java.io.FileOutputStream
+import java.io.InputStream
 import java.net.InetAddress
+import java.util.zip.GZIPInputStream
+import java.util.zip.InflaterInputStream
 import javax.net.ssl.SSLHandshakeException
 import javax.net.ssl.SSLPeerUnverifiedException
 import java.nio.charset.Charset
@@ -199,7 +202,13 @@ class Wenku8HttpClient(private val cacheDirectory: File, private val sessionCook
                 // 而不是只在解析器里针对 parseBook 生效。
                 // 诊断信息（cf-mitigated / cf-ray / 页面标题）只用于在设置页区分
                 // 「JS 挑战」与「WAF 硬拦截」：前者能用 clearance，后者换网络或中继才有用。
-                val bodyPreview = runCatching { response.peekBody(CF_PEEK_LIMIT).string() }.getOrDefault("")
+                // 显式声明 Accept-Encoding 后 OkHttp 不再透明解压（见 Wenku8NetProtocols.headers），
+                // 这里按 Content-Encoding 自己解，否则拿到的是压缩字节。
+                val encoding = response.header("Content-Encoding").orEmpty()
+                val previewBytes = runCatching {
+                    response.body?.let { body -> decodeLimited(body, encoding, CF_PEEK_LIMIT) } ?: ByteArray(0)
+                }.getOrDefault(ByteArray(0))
+                val bodyPreview = String(previewBytes, Charsets.ISO_8859_1)
                 val mitigated = response.header("cf-mitigated") ?: "无"
                 val ray = response.header("cf-ray") ?: "无"
                 response.close()
@@ -212,7 +221,9 @@ class Wenku8HttpClient(private val cacheDirectory: File, private val sessionCook
                 throw Wenku8Exception("源站返回 HTTP $status。", "UPSTREAM_HTTP_ERROR")
             }
             val body = response.body ?: throw Wenku8Exception("源站响应为空。", "EMPTY_RESPONSE")
-            val bytes = body.byteStream().use { readLimited(it, body.contentLength(), maxBytes) }
+            val encoding = response.header("Content-Encoding").orEmpty()
+            val declared = if (encoding.isBlank()) body.contentLength() else -1L
+            val bytes = decodedStream(body, encoding).use { readLimited(it, declared, maxBytes) }
             val result = HttpResult(bytes, response.header("Content-Type").orEmpty(), status, current.toString())
             response.close()
             return result
@@ -276,6 +287,33 @@ class Wenku8HttpClient(private val cacheDirectory: File, private val sessionCook
         return output.toByteArray()
     }
 
+    /** 按 `Content-Encoding` 包装响应体。显式声明 Accept-Encoding 后 OkHttp 不再透明解压。 */
+    private fun decodedStream(body: okhttp3.ResponseBody, encoding: String): InputStream = when {
+        encoding.contains("gzip", ignoreCase = true) -> GZIPInputStream(body.byteStream())
+        encoding.contains("deflate", ignoreCase = true) -> InflaterInputStream(body.byteStream())
+        else -> body.byteStream()
+    }
+
+    /** 解压并只读前 [limit] 字节，供 403 拦截页做特征识别（压缩流截断时保留已解出的前缀）。 */
+    private fun decodeLimited(body: okhttp3.ResponseBody, encoding: String, limit: Long): ByteArray {
+        val raw = java.io.ByteArrayOutputStream()
+        val buffer = ByteArray(4 * 1024)
+        try {
+            body.byteStream().use { input ->
+                while (raw.size() < limit) {
+                    val room = minOf(buffer.size.toLong(), limit - raw.size()).toInt()
+                    if (room <= 0) break
+                    val count = input.read(buffer, 0, room)
+                    if (count < 0) break
+                    raw.write(buffer, 0, count)
+                }
+            }
+        } catch (_: Exception) {
+            // 读不全也能用前缀判定挑战页
+        }
+        return decodeHttpContent(raw.toByteArray(), encoding)
+    }
+
     private fun decodeHtml(bytes: ByteArray, contentType: String): String {
         // wenku8 声明 gbk 但实际输出 GB18030（issue #485），归一化见 Wenku8Encoding
         val head = String(bytes, 0, minOf(bytes.size, 4096), Charsets.ISO_8859_1)
@@ -308,4 +346,34 @@ class Wenku8HttpClient(private val cacheDirectory: File, private val sessionCook
         /** 403 时读取响应体前N 字节用于识别 Cloudflare 挑战页（够识别标题即可）。 */
         private const val CF_PEEK_LIMIT = 2048L
     }
+}
+
+/**
+ * 按 `Content-Encoding` 解压响应体。
+ *
+ * `Wenku8NetProtocols.headers()` 显式声明 `Accept-Encoding: gzip, deflate` 后，
+ * OkHttp 不再为我们透明解压，所以所有响应体必须过一遍这里。
+ * 无法识别的编码原样返回；压缩流被截断时返回已解出的前缀（用于挑战页判定）。
+ */
+internal fun decodeHttpContent(bytes: ByteArray, encoding: String): ByteArray {
+    if (bytes.isEmpty() || encoding.isBlank()) return bytes
+    val stream: InputStream = when {
+        encoding.contains("gzip", ignoreCase = true) -> GZIPInputStream(bytes.inputStream())
+        encoding.contains("deflate", ignoreCase = true) -> InflaterInputStream(bytes.inputStream())
+        else -> return bytes
+    }
+    val output = java.io.ByteArrayOutputStream(bytes.size * 4)
+    val buffer = ByteArray(16 * 1024)
+    try {
+        stream.use { input ->
+            while (true) {
+                val count = input.read(buffer)
+                if (count < 0) break
+                output.write(buffer, 0, count)
+            }
+        }
+    } catch (_: Exception) {
+        // 截断的压缩体：保留已解出的部分
+    }
+    return if (output.size() == 0) bytes else output.toByteArray()
 }

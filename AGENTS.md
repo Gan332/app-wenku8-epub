@@ -145,7 +145,11 @@ android/app/src/main/java/io/nightfish/lightnovelreader/api/   ← LNR 书源抽
 - **HTTP/2 优先**（ALPN 协商，回落 HTTP/1.1）、**TLS 1.3 优先**（回落 1.2），在`core/Wenku8NetProtocols.kt` 声明并由 `NetProtocolsTest` 锁定；
 - 请求头是**完整导航头组**（`Sec-Fetch-Dest: document` / `Sec-Fetch-Mode: navigate` / `Sec-Fetch-Site` / `Sec-Fetch-User`、`Upgrade-Insecure-Requests`、`Accept: …image/avif,image/webp`），
   图片请求用独立的 `image` 语义头组（`Wenku8NetProtocols.imageHeaders`），不冒用 `document`；
-- **不要手加 `Accept-Encoding: br`**（OkHttp 只自动处理 gzip）；
+- **`Accept-Encoding` 必须显式声明 `gzip, deflate`**（2026-11 实测的关键判据）。OkHttp 默认只发
+  `Accept-Encoding: gzip`，Cloudflare 会据此把客户端判成脚本并下发 managed challenge
+  （`Cf-Mitigated: challenge` + `Just a moment...`）。显式声明会关闭 OkHttp 的透明解压，
+  因此 `Wenku8HttpClient` 按 `Content-Encoding` 自行解压（`decodeHttpContent`）；
+  **不要声明 `br`/`zstd`**：OkHttp 解不开，而服务端会真的返回该编码；
 - **User-Agent 使用标准浏览器 UA**（与平台一致的 Android Chrome 形态）——但 UA **不用于**绕过任何访问控制，登录墙与验证页照旧按§4.2 处理；
 - **编码**：源站声明 gbk/gb2312 但实际输出 GB18030，一律按 **GB18030** 解码（`Wenku8Encoding`，LNR issue #485）；
 - **直连入口轮换**：`.net → .cc`，遇到 CF 拦截或 TLS 证书异常换一个边缘入口重试一次
@@ -159,11 +163,17 @@ android/app/src/main/java/io/nightfish/lightnovelreader/api/   ← LNR 书源抽
   （`Wenku8Url.isEntryHost`）。改到图片 CDN 的 host 上会让请求落到主站并不存在的
   `/image/…`（实测 404），封面与插图会静默消失。
 
-**403 排查口径**（实测于 2026-10）：匿名公开页前置 Cloudflare，对部分网络会返回
-403「Attention Required」（约 5.5KB 拦截页）：
+**403 排查口径**（2026-11 实测，推翻 0.18.0「与 UA/Referer 无关、波动、只能换网络」的旧结论）：
 
-- 与UA / Referer / Accept-Language **无关**（补齐浏览器头仍 403），不要试图伪装绕过；
-- 是**波动**的：同一网络实测出现过连续 8 次 403、也出现过 200；
+- 决定项是 **`Accept-Encoding`**。浏览器发 `gzip, deflate, br, zstd`；OkHttp 默认只发 `gzip`。
+  同一网络、同一组头，逐个替换其它变量（UA / Sec-Fetch / 客户端提示 / Cookie / HTTP 版本 /
+  TLS 栈 / IPv4 / IPv6 / Referer）**都 200**；只把 `Accept-Encoding` 改成单纯 `gzip`，
+  立刻 `403 Cf-Mitigated: challenge`；改成 `gzip, deflate` 即 200（服务端选 gzip）。
+  这就是「浏览器能过、App 不能」的真正原因，与 TLS 指纹、HTTP/2 无关。
+- 因此修复在客户端本身：`Wenku8NetProtocols.headers()` 声明 `gzip, deflate`，
+  `Wenku8HttpClient` 自行解压。`cf_clearance` 仍保留（部分网络仍会挑战），但不再是主路径。
+- 挑战页仍按 `UPSTREAM_CHALLENGE` 归类（`Wenku8Parser.looksLikeChallenge()`，含 gzip 解码）；
+  验证窗口只从「设置 → 网络 → 浏览器验证」与在线阅读错误页按钮主动打开，不自动弹窗。
 - 图域`img.wenku8.com` 走 nginx、不经 Cloudflare，**不受影响**（封面/插图链路正常）；
   插图在 2026 年迁到新图床 `pic.777743.xyz`（同样不经 CF），按 §4.2 的图片白名单放行；
   页面给的图片常是相对路径或明文 http，解析出口必须走 `Wenku8Url.normalizeImage`
@@ -176,11 +186,13 @@ android/app/src/main/java/io/nightfish/lightnovelreader/api/   ← LNR 书源抽
 注意登录页 WebView 必须用 `Wenku8NetProtocols.USER_AGENT`（早先版本用的是 App 自家 UA，
 会被当可疑客户端拦下）。
 
-**为什么 WebView 能过而 OkHttp 不能（实测结论，0.18.0）**：Cloudflare 对非浏览器客户端
-启用了**需要执行 JavaScript 的挑战**——浏览器能执行JS 故通过（登录与验证页都正常），
-OkHttp 执行不了故直接 403。浏览器通过后下发的 `cf_clearance` **与 UA/IP 绑定**，
-只要OkHttp 用同一份 UA（同一个 `Wenku8NetProtocols.USER_AGENT`）并带上它即可放行——
-公开链路的 `clearanceCookieJar()` 就是干这个的。若已有凭证仍被拦，则只剩自建中继（§4.13）。
+**为什么 WebView 能过而 OkHttp 不能（2026-11 修正）**：不是「WebView 能执行 JS 所以被放行」——
+而是浏览器与 OkHttp 在 `Accept-Encoding` 上不同（见上）。WebView 本来就发完整浏览器编码列表，
+OkHttp 现在显式发 `gzip, deflate`，公开页不再需要先做验证。
+`cf_clearance` 作为兜底保留：按 host 存在 `Wenku8SessionStore`，只发给 wenku8 域名，
+但 **不要假定它一定有效**——实测在部分网络下，用它拿到的 token 回放到 OkHttp 仍然被挑战
+（token 与验证时的会话/握手也有关）。凭证失效时客户端会自动挂起重试、必要时提示重新验证；
+仍不行则用自建中继（§4.13）。
 
 凭证还**与入口域名绑定**：`Wenku8SessionStore` 按 host 分开存（键 `cf_clearance@www.wenku8.cc`），
 验证窗口打在当前直连入口（`Wenku8Endpoint.directRewire`，忽略中继）上，通过后把该入口钉住；
