@@ -22,6 +22,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
@@ -47,8 +48,10 @@ import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Badge
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Icon
+import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
+import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.More
 import top.yukonga.miuix.kmp.overlay.OverlayBottomSheet
@@ -78,6 +81,8 @@ fun BookshelfScreen(
     var menuEntryId by remember { mutableStateOf<String?>(null) }
     // 排序选择 Sheet（0.19.0-alpha03）：编辑型设置用轻量 Sheet，不占二级页（AGENTS §4.12）
     var sortSheet by remember { mutableStateOf(false) }
+    // 书架内筛选：纯 UI 关注点，不进 ViewModel，也不持久化（换 tab 后由 rememberSaveable 保留）
+    var filter by rememberSaveable { mutableStateOf("") }
     // 阅读断点（第 x 章 · 第 y 段）：reader_progress_ 前缀键的全量视图
     val readingProgress by viewModel.readingProgress.collectAsStateWithLifecycle(initialValue = emptyMap())
     // 数据变化时刷新「N 分钟前」的基准时刻，避免长开应用后相对时间停在启动瞬间
@@ -86,7 +91,15 @@ fun BookshelfScreen(
     val menuEntry = state.bookshelf.firstOrNull { it.id == menuEntryId }
     // 分组按书架内容记忆，放在 LazyColumn **之外**：`LazyListScope` 的 DSL 块不是
     // @Composable 上下文，在里面调 `remember` 会直接编译失败。
-    val sections = remember(state.bookshelf) { groupBookshelf(state.bookshelf) }
+    // 筛选只影响列表呈现：置顶、分组与排序仍由完整书架决定。
+    val visibleEntries = remember(state.bookshelf, filter) {
+        val query = filter.trim()
+        if (query.isEmpty()) state.bookshelf
+        else state.bookshelf.filter {
+            it.title.contains(query, ignoreCase = true) || it.author.contains(query, ignoreCase = true)
+        }
+    }
+    val sections = remember(visibleEntries) { groupBookshelf(visibleEntries) }
     // 折叠状态是纯 UI 关注点，不进 ViewModel（AGENTS §4.6.1）。
     var collapsed by remember { mutableStateOf(emptySet<BookshelfGroup>()) }
     // 单滚动容器：页头（标题 / 说明 / 导入 / 导出 / 分割线）与书籍列表放在同一个
@@ -128,7 +141,8 @@ fun BookshelfScreen(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        "${state.bookshelf.size} 本书",
+                        if (filter.isBlank()) "${state.bookshelf.size} 本书"
+                        else "${visibleEntries.size} / ${state.bookshelf.size} 本",
                         fontSize = UiDimens.title,
                         fontWeight = FontWeight.Bold,
                     )
@@ -137,6 +151,29 @@ fun BookshelfScreen(
                         modifier = Modifier.weight(1f),
                         fontSize = UiDimens.captionSmall,
                         color = tertiaryTextColor(),
+                    )
+                }
+            }
+            // 书少时不占地方；书多了才需要筛选入口。
+            if (state.bookshelf.size >= FILTER_MIN_BOOKS) {
+                item(key = "bookshelf-filter") {
+                    TextField(
+                        value = filter,
+                        onValueChange = { filter = it },
+                        label = "筛选书名或作者",
+                        useLabelAsPlaceholder = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        trailingIcon = if (filter.isBlank()) null else {
+                            {
+                                IconButton(
+                                    onClick = { filter = "" },
+                                    modifier = Modifier.size(UiDimens.touchMin),
+                                ) {
+                                    Icon(MiuixIcons.Close, contentDescription = "清空筛选")
+                                }
+                            }
+                        },
                     )
                 }
             }
@@ -159,6 +196,13 @@ fun BookshelfScreen(
                     description = "可以从「探索」加入 Wenku8 书籍，或导入本地 EPUB。",
                     actionLabel = "去探索",
                     onAction = onOpenExplore,
+                )
+            }
+        } else if (visibleEntries.isEmpty()) {
+            item(key = "bookshelf-no-match") {
+                EmptyState(
+                    title = "没有匹配的书",
+                    description = "试试书名或作者的其他关键词，或清空筛选。",
                 )
             }
         } else {
@@ -575,4 +619,7 @@ private fun BookshelfSkeleton() {
         }
     }
 }
+
+/** 书架少于这个数量时不显示筛选框：几本书翻一眼就找得到，输入框只会占地方。 */
+private const val FILTER_MIN_BOOKS = 6
 
