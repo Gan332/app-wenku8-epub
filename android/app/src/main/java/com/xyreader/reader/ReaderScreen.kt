@@ -73,6 +73,9 @@ import top.yukonga.miuix.kmp.basic.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -211,6 +214,19 @@ fun ReaderScreen(
     // 书签全量流（UI 按 bookId 过滤本书）；阅读配置提升到顶层供亮度作用与各分支共用
     val bookmarks by viewModel.bookmarks.collectAsState(initial = emptyList())
     val prefs by viewModel.readerPrefs.collectAsState()
+
+    // —— 进度落库：翻页有 500ms 防抖，退后台或退出前先 flush 一次，避免丢最后一页 ——
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, viewModel) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP) viewModel.flushProgress()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            viewModel.flushProgress()
+        }
+    }
 
     // —— 状态栏：进入隐藏，离开恢复；部分环境拿不到 Activity，整体 try-catch 静默降级 ——
     val context = LocalContext.current

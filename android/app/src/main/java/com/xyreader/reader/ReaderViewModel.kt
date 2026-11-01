@@ -147,6 +147,8 @@ class ReaderViewModel(
     private var growJob: Job? = null
 
     private var saveJob: Job? = null
+    /** pager 是否真的上报过页码；未上报前 flushProgress 不能把默认 0 写成进度。 */
+    private var pageReported = false
 
     /** 当前已打开数据源所用的样式键；与最新配置不一致时触发重建 */
     private var openedStyleKey: String? = null
@@ -754,11 +756,30 @@ class ReaderViewModel(
     }
 
     /**
+     * 离开阅读器前立即落库：进度平时防抖 500ms，退到后台/关闭后进程可能被回收，
+     * 只靠防抖会丢掉最后一次翻页（表现为「刚翻过一页，再进来回到上一页」）。
+     * 用 NonCancellable 保证 ViewModel 已清理时这次写入也能跑完。
+     */
+    fun flushProgress() {
+        if (!pageReported) return
+        val count = _state.value.pageCount
+        if (count <= 0) return
+        val page = currentPage
+        saveJob?.cancel()
+        saveJob = viewModelScope.launch(start = CoroutineStart.UNDISPATCHED) {
+            withContext(NonCancellable + Dispatchers.IO) {
+                runCatching { repository.saveProgress(bookId, page, count) }
+            }
+        }
+    }
+
+    /**
      * 当前页变化（由 Screen 的 pager snapshotFlow 回报）：
      * 立即预载前后各 2 页；进度防抖 500ms 后保存，快速连翻只落库最后一页。
      */
     fun onPageChanged(page: Int) {
         currentPage = page
+        pageReported = true
         pruneAround(page)
         preloadAround(page)
         maybeGrow(page)

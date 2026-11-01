@@ -69,6 +69,33 @@ class StartPositionTest {
     }
 
     @Test
+    fun deletedStartChapterZerosThePageAxis() {
+        // 页轴起始章已从目录消失（进度里的 startChapterId 不在目录），页码相对旧页轴，不能套用
+        val start = StartPosition.resolve(
+            requestedChapterId = null,
+            catalog = catalog,
+            rememberedChapterId = "10003",
+            rememberedPage = 70,
+            rememberedStartChapterId = "10002",
+        )
+        assertEquals("10003", start.chapterId)
+        assertEquals(0, start.page)
+    }
+
+    @Test
+    fun matchingStartChapterKeepsThePage() {
+        val start = StartPosition.resolve(
+            requestedChapterId = null,
+            catalog = catalog,
+            rememberedChapterId = "10002",
+            rememberedPage = 7,
+            rememberedStartChapterId = "10002",
+        )
+        assertEquals("10002", start.chapterId)
+        assertEquals(7, start.page)
+    }
+
+    @Test
     fun emptyCatalogYieldsNoChapter() {
         val start = StartPosition.resolve("10001", emptyList(), null, null)
         assertNull(start.chapterId)

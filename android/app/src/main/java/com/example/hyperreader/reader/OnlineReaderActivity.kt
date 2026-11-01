@@ -121,6 +121,7 @@ class OnlineReaderActivity : ComponentActivity() {
                         catalog = index.catalog.chapters,
                         rememberedChapterId = repository.resolveStartChapterId(index.catalog.chapters),
                         rememberedPage = stored?.page,
+                        rememberedStartChapterId = stored?.startChapterId,
                     )
                     val initialPage = start.page
                     opener.setStartChapterId(start.chapterId)

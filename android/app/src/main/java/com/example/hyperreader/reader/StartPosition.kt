@@ -19,11 +19,15 @@ internal object StartPosition {
         catalog: List<Chapter>,
         rememberedChapterId: String?,
         rememberedPage: Int?,
+        rememberedStartChapterId: String? = null,
     ): Start {
         val requested = requestedChapterId?.takeIf { id -> catalog.any { it.id == id } }
         if (requested != null) return Start(chapterId = requested, page = 0)
         val chapterId = rememberedChapterId?.takeIf { id -> catalog.any { it.id == id } }
             ?: catalog.firstOrNull()?.id
-        return Start(chapterId = chapterId, page = rememberedPage ?: 0)
+        // 页码只对「当初那条页轴的起始章」有意义：起始章已从目录消失、回落到别的章时，
+        // 旧页码（相对旧页轴）套到新页轴上会跳到章尾甚至下一章，必须归零。
+        val pageApplies = rememberedStartChapterId == null || rememberedStartChapterId == chapterId
+        return Start(chapterId = chapterId, page = if (pageApplies) rememberedPage ?: 0 else 0)
     }
 }
