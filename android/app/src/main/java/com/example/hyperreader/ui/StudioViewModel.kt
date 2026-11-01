@@ -234,6 +234,7 @@ data class StudioUiState(
     val catalogLoading: Boolean = false,
     val catalogProgress: Pair<Int, Int>? = null,
     val catalogUpdatedAt: Long = 0L,
+    val coverCacheBytes: Long = 0L,
     val localResults: List<CatalogEntry> = emptyList(),
     val settingsSection: SettingsSection = SettingsSection.OVERVIEW,
     val readerSettings: com.example.hyperreader.settings.ReaderSettings = com.example.hyperreader.settings.ReaderSettings(),
@@ -758,7 +759,23 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    fun updateCatalog(budget: Int = 200) = catalogRepository.update(budget)    fun clearCatalog() = catalogRepository.clear()
+    fun updateCatalog(budget: Int = 200) = catalogRepository.update(budget)
+    fun clearCatalog() = catalogRepository.clear()
+
+    /** 读取封面/插图磁盘缓存占用；进入「书目缓存」页时刷新。 */
+    fun refreshCoverCacheSize() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val bytes = runCatching { app.coverRepository.diskUsageBytes() }.getOrDefault(0L)
+            mutable.update { it.copy(coverCacheBytes = bytes) }
+        }
+    }
+
+    fun clearCoverCache() {
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { app.coverRepository.clear() }
+            mutable.update { it.copy(coverCacheBytes = 0L, message = "封面缓存已清理") }
+        }
+    }
 
     /** 由用户在书架操作界面显式触发：抓取该作者的作品。被动触发，不由打开页面自动执行。 */
     fun expandAuthor(bookId: String) {

@@ -26,15 +26,11 @@ import kotlin.math.max
 
 class Wenku8HttpClient(private val cacheDirectory: File, private val sessionCookieJar: CookieJar? = null) {
     private val activeCalls = ConcurrentHashMap<String, MutableSet<Call>>()
-    private val client = OkHttpClient.Builder()
-        // 协议与 TLS 口径集中在 Wenku8NetProtocols（HTTP/2 优先 + TLS 1.3，见该文件 KDoc）
-        .protocols(Wenku8NetProtocols.protocols())
-        .connectionSpecs(Wenku8NetProtocols.tlsSpecs())
+    // 连接池/调度器在进程内共享：各仓库（探索、详情、导出、封面、诊断）各建一个
+    // OkHttpClient 时，同一个 host 会重复握手、各自占一组线程与空闲连接。
+    // 共享 base 后只换 CookieJar，连接仍然可以复用（Cookie 是请求期附加的）。
+    private val client = sharedClient.newBuilder()
         .apply { sessionCookieJar?.let { cookieJar(it) } }
-        .connectTimeout(20, TimeUnit.SECONDS)
-        .readTimeout(45, TimeUnit.SECONDS)
-        .followRedirects(false)
-        .followSslRedirects(false)
         .build()
 
     /** 降级用的 HTTP/1.1 客户端（参数相同，只改协议；遇到 403 时按需启用）。 */
@@ -345,6 +341,19 @@ class Wenku8HttpClient(private val cacheDirectory: File, private val sessionCook
         private const val MAX_RETRIES = 3
         /** 403 时读取响应体前N 字节用于识别 Cloudflare 挑战页（够识别标题即可）。 */
         private const val CF_PEEK_LIMIT = 2048L
+
+        /** 进程内共享的连接池与调度器；协议/TLS 口径集中在这里。 */
+        private val sharedClient: OkHttpClient by lazy {
+            OkHttpClient.Builder()
+                // 协议与 TLS 口径集中在 Wenku8NetProtocols（HTTP/2 优先 + TLS 1.3，见该文件 KDoc）
+                .protocols(Wenku8NetProtocols.protocols())
+                .connectionSpecs(Wenku8NetProtocols.tlsSpecs())
+                .connectTimeout(20, TimeUnit.SECONDS)
+                .readTimeout(45, TimeUnit.SECONDS)
+                .followRedirects(false)
+                .followSslRedirects(false)
+                .build()
+        }
     }
 }
 

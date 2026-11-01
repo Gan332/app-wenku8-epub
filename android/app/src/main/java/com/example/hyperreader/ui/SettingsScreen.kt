@@ -833,6 +833,7 @@ private fun ReaderSection(state: StudioUiState, viewModel: StudioViewModel, onIm
 
 @Composable
 private fun CatalogSection(state: StudioUiState, viewModel: StudioViewModel, onImportEpub: () -> Unit) {
+    LaunchedEffect(state.settingsSection) { viewModel.refreshCoverCacheSize() }
     val updated = state.catalogUpdatedAt.takeIf { it > 0 }
         ?.let { "上次更新 ${java.time.Instant.ofEpochMilli(it).atZone(java.time.ZoneId.systemDefault()).toLocalDate()}" }
         ?: "尚未更新"
@@ -856,6 +857,26 @@ private fun CatalogSection(state: StudioUiState, viewModel: StudioViewModel, onI
         {
             TextButton(text = "清空本地书目", onClick = viewModel::clearCatalog, modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin))
         },
+        { SectionTitle("缓存") },
+        {
+            StudioPanel("封面与插图") {
+                Text(
+                    "占用 ${formatCacheSize(state.coverCacheBytes)}",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = UiDimens.section,
+                )
+                Text(
+                    "封面与在线阅读插图共用这份磁盘缓存；超过 128 MB 时按最后访问时间自动清理最旧的。",
+                    fontSize = UiDimens.captionSmall,
+                    color = tertiaryTextColor(),
+                )
+                TextButton(
+                    text = "清理封面缓存",
+                    onClick = viewModel::clearCoverCache,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
+                )
+            }
+        },
         { SectionTitle("数据来源") },
         {
             Text(
@@ -867,6 +888,13 @@ private fun CatalogSection(state: StudioUiState, viewModel: StudioViewModel, onI
         { SectionTitle("文件") },
         { TextButton(text = "导入 EPUB 文件", onClick = onImportEpub, modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin)) },
     ))
+}
+
+/** 缓存占用的人话表示：低于 1 MB 用 KB，其余保留一位小数。 */
+private fun formatCacheSize(bytes: Long): String {
+    if (bytes <= 0L) return "暂无"
+    val mb = bytes / 1024.0 / 1024.0
+    return if (mb >= 1.0) String.format(java.util.Locale.US, "%.1f MB", mb) else "${bytes / 1024} KB"
 }
 
 @Composable

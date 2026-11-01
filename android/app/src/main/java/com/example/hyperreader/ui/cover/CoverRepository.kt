@@ -9,8 +9,10 @@ import com.example.hyperreader.core.Wenku8Endpoint
 import com.example.hyperreader.core.Wenku8HttpClient
 import com.example.hyperreader.core.Wenku8Url
 import java.io.File
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * 网络封面加载与缓存。
@@ -28,6 +30,8 @@ import kotlinx.coroutines.withContext
 class CoverRepository(context: Context) {
     private val directory = File(context.cacheDir, "covers").apply { mkdirs() }
     private val client = Wenku8HttpClient(File(context.cacheDir, "wenku8-covers"))
+    /** 同一 URL 的并发加载合并成一次：列表里同一本书的封面常被多屏同时请求。 */
+    private val inflight = ConcurrentHashMap<String, CompletableDeferred<ImageBitmap?>>()
     private val memory = object : LruCache<String, ImageBitmap>(MEMORY_BYTES) {
         override fun sizeOf(key: String, value: ImageBitmap): Int = value.width * value.height * 4
     }
@@ -75,17 +79,39 @@ class CoverRepository(context: Context) {
             }
         }
 
+        // 并发去重：后来者等领先者一次下载的结果，避免同一封面同时打多次网络
+        // （限流是 1 秒/请求，重复下载会直接把首屏拖长）。
+        val gate = CompletableDeferred<ImageBitmap?>()
+        inflight.putIfAbsent(key, gate)?.let { leader ->
+            return@withContext runCatching { leader.await() }.getOrNull()
+        }
+        try {
+            val result = fetchRemote(key, file, targetWidthPx)
+            gate.complete(result)
+            result
+        } catch (error: Throwable) {
+            gate.completeExceptionally(error)
+            null
+        } finally {
+            inflight.remove(key, gate)
+        }
+    }
+
+    private suspend fun fetchRemote(key: String, file: File, targetWidthPx: Int): ImageBitmap? {
         val downloaded = runCatching {
             client.downloadImage(Wenku8Endpoint.toRelayUrl(key), REFERER, "cover", "cover")
-        }.getOrNull() ?: return@withContext null
+        }.getOrNull() ?: return null
 
         val source = File(downloaded.path)
         val bytes = runCatching { source.readBytes() }.getOrNull()
         source.delete()
-        bytes ?: return@withContext null
+        bytes ?: return null
 
-        val bitmap = decodeBytes(bytes, targetWidthPx) ?: return@withContext null
-        runCatching { file.writeBytes(bytes) }
+        val bitmap = decodeBytes(bytes, targetWidthPx) ?: return null
+        runCatching {
+            file.writeBytes(bytes)
+            trimCoverDirectory(directory, DISK_LIMIT_BYTES, DISK_TARGET_BYTES)
+        }
         memory.put(key, bitmap)
         bitmap
     }
@@ -102,7 +128,12 @@ class CoverRepository(context: Context) {
             ?: return@withContext null
         val bytes = runCatching { File(downloaded.path).readBytes() }.getOrNull()
         File(downloaded.path).delete()
-        bytes?.takeIf { it.isNotEmpty() }?.also { runCatching { file.writeBytes(it) } }
+        bytes?.takeIf { it.isNotEmpty() }?.also {
+            runCatching {
+                file.writeBytes(it)
+                trimCoverDirectory(directory, DISK_LIMIT_BYTES, DISK_TARGET_BYTES)
+            }
+        }
     }
 
     private fun decode(file: File, targetWidthPx: Int): ImageBitmap? {
@@ -137,8 +168,30 @@ class CoverRepository(context: Context) {
         directory.listFiles()?.forEach { it.delete() }
     }
 
+    /** 磁盘缓存的占用（字节）；设置页展示与清理前确认用。 */
+    fun diskUsageBytes(): Long = directory.listFiles()?.filter { it.isFile }?.sumOf { it.length() } ?: 0L
+
     private companion object {
         const val MEMORY_BYTES = 12 * 1024 * 1024
+        const val DISK_LIMIT_BYTES = 128L * 1024 * 1024
+        const val DISK_TARGET_BYTES = 96L * 1024 * 1024
         const val REFERER = "https://www.wenku8.net/"
+    }
+}
+
+/**
+ * 封面/插图磁盘缓存的容量控制：超过 [limitBytes] 时按最后修改时间从旧到新删到 [targetBytes]。
+ *
+ * 不设上限时 `cacheDir/covers` 会随浏览历史无限增长；系统虽然能回收缓存目录，
+ * 但不会替我们控制水位，低存储设备上容易先被系统当作“占用大户”。
+ */
+internal fun trimCoverDirectory(directory: File, limitBytes: Long, targetBytes: Long) {
+    val files = directory.listFiles()?.filter { it.isFile } ?: return
+    var total = files.sumOf { it.length() }
+    if (total <= limitBytes) return
+    for (file in files.sortedBy { it.lastModified() }) {
+        if (total <= targetBytes) break
+        val size = file.length()
+        if (file.delete()) total -= size
     }
 }
