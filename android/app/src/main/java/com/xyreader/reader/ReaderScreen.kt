@@ -32,16 +32,19 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
@@ -461,7 +464,7 @@ fun ReaderScreen(
             state = snackbarHostState,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(WindowInsets.navigationBars.asPaddingValues())
+                .padding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom).asPaddingValues())
                 .padding(bottom = ReaderDimens.snackbarBottomInset),
         )
     }
@@ -556,9 +559,14 @@ private fun ReaderPagerArea(
 
     val rtl = !upDown && prefs.mangaDirection == MangaDirection.RTL
 
-    Box(Modifier.fillMaxSize()) {
+    // 背景铺满整屏（含挖孔区），正文再按 displayCutout 缩进，避免文字压到刘海/水滴下
+    Box(Modifier.fillMaxSize().background(bgColor)) {
         if (upDown) {
-            BoxWithConstraints(Modifier.fillMaxSize().background(bgColor)) {
+            BoxWithConstraints(
+                Modifier
+                    .fillMaxSize()
+                    .windowInsetsPadding(WindowInsets.displayCutout),
+            ) {
                 val fallbackPageHeight = maxHeight
                 val viewportWidthPx = constraints.maxWidth
                 val fallbackPageHeightPx = with(LocalDensity.current) { fallbackPageHeight.toPx() }
@@ -683,7 +691,7 @@ private fun ReaderPagerArea(
                     state = pagerState,
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(bgColor)
+                        .windowInsetsPadding(WindowInsets.displayCutout)
                         // 三分点击：左 1/3 上一页，右 1/3 下一页，中间切换工具栏；
                         // RTL 时镜像（左 1/3 下一页、右 1/3 上一页）。
                         // tapTurnPage 关闭时左右分区与中间一致，只呼出/隐藏工具栏。
@@ -744,7 +752,7 @@ private fun ReaderPagerArea(
         ) {
             Row(
                 modifier = Modifier
-                    .padding(WindowInsets.statusBars.asPaddingValues())
+                    .padding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top).asPaddingValues())
                     .padding(start = ReaderDimens.spaceS, end = ReaderDimens.spaceS, top = ReaderDimens.spaceXS)
                     .fillMaxWidth()
                     .background(BarBackground, BarCorner)
@@ -826,7 +834,7 @@ private fun ReaderPagerArea(
 
             Column(
                 modifier = Modifier
-                    .padding(WindowInsets.navigationBars.asPaddingValues())
+                    .padding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom).asPaddingValues())
                     .padding(start = ReaderDimens.spaceS, end = ReaderDimens.spaceS, bottom = ReaderDimens.spaceXS)
                     .fillMaxWidth()
                     .background(BarBackground, BarCorner)
@@ -1706,8 +1714,7 @@ private fun DirectoryDialog(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(WindowInsets.statusBars.asPaddingValues())
-                    .padding(WindowInsets.navigationBars.asPaddingValues()),
+                    .padding(WindowInsets.safeDrawing.asPaddingValues()),
             ) {
                 // —— 顶部：✕ 关闭 + 标题 ——
                 Row(

@@ -25,9 +25,9 @@ import java.util.Locale
  * - 正文结构与自研引擎一致：段落按 `<p>` 切分，`ContentBlock.Rich` 的行内强调
  *   （`b` / `i` / `u` / `sup` / `sub`）写成真标签而不是被转义成字面量。
  */
-class PotatoEpubBuilder {
+class PotatoEpubBuilder : EpubPackager {
 
-    fun build(
+    override fun build(
         book: Book,
         chapters: List<ParsedChapter>,
         images: List<DownloadedImage>,

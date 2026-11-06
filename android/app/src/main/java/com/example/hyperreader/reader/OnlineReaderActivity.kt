@@ -58,6 +58,7 @@ class OnlineReaderActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        applyReaderWindowInsets()
         hostBookId = intent.getStringExtra(EXTRA_BOOK_ID).orEmpty().filter(Char::isDigit)
         bookTitle = intent.getStringExtra(EXTRA_TITLE).orEmpty()
         bookshelfId = intent.getStringExtra(EXTRA_BOOKSHELF_ID)

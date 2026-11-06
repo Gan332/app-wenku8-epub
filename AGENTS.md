@@ -404,12 +404,22 @@ MiuiX 化对照（上游全是 material3，本项目禁止 material，有守卫�
 `ImageVector.vectorResource(R.drawable.*_24px)`；无 `FilterChip`，用 `ReaderScreen.kt`
 末尾的本地同名实现。
 
+刘海 / 水滴挖孔适配：两个阅读器 Activity 都调用
+`reader/ReaderWindow.kt` 的 `applyReaderWindowInsets()`（edge-to-edge +
+`LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES`），否则竖屏刘海会被系统缩成黑边。
+窗口铺满后，正文用 `WindowInsets.displayCutout` 缩进，工具栏 / 目录 / Snackbar 用
+`WindowInsets.safeDrawing` 的对应边；**不要**再退回只读 `statusBars`（状态栏隐藏后
+inset 为 0，挖孔仍会压字）。
+
 ### 4.9 双 EPUB 导出引擎（0.14.0 起）
 
 `settings/SettingsModels.kt` 的 `EpubEngine` 枚举有两个引擎，产出同样的 EPUB 3.3
-结构、调用契约一致，由 `ExportJobManager` 按配置选择：
+结构、统一实现 `epub/EpubPackager`，由 `ExportJobManager` 的引擎注册表按配置选择：
 
-- `CLASSIC`：自研 `epub/EpubBuilder`，保留已 sanitize 的行内强调标签，默认
+- `CLASSIC`：自研 `epub/EpubBuilder`，保留已 sanitize 的行内强调标签，默认。
+  编排之外拆成 `EpubChapterResolver`（归一化）、`EpubPackageBuilder`（manifest/spine）、
+  `EpubDocumentWriter`（OPF/nav/NCX/XHTML/CSS 纯字符串）、`EpubArchiveWriter`（ZIP）。
+  失败时必须清理 `*.tmp`，不得留下半截成品。
 - `POTATO`：LightNovelReader 的 `:epub` 模块（`io.nightfish.potatoepub`，Apache-2.0，源码整体 vendored 进仓库），正文按段落纯文本写入
 
 切换入口：设置页「EPUB 导出引擎」（`SettingsRepository.EXPORT_ENGINE`）。

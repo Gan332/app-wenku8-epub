@@ -10,6 +10,8 @@ import com.example.hyperreader.core.Wenku8Parser
 import com.example.hyperreader.core.Wenku8Url
 import com.example.hyperreader.data.JobRepository
 import com.example.hyperreader.epub.EpubBuilder
+import com.example.hyperreader.epub.EpubPackager
+import com.example.hyperreader.epub.PotatoEpubBuilder
 import com.example.hyperreader.file.EpubFileStore
 import com.example.hyperreader.model.Book
 import com.example.hyperreader.settings.EpubEngine
@@ -48,10 +50,11 @@ class ExportJobManager(private val context: Context, sessionStore: Wenku8Session
     private val repository = JobRepository(context.filesDir)
     private val http = Wenku8HttpClient(File(context.cacheDir, "wenku8"), sessionStore?.cookieJar())
     private val fileStore = EpubFileStore(context)
-    private val epubBuilder = EpubBuilder()
-
-    /** 第二种导出引擎（设置里可切换），见 [EpubEngine]。 */
-    private val potatoEpubBuilder = com.example.hyperreader.epub.PotatoEpubBuilder()
+    /** 导出引擎注册表：新增引擎只在这里补一项，任务流程不再关心具体实现。 */
+    private val packagers: Map<EpubEngine, EpubPackager> = mapOf(
+        EpubEngine.CLASSIC to EpubBuilder(),
+        EpubEngine.POTATO to PotatoEpubBuilder(),
+    )
     private val settings = com.example.hyperreader.settings.SettingsRepository(context)
     private val outputDirectory = File(context.filesDir, "output").apply { mkdirs() }
     private val queue = Channel<String>(Channel.UNLIMITED)
@@ -232,7 +235,7 @@ class ExportJobManager(private val context: Context, sessionStore: Wenku8Session
                 job = job.copy(warnings = warnings.toList(), progress = job.progress.copy(phase = JobPhase.fetching, percent = (completed.toDouble() / initial.requestedChapters.size.coerceAtLeast(1) * 94).toInt().coerceAtMost(94), completed = completed, imageTotal = imageTotal, cacheHits = cacheHits, message = "已处理 $completed/${initial.requestedChapters.size} 个章节"))
                 update(job)
             }
-            // 下载失败的插图在 EpubBuilder.resolveChapters 里会被**静默丢弃**，
+            // 下载失败的插图在 EpubChapterResolver 里会被**静默丢弃**，
             // 任务却显示成功 —— 把缺图变成明确警告（复用「查看 N 条警告」入口）。
             warnings += missingImageWarnings(parsed, images)
             if (parsed.isEmpty()) throw Wenku8Exception("所有章节都未能成功读取。", "NO_CHAPTERS_PARSED")
@@ -257,11 +260,8 @@ class ExportJobManager(private val context: Context, sessionStore: Wenku8Session
             val output = File(outputDirectory, "${bookSafeName(job.book.title)}-${job.id}.epub")
             // 导出引擎随任务走（0.14.0）：默认取创建任务时的全局设置，
             // 书籍详情页的两个按钮可显式指定，不受之后改设置影响。
-            val built = if (job.engine == EpubEngine.POTATO) {
-                potatoEpubBuilder.build(job.book, parsed, images, cover, output)
-            } else {
-                epubBuilder.build(job.book, parsed, images, cover, output)
-            }
+            val packager = packagers[job.engine] ?: packagers.getValue(EpubEngine.CLASSIC)
+            val built = packager.build(job.book, parsed, images, cover, output)
             val savedUri = fileStore.save(File(built.sourcePath), built.name)
             job = job.copy(
                 status = JobStatus.completed,
@@ -403,7 +403,7 @@ class ExportJobManager(private val context: Context, sessionStore: Wenku8Session
  * 导出缺图警告（纯函数，可单测）。
  *
  * 按章对比「正文中出现的插图数」与「实际下载成功的插图数」：
- * 少于正文数量即说明有图没进包（下载失败被 [EpubBuilder] 静默跳过）。
+ * 少于正文数量即说明有图没进包（下载失败被 EpubChapterResolver 静默跳过）。
  */
 internal fun missingImageWarnings(parsed: List<ParsedChapter>, images: List<DownloadedImage>): List<String> =
     parsed.mapNotNull { chapter ->

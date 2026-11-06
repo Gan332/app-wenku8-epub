@@ -46,6 +46,7 @@ class XyReaderActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        applyReaderWindowInsets()
 
         val uri = intent.getStringExtra(EXTRA_URI).orEmpty()
         hostBookId = intent.getStringExtra(EXTRA_BOOK_ID).orEmpty()
