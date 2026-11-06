@@ -6,9 +6,20 @@ on:
       - main
     tags:
       - 'v*'
+    # 纯文档改动不跑 5 分钟 APK 构建；标签推送不受 paths 过滤（GitHub 对 tag 不评估路径）
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - '.github/ISSUE_TEMPLATE/**'
+      - 'LICENSE'
   pull_request:
     branches:
       - main
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - '.github/ISSUE_TEMPLATE/**'
+      - 'LICENSE'
   workflow_dispatch:
 
 permissions:

@@ -1,0 +1,112 @@
+name: Dependabot auto-merge
+
+# pull_request_target 才能在 Dependabot PR 上拿到可写 token；
+# 本工作流不 checkout 也不执行 PR 里的任何代码，只调 gh / fetch-metadata，风险可控。
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, ready_for_review]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  actions: read
+
+concurrency:
+  group: dependabot-auto-merge-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  auto-merge:
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Fetch Dependabot metadata
+        id: meta
+        uses: dependabot/fetch-metadata@v2
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Ensure labels exist
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          gh label create dependencies --repo "$REPO" --color "0366d6" --description "Dependency updates" --force
+          gh label create ci --repo "$REPO" --color "0e8a16" --description "GitHub Actions / CI" --force
+          gh label create android --repo "$REPO" --color "3ddc84" --description "Android app" --force
+          gh label create javascript --repo "$REPO" --color "f1e05a" --description "Node.js / web" --force
+          gh label create rust --repo "$REPO" --color "dea584" --description "Rust core" --force
+          gh label create major-update --repo "$REPO" --color "d93f0b" --description "Major version bump; review before merge" --force
+
+      - name: Label the pull request
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          ECOSYSTEM: ${{ steps.meta.outputs.package-ecosystem }}
+          UPDATE_TYPE: ${{ steps.meta.outputs.update-type }}
+        run: |
+          set -euo pipefail
+          gh pr edit "$PR_URL" --add-label "dependencies"
+          case "$ECOSYSTEM" in
+            github_actions) gh pr edit "$PR_URL" --add-label "ci" ;;
+            gradle) gh pr edit "$PR_URL" --add-label "android" ;;
+            npm) gh pr edit "$PR_URL" --add-label "javascript" ;;
+            cargo) gh pr edit "$PR_URL" --add-label "rust" ;;
+          esac
+          if [ "$UPDATE_TYPE" = "version-update:semver-major" ]; then
+            gh pr edit "$PR_URL" --add-label "major-update"
+          fi
+
+      - name: Approve minor and patch updates
+        if: >-
+          steps.meta.outputs.update-type == 'version-update:semver-patch' ||
+          steps.meta.outputs.update-type == 'version-update:semver-minor'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: gh pr review --approve "$PR_URL"
+
+      - name: Wait for the PR's Android APK run
+        if: >-
+          steps.meta.outputs.update-type == 'version-update:semver-patch' ||
+          steps.meta.outputs.update-type == 'version-update:semver-minor'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          run_id=""
+          # Dependabot 推送后 android-apk.yml 才会被创建，先等它出现（最多 10 分钟）
+          for _ in $(seq 1 60); do
+            run_id="$(gh run list \
+              --repo "$REPO" \
+              --workflow android-apk.yml \
+              --event pull_request \
+              --branch "$HEAD_REF" \
+              --limit 10 \
+              --json databaseId,headSha \
+              --jq ".[] | select(.headSha == \"$HEAD_SHA\") | .databaseId" | head -n 1)"
+            if [ -n "$run_id" ]; then
+              break
+            fi
+            sleep 10
+          done
+          if [ -z "$run_id" ]; then
+            echo "::error::10 分钟内没有找到 head $HEAD_SHA 的 Android APK 运行"
+            exit 1
+          fi
+          # 只有整条 CI（Rust + 单元测试 + APK）通过才继续；失败则本工作流停在红色
+          gh run watch "$run_id" --repo "$REPO" --exit-status --interval 20
+
+      - name: Squash merge after CI passes
+        if: >-
+          steps.meta.outputs.update-type == 'version-update:semver-patch' ||
+          steps.meta.outputs.update-type == 'version-update:semver-minor'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: gh pr merge "$PR_URL" --squash --delete-branch

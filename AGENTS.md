@@ -584,6 +584,24 @@ Gradle；`build.gradle.kts` 读的是**文件路径**，不是 base64。
 `@Serializable` 生成器、反射读取的 DTO、JSoup 反射都会编译期无感、运行期崩。
 改了 `proguard-rules.pro` 或引了新库之后，**release APK 必须真机冒烟**。
 
+### 5.6 依赖更新（Dependabot）
+
+- `.github/dependabot.yml` 每周一 06:00（Asia/Shanghai）检查四个生态：
+  `github-actions`、`gradle`（`/android`）、`npm`（`/`）、`cargo`（`/rust`）。
+  minor + patch 按生态分组以减少 PR/CI 次数；major 不分组，单独开 PR。
+- `.github/workflows/dependabot-auto-merge.yml` 是自动合并 bot：
+  `pull_request_target` 下只调用 `gh` 与 `dependabot/fetch-metadata`（**不 checkout、
+  不执行 PR 里的代码**），先等该 PR head 的 `android-apk.yml` 整条运行成功，
+  再 `gh pr merge --squash`；major 只打 `major-update` 标签，不自动合并。
+- **不要给 `main` 加要求 PR 的 branch protection**：仓库推送走 Git Database API
+  直接更新 ref，保护规则会把推送挡掉。自动合并的安全性由 bot 等待 CI 成功保证，
+  不依赖 required checks。
+- Dependabot PR 拿不到签名 Secrets，release 构建按既有逻辑跳过；Rust 测试、
+  Kotlin 单元测试与 debug APK 仍会完整运行。
+- 自动合并会让远端 `main` 前进，而本地因换行差异本来就不是同一 SHA。合并后先
+  `git fetch` 查看远端改过的文件；下一次用 Git Database API 推送前，把 `LOCAL_BASE`
+  换成与远端内容等价的新本地基准，避免用旧版本覆盖刚升级的依赖。
+
 ## 6. 推送方式（重要）
 
 本机 `git push` 在 Windows Schannel 下不可靠，**必须使用 GitHub Git Database API 推送**：
