@@ -98,6 +98,7 @@ import com.example.hyperreader.ui.ExploreDetailScreen
 import com.example.hyperreader.ui.ExploreScreen
 import com.example.hyperreader.ui.LoadingBlock
 import com.example.hyperreader.ui.ReadingHomeScreen
+import com.example.hyperreader.ui.isOngoing
 import com.example.hyperreader.ui.SearchScreen
 import com.example.hyperreader.ui.secondaryTextColor
 import com.example.hyperreader.ui.tertiaryTextColor
