@@ -831,6 +831,18 @@ private fun HistoryScreen(jobs: List<ExportJob>, viewModel: StudioViewModel) {
                             }
                         }
                     }
+                    if (job.warnings.isNotEmpty()) {
+                        job.warnings.take(3).forEach { warning ->
+                            Text(warning, fontSize = UiDimens.captionSmall, color = MiuixTheme.colorScheme.error)
+                        }
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
+                        if (job.status.isOngoing()) {
+                            TextButton(text = "取消", onClick = { viewModel.cancelJob(job.id) })
+                        } else {
+                            TextButton(text = "删除", onClick = { viewModel.deleteJob(job.id) })
+                        }
+                    }
                 }
             }
         }

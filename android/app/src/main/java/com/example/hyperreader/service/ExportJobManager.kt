@@ -63,8 +63,10 @@ class ExportJobManager(private val context: Context, sessionStore: Wenku8Session
     init {
         scope.launch {
             val loaded = repository.loadAll()
-            state.value = loaded.associateBy { it.id }
-            for (job in loaded) if (job.status == JobStatus.queued || job.status == JobStatus.running) queue.send(job.id)
+            val retained = pruneHistory(loaded)
+            state.value = retained.associateBy { it.id }
+            cleanOrphanOutputs(retained)
+            for (job in retained) if (job.status == JobStatus.queued || job.status == JobStatus.running) queue.send(job.id)
         }
         scope.launch {
             for (id in queue) runCatching { execute(id) }
@@ -292,6 +294,49 @@ class ExportJobManager(private val context: Context, sessionStore: Wenku8Session
         }
     }
 
+    /**
+     * 删除一条导出记录及其私有副本。
+     *
+     * 公开产物已由 MediaStore 持有，私有副本只用于「再次保存到下载」。
+     */
+    suspend fun delete(id: String) {
+        val job = state.value[id] ?: return
+        // 在途任务收到的是「取消」：直接删记录会被收尾的 update() 重新写回。
+        if (job.status.isOngoing()) {
+            cancel(id)
+            return
+        }
+        state.value = state.value - id
+        runCatching { repository.delete(id) }
+        job.output?.sourcePath?.let { path -> runCatching { File(path).delete() } }
+    }
+
+    /**
+     * 保留最近 [MAX_HISTORY] 条已结束记录，其余连记录带私有 EPUB 一起清掉。
+     *
+     * 导出产物原本会永久堆在 `filesDir/output`，系统不会代清，长期使用会吃掉上百 MB。
+     */
+    private suspend fun pruneHistory(loaded: List<ExportJob>): List<ExportJob> {
+        val finished = loaded.filter { !it.status.isOngoing() }.sortedByDescending { it.createdAt }
+        val stale = finished.drop(MAX_HISTORY)
+        if (stale.isEmpty()) return loaded
+        val staleIds = stale.map { it.id }.toSet()
+        for (job in stale) {
+            runCatching { repository.delete(job.id) }
+            job.output?.sourcePath?.let { path -> runCatching { File(path).delete() } }
+        }
+        return loaded.filterNot { it.id in staleIds }
+    }
+
+    /** 清掉没有记录引用的私有 EPUB（记录丢失/手动删除后遗留），只删一天前的，避开在途任务。 */
+    private fun cleanOrphanOutputs(retained: List<ExportJob>) {
+        val referenced = retained.mapNotNull { it.output?.sourcePath }.toSet()
+        val cutoff = System.currentTimeMillis() - ORPHAN_GRACE_MS
+        outputDirectory.listFiles { file -> file.isFile && file.name.endsWith(".epub") }.orEmpty().forEach { file ->
+            if (file.absolutePath !in referenced && file.lastModified() < cutoff) runCatching { file.delete() }
+        }
+    }
+
     private fun bookSafeName(value: String): String = Normalizer.normalize(value, Normalizer.Form.NFKC).replace(Regex("[<>:\"/\\\\|?*\\u0000-\\u001f]"), "_").trim().take(90).ifBlank { "轻小说" }
 
     /**
@@ -335,6 +380,12 @@ class ExportJobManager(private val context: Context, sessionStore: Wenku8Session
 
         /** 导出缓存上限：512MB（成功导出后按新旧淘汰）。 */
         const val CACHE_TRIM_BYTES = 512L * 1024 * 1024
+
+        /** 保留的导出记录条数；超出后连私有 EPUB 一起清理，避免 filesDir 无限增长。 */
+        const val MAX_HISTORY = 40
+
+        /** 无主产物的宽限期：只删一天前的文件，避开在途导出。 */
+        const val ORPHAN_GRACE_MS = 24L * 60 * 60 * 1000
 
         fun estimateEtaSeconds(completedChapters: Int, totalChapters: Int, imageCompleted: Int, imageTotal: Int): Int {
             val remaining = (totalChapters - completedChapters).coerceAtLeast(0) +

@@ -894,8 +894,8 @@ class ReaderViewModel(
     private companion object {
         const val PAGE_UI_RADIUS = 3
 
-        /** 距末尾还有这么多页时开始抓取下一章（在线阅读）。 */
-        const val GROW_THRESHOLD = 3
+        /** 距卷尾多少页开始预取下一章：一章正文 + 插图受 1s/请求全局限流，提前 8 页约 15s，翻页不卡。 */
+        const val GROW_THRESHOLD = 8
     }
 }
 

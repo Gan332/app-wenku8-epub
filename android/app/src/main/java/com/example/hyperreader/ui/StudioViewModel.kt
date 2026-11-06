@@ -861,7 +861,9 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch { bookmarkCenterRepository.removeAllForBook(hostBookId) }
     }
 
-    fun removeFromShelf(id: String) { viewModelScope.launch { bookshelfRepository.remove(id) } }    fun setPinned(id: String, pinned: Boolean) { viewModelScope.launch { bookshelfRepository.setPinned(id, pinned) } }
+    fun removeFromShelf(id: String) { viewModelScope.launch { bookshelfRepository.remove(id) } }
+
+    fun setPinned(id: String, pinned: Boolean) { viewModelScope.launch { bookshelfRepository.setPinned(id, pinned) } }
     fun markShelfRead(id: String) { viewModelScope.launch { bookshelfRepository.recordRead(id) } }
 
     /** 切换书架排序；只改展示顺序，下次启动仍生效（DataStore）。 */
@@ -1285,8 +1287,24 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun save(id: String) {
-        runCatching { manager.save(id) }
-            .onFailure { error -> mutable.update { it.copy(message = error.message ?: "保存失败。") } }
+        viewModelScope.launch {
+            val job = manager.get(id)
+            val output = job?.output
+            if (job == null || output == null) {
+                mutable.update { it.copy(message = "EPUB 尚未生成完成。") }
+                return@launch
+            }
+            // 文件拷贝可能几十 MB，放到 IO 线程；完成/失败都要给回执，否则用户会反复点。
+            runCatching { withContext(Dispatchers.IO) { manager.save(id) } }
+                .onSuccess { mutable.update { it.copy(message = "已保存《${job.book.title}》到下载/EPUB。") } }
+                .onFailure { error -> mutable.update { it.copy(message = error.message ?: "保存失败。") } }
+        }
     }
     fun share(id: String) = manager.share(id)
+
+    fun cancelJob(id: String) = manager.cancel(id)
+
+    fun deleteJob(id: String) {
+        viewModelScope.launch { manager.delete(id) }
+    }
 }

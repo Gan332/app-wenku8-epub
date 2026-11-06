@@ -1751,56 +1751,80 @@ private fun ChapterList(
         )
         return
     }
+    var query by remember { mutableStateOf("") }
+    val visible = remember(chapters, query) {
+        if (query.isBlank()) chapters else chapters.filter { it.title.contains(query, true) }
+    }
     val listState = rememberLazyListState()
-    val currentIndex = remember(chapters, currentPage) {
-        chapters.indexOfFirst { currentPage in it.startPage..it.endPageInclusive }
+    val currentIndex = remember(visible, currentPage) {
+        visible.indexOfFirst { currentPage in it.startPage..it.endPageInclusive }
     }
     // 打开目录时直接定位到当前章。几百章的书从第一章开始翻是没必要的折磨；
-    // 只跑一次，用户之后自己滚动不会被拽回去。
-    LaunchedEffect(Unit) {
-        if (currentIndex > 0) listState.scrollToItem(currentIndex)
+    // 只跑一次（清空筛选后亦然），用户之后自己滚动不会被拽回去。
+    LaunchedEffect(query.isBlank()) {
+        if (query.isBlank() && currentIndex > 0) listState.scrollToItem(currentIndex)
     }
-    LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
-        items(chapters) { chapter ->
-            // 当前章 = 当前页落在该章闭区间内：背景 primary 微透明 + 文字 primary
-            val isCurrent = currentPage in chapter.startPage..chapter.endPageInclusive
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(
-                        if (isCurrent) {
-                            MiuixTheme.colorScheme.primary.copy(alpha = 0.12f)
-                        } else {
-                            Color.Transparent
-                        },
-                    )
-                    .clickable { onJumpTo(chapter.startPage) }
-                    .padding(start = ReaderDimens.pagePadding, end = ReaderDimens.pagePadding, top = ReaderDimens.spaceS, bottom = ReaderDimens.spaceS),
-            ) {
-                Text(
-                    text = chapter.title,
-                    style = MiuixTheme.textStyles.body1,
-                    color = if (isCurrent) {
-                        MiuixTheme.colorScheme.primary
-                    } else {
-                        MiuixTheme.colorScheme.onSurface
-                    },
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    // 页码按 1 起展示："起始页-结束页"
-                    text = "${chapter.startPage + 1}-${chapter.endPageInclusive + 1}",
-                    style = MiuixTheme.textStyles.footnote1,
-                    color = if (isCurrent) {
-                        MiuixTheme.colorScheme.primary.copy(alpha = 0.8f)
-                    } else {
-                        MiuixTheme.colorScheme.onSurfaceVariantSummary
-                    },
-                )
+    Column(Modifier.fillMaxSize()) {
+        TextField(
+            value = query,
+            onValueChange = { query = it },
+            label = "在目录中查找章节",
+            useLabelAsPlaceholder = true,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = ReaderDimens.pagePadding, vertical = ReaderDimens.spaceS),
+        )
+        if (visible.isEmpty()) {
+            Text(
+                text = "没有匹配的章节",
+                modifier = Modifier.padding(horizontal = ReaderDimens.pagePadding, vertical = ReaderDimens.spaceM),
+                style = MiuixTheme.textStyles.footnote1,
+                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+            )
+        } else {
+            LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
+                items(visible) { chapter ->
+                    // 当前章 = 当前页落在该章闭区间内：背景 primary 微透明 + 文字 primary
+                    val isCurrent = currentPage in chapter.startPage..chapter.endPageInclusive
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(
+                                if (isCurrent) {
+                                    MiuixTheme.colorScheme.primary.copy(alpha = 0.12f)
+                                } else {
+                                    Color.Transparent
+                                },
+                            )
+                            .clickable { onJumpTo(chapter.startPage) }
+                            .padding(start = ReaderDimens.pagePadding, end = ReaderDimens.pagePadding, top = ReaderDimens.spaceS, bottom = ReaderDimens.spaceS),
+                    ) {
+                        Text(
+                            text = chapter.title,
+                            style = MiuixTheme.textStyles.body1,
+                            color = if (isCurrent) {
+                                MiuixTheme.colorScheme.primary
+                            } else {
+                                MiuixTheme.colorScheme.onSurface
+                            },
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            // 页码按 1 起展示："起始页-结束页"
+                            text = "${chapter.startPage + 1}-${chapter.endPageInclusive + 1}",
+                            style = MiuixTheme.textStyles.footnote1,
+                            color = if (isCurrent) {
+                                MiuixTheme.colorScheme.primary.copy(alpha = 0.8f)
+                            } else {
+                                MiuixTheme.colorScheme.onSurfaceVariantSummary
+                            },
+                        )
+                    }
+                }
+                item { Spacer(Modifier.height(ReaderDimens.spaceM)) }
             }
         }
-        item { Spacer(Modifier.height(ReaderDimens.spaceM)) }
     }
 }
 

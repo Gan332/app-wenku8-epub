@@ -31,6 +31,11 @@ class JobRepository(private val rootDirectory: File) {
 
     suspend fun save(job: ExportJob): Unit = withContext(Dispatchers.IO) { persistBlocking(job) }
 
+    suspend fun delete(id: String): Unit = withContext(Dispatchers.IO) {
+        File(jobsDirectory, "$id.json").delete()
+        File(jobsDirectory, "$id.json.tmp").delete()
+    }
+
     fun readBlocking(job: ExportJob): ExportJob = job
 
     private fun persistBlocking(job: ExportJob) {
