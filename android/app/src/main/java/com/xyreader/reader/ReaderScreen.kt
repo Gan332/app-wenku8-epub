@@ -1751,7 +1751,16 @@ private fun ChapterList(
         )
         return
     }
-    LazyColumn(modifier = Modifier.fillMaxSize()) {
+    val listState = rememberLazyListState()
+    val currentIndex = remember(chapters, currentPage) {
+        chapters.indexOfFirst { currentPage in it.startPage..it.endPageInclusive }
+    }
+    // 打开目录时直接定位到当前章。几百章的书从第一章开始翻是没必要的折磨；
+    // 只跑一次，用户之后自己滚动不会被拽回去。
+    LaunchedEffect(Unit) {
+        if (currentIndex > 0) listState.scrollToItem(currentIndex)
+    }
+    LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
         items(chapters) { chapter ->
             // 当前章 = 当前页落在该章闭区间内：背景 primary 微透明 + 文字 primary
             val isCurrent = currentPage in chapter.startPage..chapter.endPageInclusive
