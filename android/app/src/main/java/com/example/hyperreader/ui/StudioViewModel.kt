@@ -129,6 +129,8 @@ internal object ExportWizard {
         book = null,
         index = null,
         selectedIds = emptySet(),
+        // 上一轮的章节筛选不能带到新书：否则章节列表被过滤成空，看起来像「目录没解析出来」
+        search = "",
         message = null,
     )
 
@@ -1143,6 +1145,21 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
 
     fun selectAll() = mutable.update { current -> current.copy(selectedIds = current.index?.chapters?.map { it.id }?.toSet() ?: emptySet()) }
     fun clearSelection() = mutable.update { it.copy(selectedIds = emptySet()) }
+
+    /**
+     * 选中给定章节（章节筛选后的「全选」用）。
+     *
+     * 与 [selectAll] 的区别：只动传进来的这批 id，已选的其它章不受影响。
+     * 筛选为空时调用方应改用 [selectAll]，避免点了没反应。
+     */
+    fun selectChapters(ids: Collection<String>) = mutable.update { current ->
+        current.copy(selectedIds = current.selectedIds + ids)
+    }
+
+    /** 取消给定章节（筛选后的「清空」用）；同样不碰筛选外的已选章节。 */
+    fun deselectChapters(ids: Collection<String>) = mutable.update { current ->
+        current.copy(selectedIds = current.selectedIds - ids.toSet())
+    }
     fun toggleChapter(id: String) = mutable.update { current -> current.copy(selectedIds = if (id in current.selectedIds) current.selectedIds - id else current.selectedIds + id) }
     fun toExport() {
         if (state.value.selectedIds.isEmpty()) { mutable.update { it.copy(message = "请至少选择一个章节。") }; return }

@@ -64,6 +64,7 @@ class ExportWizardTest {
             busy = true,
             detailError = "旧错误",
             message = "旧提示",
+            search = "第二卷",
             tab = StudioTab.EXPLORE,
         )
         val started = ExportWizard.begin(dirty, "https://www.wenku8.net/book/2835.htm")
@@ -77,6 +78,8 @@ class ExportWizardTest {
         assertFalse(started.busy)
         assertNull(started.detailError)
         assertNull(started.message)
+        // 上一轮的章节筛选不能带进新书，否则目录会被过滤成空
+        assertEquals("", started.search)
     }
 
     @Test

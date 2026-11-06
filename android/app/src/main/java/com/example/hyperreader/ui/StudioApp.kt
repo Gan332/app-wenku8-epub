@@ -645,6 +645,9 @@ private fun ChaptersScreen(state: StudioUiState, viewModel: StudioViewModel) {
     val visible = remember(state.search, index) {
         index.chapters.filter { state.search.isBlank() || it.title.contains(state.search, true) || it.volume.contains(state.search, true) }
     }
+    val filtering = state.search.isNotBlank()
+    // 筛选时「全选/清空」只作用于筛出来的章节：先按卷过滤再全选，是这个入口的主要用法。
+    val visibleIds = remember(visible) { visible.map { it.id } }
     Column(Modifier.fillMaxSize()) {
         BookHeader(book.title, book.author, book.category, index.chapters.size, state.selectedIds.size)
         Row(
@@ -655,25 +658,41 @@ private fun ChaptersScreen(state: StudioUiState, viewModel: StudioViewModel) {
             TextField(
                 value = state.search,
                 onValueChange = viewModel::setSearch,
-                label = "搜索章节标题",
+                label = "搜索章节标题或卷名",
                 useLabelAsPlaceholder = true,
                 modifier = Modifier.weight(1f),
             )
-            TextButton(text = "全选", onClick = viewModel::selectAll)
-            TextButton(text = "清空", onClick = viewModel::clearSelection)
+            TextButton(
+                text = "全选",
+                onClick = { if (filtering) viewModel.selectChapters(visibleIds) else viewModel.selectAll() },
+            )
+            TextButton(
+                text = "清空",
+                onClick = { if (filtering) viewModel.deselectChapters(visibleIds) else viewModel.clearSelection() },
+            )
         }
         Text(
-            "已选择 ${state.selectedIds.size} / ${index.chapters.size} 章",
+            "已选择 ${state.selectedIds.size} / ${index.chapters.size} 章" +
+                if (filtering) " · 筛选出 ${visible.size} 章" else "",
             modifier = Modifier.padding(bottom = UiDimens.spaceS),
             color = MiuixTheme.colorScheme.primary,
             fontSize = UiDimens.caption,
         )
-        LazyColumn(
-            modifier = Modifier.fillMaxWidth().weight(1f),
-            contentPadding = PaddingValues(bottom = UiDimens.spaceXL),
-            verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXS),
-        ) {
-            items(visible, key = { it.id }) { chapter -> ChapterRow(chapter, chapter.id in state.selectedIds) { viewModel.toggleChapter(chapter.id) } }
+        if (filtering && visible.isEmpty()) {
+            Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
+                EmptyState(
+                    title = "没有匹配的章节",
+                    description = "试试卷名或章节名的其他关键词，或清空搜索框。",
+                )
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.fillMaxWidth().weight(1f),
+                contentPadding = PaddingValues(bottom = UiDimens.spaceXL),
+                verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXS),
+            ) {
+                items(visible, key = { it.id }) { chapter -> ChapterRow(chapter, chapter.id in state.selectedIds) { viewModel.toggleChapter(chapter.id) } }
+            }
         }
         Button(onClick = viewModel::toExport, enabled = state.selectedIds.isNotEmpty(), modifier = Modifier.fillMaxWidth()) { Text("继续导出设置") }
     }
