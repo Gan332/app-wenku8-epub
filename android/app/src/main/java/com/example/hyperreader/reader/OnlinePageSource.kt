@@ -236,6 +236,21 @@ class OnlinePageSource private constructor(
         return hits
     }
 
+    /**
+     * 目录序号 → 页轴起始页。只有已加载的章才有页码；从中间某章打开时
+     * 目录序号与加载序号存在偏移，因此按章节 id 查找而不是直接当下标用。
+     */
+    override fun pageForChapter(index: Int): Int? {
+        val target = catalog.getOrNull(index) ?: return null
+        val pages = snapshot
+        var offset = 0
+        for (chapter in pages) {
+            if (chapter.id == target.id) return offset
+            offset += chapter.source.pageCount
+        }
+        return null
+    }
+
     companion object {
         /**
          * 打开：先抓**起始章**再构造（[PageSource.pageCount] 必须非 0 才能被阅读器接受）。

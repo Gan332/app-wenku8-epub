@@ -129,3 +129,44 @@ fun matchChapterBody(paragraphs: List<String>, query: String): Pair<Int, String>
     val snippet = contextSnippet(body, needle) ?: return null
     return at to snippet
 }
+
+/**
+ * 本地 EPUB 的章节级搜索：按目录切好的正文逐章复用 [matchChapterBody]。
+ *
+ * 本地 EPUB 与在线阅读共用这条规则：调用方只负责「切出每一章的段文本」，
+ * 匹配、标题回退与进度推进都在这里，避免两处实现慢慢分叉。章标题为空时按位置
+ * 补一个，与目录的默认标题保持同一规则，免得搜索结果和目录对不上。
+ *
+ * 纯函数，可以在 JVM 单测里直接验证；[isActive] 供长循环响应取消，
+ * [onProgress] 汇报「已扫 n / m」。
+ */
+fun searchNovelChapters(
+    chapters: List<Pair<String, List<String>>>,
+    query: String,
+    isActive: () -> Boolean = { true },
+    onProgress: (scanned: Int, total: Int) -> Unit = { _, _ -> },
+): List<com.xyreader.core.ChapterSearchHit> {
+    val needle = query.trim()
+    val total = chapters.size
+    onProgress(0, total)
+    if (needle.isEmpty()) return emptyList()
+    val hits = ArrayList<com.xyreader.core.ChapterSearchHit>(total)
+    for (index in chapters.indices) {
+        if (!isActive()) break
+        val (title, paragraphs) = chapters[index]
+        val matched = matchChapterBody(paragraphs, needle)
+        if (matched == null) {
+            onProgress(index + 1, total)
+            continue
+        }
+        val (at, snippet) = matched
+        hits += com.xyreader.core.ChapterSearchHit(
+            chapterIndex = index,
+            chapterTitle = title.ifBlank { "第 ${index + 1} 节" },
+            snippet = snippet,
+            charOffset = at,
+        )
+        onProgress(index + 1, total)
+    }
+    return hits
+}

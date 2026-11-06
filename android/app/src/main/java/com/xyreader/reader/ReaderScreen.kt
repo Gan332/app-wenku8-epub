@@ -1088,7 +1088,7 @@ private fun ReaderSearchSheet(
 ) {
     val state by viewModel.search.collectAsState()
     var input by rememberSaveable { mutableStateOf("") }
-    // 页面源是否支持章节级全量搜索；不支持时只留页内搜索（本地 EPUB 的页级搜索已覆盖全书）。
+    // 页面源是否支持章节级全量搜索；不支持时只留页内搜索。
     val canSearchWholeBook = viewModel.supportsChapterSearch
     // 全书搜索的命中按章定位，页内搜索按页；两者结果区共用一个列表但语义不同。
     val chapterResults = state.chapterHits.isNotEmpty()
@@ -1137,7 +1137,7 @@ private fun ReaderSearchSheet(
             // 没有进度用户会以为卡住，因此显式展示。
             if (state.totalChapters > 0 && state.running) {
                 Text(
-                    "已扫 ${state.scannedChapters} / ${state.totalChapters} 章（按需抓取，可能需要几分钟）",
+                    "已扫 ${state.scannedChapters} / ${state.totalChapters} 章（长书可能需要一些时间）",
                     style = MiuixTheme.textStyles.body2,
                     color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                 )
@@ -1158,13 +1158,17 @@ private fun ReaderSearchSheet(
             when {
                 state.chapterHits.isEmpty() && state.hits.isEmpty() && state.finished && input.isNotBlank() ->
                     Text(
-                        text = "没有找到「${state.query}」。若正在在线阅读，可改用「全书搜索」逐章抓取后再匹配。",
+                        text = if (canSearchWholeBook) {
+                            "没有找到「${state.query}」。可改用「全书搜索」按章匹配整本正文。"
+                        } else {
+                            "没有找到「${state.query}」。"
+                        },
                         style = MiuixTheme.textStyles.body2,
                         color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                     )
                 state.chapterHits.isEmpty() && state.hits.isEmpty() -> Text(
                     text = if (canSearchWholeBook) {
-                        "输入关键词后选择搜索方式。「页内搜索」只扫已读到的页，「全书搜索」逐章抓取，能搜到未读章节。"
+                        "输入关键词后选择搜索方式。「页内搜索」只扫已读到的页，「全书搜索」按章匹配整本正文。"
                     } else {
                         "输入关键词后开始搜索。结果按页码顺序列出，点一条即可跳转。"
                     },
@@ -1178,7 +1182,12 @@ private fun ReaderSearchSheet(
                     // 全书搜索结果优先展示：它覆盖范围更广，用户刚点的就是它
                     if (chapterResults) {
                         items(state.chapterHits, key = { "chapter-${it.chapterIndex}" }) { hit ->
-                            ChapterSearchHitRow(hit = hit)
+                            // 已分页的章（本地 EPUB 全部、在线书已加载部分）可以点；其余标题行仅展示
+                            val target = viewModel.pageForChapter(hit.chapterIndex)
+                            ChapterSearchHitRow(
+                                hit = hit,
+                                onClick = target?.let { page -> { onJumpToPage(page) } },
+                            )
                         }
                     } else {
                         items(state.hits, key = { it.page }) { hit ->
@@ -1244,34 +1253,46 @@ private fun SnippetText(snippet: String) {
 }
 
 /**
- * 章节级命中行（0.19.0）：章节名 + 摘要，**不提供点击跳转**。
+ * 章节级命中行（0.19.0）：章节名 + 摘要；已分页的章可点击跳转。
  *
- * 不跳转是刻意的：命中章在搜索时尚未加载，页码还不存在（页码随加载累积），
- * 给一个点不动的行比不给更糟。要读这一章，用户退出后在目录里选它——
- * 目录里已经有该章的入口，点击会以它为起始章重新打开（见 `EXTRA_START_CHAPTER`）。
+ * 能跳的章直接给整行点击；尚未加载的章（在线阅读里排在后段的命中）没有页码，
+ * 给一个点不动的行比不给更糟，所以保持静态展示。
  */
 @Composable
-private fun ChapterSearchHitRow(hit: com.xyreader.core.ChapterSearchHit) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(ReaderDimens.sheetItemCorner),
-        color = MiuixTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.5f),
-    ) {
-        Column(
-            modifier = Modifier.padding(
-                horizontal = ReaderDimens.spaceM,
-                vertical = ReaderDimens.spaceS,
-            ),
-            verticalArrangement = Arrangement.spacedBy(ReaderDimens.spaceXXS),
-        ) {
-            Text(
-                text = "第 ${hit.chapterIndex + 1} 章 · ${hit.chapterTitle}",
-                style = MiuixTheme.textStyles.body2,
-                color = MiuixTheme.colorScheme.primary,
-                fontWeight = FontWeight.SemiBold,
-            )
-            SnippetText(hit.snippet)
+private fun ChapterSearchHitRow(
+    hit: com.xyreader.core.ChapterSearchHit,
+    onClick: (() -> Unit)? = null,
+) {
+    val shape = RoundedCornerShape(ReaderDimens.sheetItemCorner)
+    val color = MiuixTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.5f)
+    val modifier = Modifier.fillMaxWidth()
+    if (onClick != null) {
+        Surface(onClick = onClick, modifier = modifier, shape = shape, color = color) {
+            ChapterSearchHitContent(hit)
         }
+    } else {
+        Surface(modifier = modifier, shape = shape, color = color) {
+            ChapterSearchHitContent(hit)
+        }
+    }
+}
+
+@Composable
+private fun ChapterSearchHitContent(hit: com.xyreader.core.ChapterSearchHit) {
+    Column(
+        modifier = Modifier.padding(
+            horizontal = ReaderDimens.spaceM,
+            vertical = ReaderDimens.spaceS,
+        ),
+        verticalArrangement = Arrangement.spacedBy(ReaderDimens.spaceXXS),
+    ) {
+        Text(
+            text = "第 ${hit.chapterIndex + 1} 章 · ${hit.chapterTitle}",
+            style = MiuixTheme.textStyles.body2,
+            color = MiuixTheme.colorScheme.primary,
+            fontWeight = FontWeight.SemiBold,
+        )
+        SnippetText(hit.snippet)
     }
 }
 

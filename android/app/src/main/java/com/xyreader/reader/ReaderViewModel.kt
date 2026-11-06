@@ -255,14 +255,23 @@ class ReaderViewModel(
         get() = source is com.xyreader.core.ChapterSearchSource
 
     /**
+     * 命中章在当前页轴里的起始页；尚未加载的章（在线阅读未读部分）返回 null。
+     *
+     * 全书搜索只给出章节序号，界面据此决定这一行能不能点：本地 EPUB 全书已分页，
+     * 一律可跳；在线书只有已加载的章有页码，其余保持“不可点”。
+     */
+    fun pageForChapter(index: Int): Int? =
+        (source as? com.xyreader.core.ChapterSearchSource)?.pageForChapter(index)
+
+    /**
      * 章节级全量搜索（0.19.0）：把搜索范围从「已渲染的页」扩到全书正文。
      *
      * 页级搜索搜不到未读章节，是因为那些正文此刻还不存在——在线书逐章抓取，
      * 没读过的章没有被抓下来。本方法按目录逐章取正文匹配，因此**受全局限流约束**，
      * 长书要扫很久；界面据此显示进度并允许取消。
      *
-     * 页面源不支持时（如本地 EPUB，它的页级搜索已经覆盖全书）退回普通页级搜索，
-     * 不给用户一个「搜不了」的死路。
+     * 页面源都支持时按章搜全书；本地 EPUB 与在线书共用同一套「按章匹配」规则，
+     * 区别只在正文来自内存还是网络，用户看到的结果结构一致。
      */
     fun searchWholeBook(query: String) {
         val src = source as? com.xyreader.core.ChapterSearchSource

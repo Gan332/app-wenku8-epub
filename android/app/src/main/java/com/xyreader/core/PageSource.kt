@@ -101,6 +101,15 @@ interface ChapterSearchSource {
         query: String,
         onProgress: (scanned: Int, total: Int) -> Unit,
     ): List<ChapterSearchHit>
+
+    /**
+     * 命中章在整条页轴上的起始页；该章尚未分页时返回 null。
+     *
+     * 搜索本身发生在页面源打开之前，命中只带章节序号。实现方最清楚「目录序号 →
+     * 页轴」的换算（在线阅读从中间某章开始时尤其不是直接下标），因此由页面源回答。
+     * 默认 null：只实现搜索、尚未支持跳转的实现保持旧行为，界面把该行显示为静态。
+     */
+    fun pageForChapter(index: Int): Int? = null
 }
 
 /** 一处章节级命中。 [snippet] 用 [SNIPPET_MARK] 标记命中段，渲染时给命中段上强调色。 */

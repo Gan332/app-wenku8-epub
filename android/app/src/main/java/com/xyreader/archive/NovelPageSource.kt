@@ -22,14 +22,19 @@ import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import com.xyreader.core.BookEntity
 import com.xyreader.core.Chapter
+import com.xyreader.core.ChapterSearchHit
+import com.xyreader.core.ChapterSearchSource
 import com.xyreader.core.NovelFontFamily
 import com.xyreader.core.NovelFontWeight
+import com.xyreader.reader.searchNovelChapters
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.IOException
 import java.io.InputStream
 import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -184,7 +189,7 @@ class NovelPageSource internal constructor(
     private val coverBytes: ByteArray? = null,
     /** EPUB 整页图片组（封面页 / 插图页）：按段落流插入点穿插进分页；无则空表 */
     private val imageGroups: List<EpubImageGroup> = emptyList(),
-) : AbstractPageSource() {
+) : AbstractPageSource(), ChapterSearchSource {
 
     private val metrics = NovelPageMetrics(
         pageWidthPx = style.pageWidthPx.coerceAtLeast(1),
@@ -461,6 +466,40 @@ class NovelPageSource internal constructor(
             )
         }
     }
+
+    // ---------- 全文搜索 ----------
+
+    /**
+     * 章节级全文搜索：正文已在内存，按目录标记切片即可，不触发排版或渲染。
+     *
+     * 与在线阅读的契约一致：可取消（章间判活）、回报进度、不改动页轴。
+     * 逐章切片用 [List.subList] 视图 + 只取文本，避免为整本书再复制一份字符串。
+     */
+    override suspend fun searchChapters(
+        query: String,
+        onProgress: (Int, Int) -> Unit,
+    ): List<ChapterSearchHit> {
+        // 切片只取文本引用，正文本身仍由 paragraphs 持有；匹配与进度交给纯函数，
+        // 与在线阅读共用同一套规则（见 searchNovelChapters）。
+        val context = currentCoroutineContext()
+        val chapters = chapterMarks.mapIndexed { index, mark ->
+            val from = mark.paragraphIndex.coerceIn(0, paragraphs.size)
+            val until = chapterMarks.getOrNull(index + 1)
+                ?.paragraphIndex?.coerceIn(from, paragraphs.size)
+                ?: paragraphs.size
+            mark.title to paragraphs.subList(from, until).map { it.text }
+        }
+        return searchNovelChapters(
+            chapters = chapters,
+            query = query,
+            isActive = { context.isActive },
+            onProgress = onProgress,
+        )
+    }
+
+    /** 本地 EPUB 打开时全书已分页，目录序号就是页轴上的章序号。 */
+    override fun pageForChapter(index: Int): Int? =
+        chapters.getOrNull(index)?.startPage
 
     // ---------- 渲染 ----------
 
