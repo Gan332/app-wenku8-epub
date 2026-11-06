@@ -415,6 +415,17 @@ object Wenku8Parser {
             ?.let { Wenku8Url.resolve(baseUrl, it.attr("href")) }
     }
 
+    /**
+     * 公开列表页的总页数（`em#pagestats` 的 `当前/总数` 或「共 N 页」）。
+     *
+     * `authorarticle.php` 与 `toplist.php` 都带这个元素；解析不到时返回 null，
+     * 调用方据此退回「本页没有更多链接即末页」的判断。
+     */
+    fun parsePageCount(html: String): Int? {
+        val document = Jsoup.parse(html)
+        return totalPages(document.selectFirst("em#pagestats")?.text().orEmpty())
+    }
+
     /** 解析年度精选榜 / 月度新书榜，返回书籍引用列表。 */
     fun parseSeedList(html: String, baseUrl: String, listName: String): List<CatalogSeedRef> {
         return parseBookLinks(html, baseUrl).map { CatalogSeedRef(it.id, it.title, listName) }

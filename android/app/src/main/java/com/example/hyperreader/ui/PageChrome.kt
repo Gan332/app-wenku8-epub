@@ -20,22 +20,26 @@ package com.example.hyperreader.ui
  */
 
 /** 当前显示的全屏层。名字与 `StudioApp` 里 `AnimatedContent` 的 key 一致。 */
-enum class ShellPage { DETAIL, HISTORY, EXPANDED, SEARCH, BOOKMARKS, EXPORT, TABS }
+enum class ShellPage { AUTHOR, DETAIL, HISTORY, EXPANDED, SEARCH, BOOKMARKS, EXPORT, TABS }
 
 /**
  * 返回键/返回图标的目标。
  *
  * `NONE` 表示没有可返回的上层——此时**不能**拦截返回键，交回系统（退出 App）。
  */
-enum class UpTarget { NONE, CLOSE_DETAIL, CLOSE_HISTORY, CLOSE_EXPANDED, CLOSE_SEARCH, CLOSE_BOOKMARKS, CLOSE_EXPORT, CLOSE_SETTINGS }
+enum class UpTarget { NONE, CLOSE_AUTHOR, CLOSE_DETAIL, CLOSE_HISTORY, CLOSE_EXPANDED, CLOSE_SEARCH, CLOSE_BOOKMARKS, CLOSE_EXPORT, CLOSE_SETTINGS }
 
 /**
- * 覆盖页的优先级：详情 > 导出记录 > 榜单展开 > 搜索 > 书签中心 > 导出向导 > 主导航。
+ * 覆盖页的优先级：同作者 > 详情 > 导出记录 > 榜单展开 > 搜索 > 书签中心 > 导出向导 > 主导航。
+ *
+ * 「同作者」压在详情之上：从详情点进来时详情状态保留，返回同作者页后仍回到原详情。
+ * 从同作者页再点开一本书时，页面会先关掉同作者再进详情，不会两层抢显示。
  *
  * 这个顺序既决定 `AnimatedContent` 显示哪一层，也决定返回键先关哪一层；
  * 两处必须一致，否则会出现「看得见 A，返回关掉的是 B」。
  */
 fun StudioUiState.shellPage(): ShellPage = when {
+    authorWorksOpen -> ShellPage.AUTHOR
     exploreDetailId != null -> ShellPage.DETAIL
     showJobHistory -> ShellPage.HISTORY
     exploreExpanded -> ShellPage.EXPANDED
@@ -72,6 +76,7 @@ fun ExportStep.exportStepTitle(): String = when (this) {
  * 覆盖页优先于 tab，顺序与 [shellPage] 完全一致。
  */
 fun StudioUiState.chromeTitle(): String = when (shellPage()) {
+    ShellPage.AUTHOR -> if (authorWorksName.isBlank()) "同作者作品" else "作者：${authorWorksName}"
     ShellPage.DETAIL -> "书籍详情"
     ShellPage.HISTORY -> "导出记录"
     ShellPage.EXPANDED -> activeExplorePage?.title?.ifBlank { null } ?: "榜单"
@@ -90,6 +95,7 @@ fun StudioUiState.chromeTitle(): String = when (shellPage()) {
  * 顶栏副标题。只补充当前页面的语境，不承担页面名，避免与 [chromeTitle] 争夺层级。
  */
 fun StudioUiState.chromeSubtitle(): String = when (shellPage()) {
+    ShellPage.AUTHOR -> "这位作者在 Wenku8 的公开作品"
     ShellPage.DETAIL -> "作品档案 · Wenku8"
     ShellPage.HISTORY -> "已生成的 EPUB 与任务状态"
     ShellPage.EXPANDED -> "完整书目，继续向下发现下一本"
@@ -124,6 +130,7 @@ fun StudioUiState.chromeSubtitle(): String = when (shellPage()) {
  * 其余步骤关闭向导回到发起页。
  */
 fun StudioUiState.upTarget(): UpTarget = when (shellPage()) {
+    ShellPage.AUTHOR -> UpTarget.CLOSE_AUTHOR
     ShellPage.DETAIL -> UpTarget.CLOSE_DETAIL
     ShellPage.HISTORY -> UpTarget.CLOSE_HISTORY
     ShellPage.EXPANDED -> UpTarget.CLOSE_EXPANDED

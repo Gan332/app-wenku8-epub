@@ -24,7 +24,7 @@ import org.junit.Test
  * 「标题对但返回键退出 App」或「看得见 A，返回关掉 B」。
  *
  * 这里锁三件事：
- * 1. **层级优先级**：覆盖页先于 tab，覆盖页之间按 详情 > 导出记录 > 榜单 > 搜索 > 书签 > 导出向导；
+ * 1. **层级优先级**：覆盖页先于 tab，覆盖页之间按 同作者 > 详情 > 导出记录 > 榜单 > 搜索 > 书签 > 导出向导；
  * 2. **标题与层级一致**：`chromeTitle()` 与 `shellPage()` 同源，不会各说各话；
  * 3. **返回逐级后退**：设置二级页回到索引页；导出打包页退回选章节（已选章节不丢）；
  *    主导航上 `NONE`（不拦截返回键，交回系统）。
@@ -57,6 +57,7 @@ class PageChromeTest {
             state().copy(tab = StudioTab.EXPLORE),
             state().copy(tab = StudioTab.SETTINGS, settingsSection = SettingsSection.READER),
             state().copy(exploreDetailId = "2835"),
+            state().copy(authorWorksOpen = true),
             state().copy(showJobHistory = true),
             state().copy(exploreExpanded = true),
             state().copy(searchPageOpen = true),
@@ -96,9 +97,10 @@ class PageChromeTest {
      * 用户看到的是优先级最高的那个，返回键也必须先关它。
      */
     @Test
-    fun overlayPriorityIsDetailThenHistoryThenExpandedThenSearchThenBookmarksThenExport() {
-        // 全部置位：详情最优先
+    fun overlayPriorityIsAuthorThenDetailThenHistoryThenExpandedThenSearchThenBookmarksThenExport() {
+        // 全部置位：同作者页最优先（它只从详情/书架点开，压在详情之上）
         val all = state().copy(
+            authorWorksOpen = true,
             exploreDetailId = "1",
             showJobHistory = true,
             exploreExpanded = true,
@@ -106,21 +108,34 @@ class PageChromeTest {
             bookmarkCenterOpen = true,
             exportStep = ExportStep.CHAPTERS,
         )
-        assertEquals(ShellPage.DETAIL, all.shellPage())
+        assertEquals(ShellPage.AUTHOR, all.shellPage())
+        assertEquals(UpTarget.CLOSE_AUTHOR, all.upTarget())
 
-        // 去掉详情 → 导出记录
-        assertEquals(ShellPage.HISTORY, all.copy(exploreDetailId = null).shellPage())
+        // 去掉同作者 → 详情
+        assertEquals(ShellPage.DETAIL, all.copy(authorWorksOpen = false).shellPage())
+        // 再去掉详情 → 导出记录
+        assertEquals(ShellPage.HISTORY, all.copy(authorWorksOpen = false, exploreDetailId = null).shellPage())
         // 再去掉记录 → 榜单展开
-        assertEquals(ShellPage.EXPANDED, all.copy(exploreDetailId = null, showJobHistory = false).shellPage())
+        assertEquals(ShellPage.EXPANDED, all.copy(authorWorksOpen = false, exploreDetailId = null, showJobHistory = false).shellPage())
         // 再去掉榜单 → 搜索
-        assertEquals(ShellPage.SEARCH, all.copy(exploreDetailId = null, showJobHistory = false, exploreExpanded = false).shellPage())
+        assertEquals(
+            ShellPage.SEARCH,
+            all.copy(authorWorksOpen = false, exploreDetailId = null, showJobHistory = false, exploreExpanded = false).shellPage(),
+        )
         // 再去掉搜索 → 书签
         assertEquals(
             ShellPage.BOOKMARKS,
-            all.copy(exploreDetailId = null, showJobHistory = false, exploreExpanded = false, searchPageOpen = false).shellPage(),
+            all.copy(authorWorksOpen = false, exploreDetailId = null, showJobHistory = false, exploreExpanded = false, searchPageOpen = false).shellPage(),
         )
         // 只留导出向导 → 导出
         assertEquals(ShellPage.EXPORT, state().copy(exportStep = ExportStep.PACKAGING).shellPage())
+    }
+
+    @Test
+    fun authorPageTitleUsesAuthorNameAndFallsBackGracefully() {
+        val named = state().copy(authorWorksOpen = true, authorWorksName = "君川优树")
+        assertEquals("作者：君川优树", named.chromeTitle())
+        assertEquals("同作者作品", named.copy(authorWorksName = "").chromeTitle())
     }
 
     @Test
@@ -182,6 +197,7 @@ class PageChromeTest {
         val samples = listOf(
             state(),
             state().copy(exploreDetailId = "1"),
+            state().copy(authorWorksOpen = true),
             state().copy(showJobHistory = true),
             state().copy(exploreExpanded = true),
             state().copy(searchPageOpen = true),

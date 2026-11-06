@@ -262,7 +262,7 @@ fun SearchScreen(
 }
 
 @Composable
-private fun SearchResultCard(result: SearchBook, onOpen: (SearchBook) -> Unit, modifier: Modifier = Modifier) {
+internal fun SearchResultCard(result: SearchBook, onOpen: (SearchBook) -> Unit, modifier: Modifier = Modifier) {
     val interaction = remember { MutableInteractionSource() }
     // 整卡可点 + 按压缩放：原先整卡既不可点也无反馈，只有卡内一个按钮，
     // 点大片留白毫无反应，与书架/探索/设置三张卡的交互语义不一致。

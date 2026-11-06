@@ -112,6 +112,7 @@ import com.example.hyperreader.model.JobStatus
 import com.example.hyperreader.model.SearchField
 import com.example.hyperreader.ui.ExportStep
 import com.example.hyperreader.ui.ExploreExpandedScreen
+import com.example.hyperreader.ui.AuthorWorksScreen
 import com.example.hyperreader.ui.Motion
 import com.example.hyperreader.ui.ShellPage
 import com.example.hyperreader.ui.UpTarget
@@ -360,6 +361,7 @@ private fun StudioApp(
                 val motionBase = Motion.duration(UiDimens.MOTION_MEDIUM)
                 val motionSlow = Motion.duration(UiDimens.MOTION_SLOW)
                 val overlayKey = when (state.shellPage()) {
+                    ShellPage.AUTHOR -> "author"
                     ShellPage.DETAIL -> "detail"
                     ShellPage.HISTORY -> "history"
                     ShellPage.EXPANDED -> "expanded"
@@ -379,6 +381,7 @@ private fun StudioApp(
                     label = "overlayTransition",
                 ) { overlay ->
                     when (overlay) {
+                        "author" -> AuthorWorksScreen(state = state, viewModel = viewModel)
                         "detail" -> ExploreDetailScreen(
                     seed = state.exploreDetailSeed,
                     detail = state.exploreDetail,
@@ -417,7 +420,11 @@ private fun StudioApp(
                             )
                         )
                     },
-                    onSameAuthor = { state.exploreDetail?.book?.id?.let(viewModel::expandAuthor) },
+                    // 详情接口失败时 exploreDetail 为 null，但 seed 里仍有书籍 ID
+                    onSameAuthor = {
+                        (state.exploreDetail?.book?.id ?: state.exploreDetailId ?: state.exploreDetailSeed?.id)
+                            ?.let(viewModel::expandAuthor)
+                    },
                     onTagClick = { tag ->
                         viewModel.setSearchField(SearchField.TITLE)
                         viewModel.setSearchQuery(tag)

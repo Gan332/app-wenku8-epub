@@ -255,6 +255,18 @@ data class StudioUiState(
     val exploreDetailError: String? = null,
     /** 0.19.0：跨书书签中心是否打开（全屏页，不占一级导航，AGENTS §4.6.1）。 */
     val bookmarkCenterOpen: Boolean = false,
+    /**
+     * 同作者作品页（全屏覆盖层）。
+     *
+     * 从详情页或书架菜单点击「同作者」后打开；[authorWorksBooks] 先由
+     * `authorarticle.php` 的书名占位，再逐本被 `articleinfo.php` 的完整条目替换。
+     */
+    val authorWorksOpen: Boolean = false,
+    val authorWorksAnchorId: String = "",
+    val authorWorksName: String = "",
+    val authorWorksBooks: List<SearchBook> = emptyList(),
+    val authorWorksLoading: Boolean = false,
+    val authorWorksMessage: String? = null,
 )
 
 class StudioViewModel(application: Application) : AndroidViewModel(application) {
@@ -275,6 +287,12 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
      * 用户中途改关键词/切字段/连点「加载更多」时，旧响应直接丢弃。
      */
     private var searchRequestId = 0L
+    /**
+     * 同作者抓取的单调序号：连续点「同作者」或刷新时，旧请求的增量回调
+     * 不得覆盖新结果（与 [searchRequestId] 同一思路）。
+     */
+    @Volatile
+    private var authorWorksRequestId = 0L
     private val mutable = MutableStateFlow(StudioUiState())
     val state: StateFlow<StudioUiState> = mutable.asStateFlow()
     val appTheme = settingsRepository.appTheme
@@ -442,6 +460,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     fun navigateUp(target: UpTarget) {
         when (target) {
             UpTarget.NONE -> Unit
+            UpTarget.CLOSE_AUTHOR -> closeAuthorWorks()
             UpTarget.CLOSE_DETAIL -> closeExploreDetail()
             UpTarget.CLOSE_HISTORY -> setShowJobHistory(false)
             UpTarget.CLOSE_EXPANDED -> closeExploreExpanded()
@@ -786,17 +805,100 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    /** 由用户在书架操作界面显式触发：抓取该作者的作品。被动触发，不由打开页面自动执行。 */
+    /**
+     * 打开「同作者作品」页并抓取该书的公开作品列表。
+     *
+     * 只由用户在详情页/书架菜单显式点击触发，不在页面打开时自动调用。
+     * 先按书名占位、再逐本补全封面与字数，因此大字作者也不会长时间空白。
+     */
     fun expandAuthor(bookId: String) {
-        val before = catalogRepository.cachedSize()
+        val id = bookId.filter(Char::isDigit)
+        if (id.isBlank()) return
+        // 手头已有的作者名先填进顶栏，避免第一请求回来前标题是空的
+        val knownAuthor = state.value.exploreDetail?.book?.takeIf { it.id == id }?.author
+            ?: state.value.bookshelf.firstOrNull { it.bookId == id }?.author
+            ?: catalogRepository.get(id)?.author
+            ?: ""
+        val requestId = ++authorWorksRequestId
         viewModelScope.launch {
-            mutable.update { it.copy(exploreMessage = "正在抓取同作者作品…") }
-            catalogRepository.expandAuthor(bookId) { progress ->
-                mutable.update { it.copy(exploreMessage = progress) }
+            mutable.update {
+                it.copy(
+                    authorWorksOpen = true,
+                    authorWorksAnchorId = id,
+                    authorWorksName = knownAuthor.trim(),
+                    authorWorksBooks = emptyList(),
+                    authorWorksLoading = true,
+                    authorWorksMessage = null,
+                )
             }
-            val added = catalogRepository.cachedSize() - before
-            mutable.update { it.copy(exploreMessage = "同作者作品已补充 $added 本") }
+            val loaded = LinkedHashMap<String, SearchBook>()
+            runCatching {
+                catalogRepository.expandAuthor(
+                    bookId = id,
+                    onAuthor = { author ->
+                        if (requestId == authorWorksRequestId) {
+                            mutable.update { it.copy(authorWorksName = author) }
+                        }
+                    },
+                    onLinks = { links ->
+                        if (requestId == authorWorksRequestId) {
+                            // 先用列表页的书名占位；已补全的条目继续用完整数据
+                            links.forEach { link ->
+                                if (loaded[link.id] == null) {
+                                    loaded[link.id] = SearchBook(
+                                        id = link.id,
+                                        title = link.title.ifBlank { "未命名作品" },
+                                        author = state.value.authorWorksName,
+                                        sourceUrl = Wenku8Urls.book(link.id),
+                                    )
+                                }
+                            }
+                            mutable.update { it.copy(authorWorksBooks = loaded.values.toList()) }
+                        }
+                    },
+                    onEntry = { entry ->
+                        if (requestId == authorWorksRequestId) {
+                            loaded[entry.id] = entry.toSearchBook()
+                            mutable.update { it.copy(authorWorksBooks = loaded.values.toList()) }
+                        }
+                    },
+                )
+            }.onSuccess {
+                if (requestId == authorWorksRequestId) {
+                    mutable.update {
+                        it.copy(
+                            authorWorksLoading = false,
+                            authorWorksMessage = null,
+                        )
+                    }
+                }
+            }.onFailure { error ->
+                if (requestId == authorWorksRequestId) {
+                    mutable.update {
+                        it.copy(
+                            authorWorksLoading = false,
+                            authorWorksMessage = if (isChallenge(error)) {
+                                "被 Cloudflare 拦截：${challengeHint()}"
+                            } else {
+                                error.message ?: "抓取同作者作品失败。"
+                            },
+                        )
+                    }
+                }
+            }
         }
+    }
+
+    /** 关闭同作者作品页（返回详情或书架）。 */
+    fun closeAuthorWorks() {
+        authorWorksRequestId++
+        mutable.update { it.copy(authorWorksOpen = false) }
+    }
+
+    /** 重试/刷新同作者作品页。 */
+    fun refreshAuthorWorks() {
+        val anchor = state.value.authorWorksAnchorId
+        if (anchor.isNotBlank()) expandAuthor(anchor)
     }
 
     /** 显式加载单本完整详情（仅由用户点击触发）。 */

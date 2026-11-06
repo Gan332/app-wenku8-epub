@@ -33,6 +33,7 @@ import com.example.hyperreader.model.ContentBlock
 import com.example.hyperreader.model.ParsedChapter
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -106,6 +107,7 @@ class CoreSmokeTest {
             <a href="/book/3988.htm">重复</a>
             <a href="/novel/2/1/index.htm">目录</a>
             <a href="/modules/article/authorarticle.php?author=%BE%FD%B4%A8">同作者作品</a>
+            <em id="pagestats">2/5</em>
             </body></html>
         """.trimIndent()
         val links = Wenku8Parser.parseBookLinks(html, "https://www.wenku8.net/zt/sugoi/2026.php")
@@ -114,6 +116,8 @@ class CoreSmokeTest {
 
         val author = Wenku8Parser.parseAuthorLink(html, "https://www.wenku8.net/book/2835.htm")
         assertEquals("https://www.wenku8.net/modules/article/authorarticle.php?author=%BE%FD%B4%A8", author)
+        assertEquals(5, Wenku8Parser.parsePageCount(html))
+        assertNull(Wenku8Parser.parsePageCount("<html><body>no stats</body></html>"))
 
         val seed = Wenku8Parser.parseSeedList(html, "https://www.wenku8.net/zt/sugoi/2026.php", "2026 年度精选")
         assertEquals(2, seed.size)

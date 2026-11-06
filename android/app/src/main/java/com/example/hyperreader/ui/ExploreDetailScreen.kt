@@ -229,7 +229,8 @@ fun ExploreDetailScreen(
                                 TextButton(
                                     text = "同作者",
                                     onClick = onSameAuthor,
-                                    enabled = detail != null,
+                                    // 详情接口失败时仍可用：bookId 来自 seed，够定位作者
+                                    enabled = bookId.isNotBlank(),
                                     modifier = Modifier.weight(1f).heightIn(min = UiDimens.touchMin),
                                 )
                             }
