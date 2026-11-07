@@ -210,10 +210,10 @@ jobs:
           version_code="$(grep -oP 'versionCode = \K\d+' android/app/build.gradle.kts | head -n 1)"
           release_apk="$(find android/app/build/outputs/apk/release -maxdepth 1 -name '*.apk' -print -quit)"
           debug_apk="$(find android/app/build/outputs/apk/debug -maxdepth 1 -name '*.apk' -print -quit)"
-          [ -n "$release_apk" ] && [ -n "$debug_apk" ] || {
+          if [ -z "$release_apk" ] || [ -z "$debug_apk" ]; then
             echo "::error::未找到 APK 产物（release=$release_apk debug=$debug_apk）"
             exit 1
-          }
+          fi
           title="文库 EPUB 工坊 · CI 最新构建 (main)"
           notes="$RUNNER_TEMP/ci-latest-notes.md"
 
