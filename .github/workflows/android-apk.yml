@@ -24,6 +24,7 @@ on:
       - '.github/dependabot.yml'
       - '.github/labeler.yml'
       - '.github/release-drafter.yml'
+      - '.github/workflows/**'
   pull_request:
     branches:
       - main
@@ -43,6 +44,7 @@ on:
       - '.github/dependabot.yml'
       - '.github/labeler.yml'
       - '.github/release-drafter.yml'
+      - '.github/workflows/**'
   workflow_dispatch:
 
 permissions:
