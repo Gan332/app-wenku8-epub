@@ -87,6 +87,22 @@ data class OnlineIndex(
 }
 
 /**
+ * 在线阅读数据源契约。
+ *
+ * 内置解析（[OnlineReaderSource]）与 LNR 书源（`LnrOnlineReadingSource`）都实现它，
+ * 阅读器只依赖这个接口，切换数据源不影响排版、目录、进度与书签链路。
+ */
+interface OnlineReadingSource {
+    suspend fun loadIndex(bookId: String, title: String = "", author: String = ""): OnlineReaderResult<OnlineIndex>
+
+    suspend fun loadChapter(
+        bookId: String,
+        chapter: Chapter,
+        catalog: List<Chapter> = emptyList(),
+    ): OnlineReaderResult<ReaderChapter>
+}
+
+/**
  * 把 wenku8 的目录与正文装配成现有阅读器的 [ReaderBook] / [ReaderChapter] / [ReaderBlock]。
  *
  * **不新造阅读器**：这里只负责「抓取 + 装配」，渲染交给现有 `ReaderScreen`，
@@ -103,7 +119,7 @@ data class OnlineIndex(
 class OnlineReaderSource(
     private val cache: OnlineChapterCache,
     private val fetcher: OnlineTextFetcher,
-) {
+) : OnlineReadingSource {
     constructor(cacheRoot: File, http: Wenku8HttpClient) : this(OnlineChapterCache(cacheRoot), Wenku8TextFetcher(http))
 
     private val chapterMutex = Mutex()
@@ -116,7 +132,7 @@ class OnlineReaderSource(
 
     // ---- 目录 ----
 
-    suspend fun loadIndex(
+    override suspend fun loadIndex(
         bookId: String,
         title: String = "",
         author: String = "",
@@ -143,10 +159,10 @@ class OnlineReaderSource(
      *
      * @param catalog 可选；提供后能保留卷名用于标题层级。
      */
-    suspend fun loadChapter(
+    override suspend fun loadChapter(
         bookId: String,
         chapter: Chapter,
-        catalog: List<Chapter> = emptyList(),
+        catalog: List<Chapter>,
     ): OnlineReaderResult<ReaderChapter> = withContext(Dispatchers.IO) {
         if (cache.isGone(bookId, chapter.id)) {
             return@withContext OnlineReaderResult.Failed(goneMessage(chapter), OnlineReaderResult.CODE_CHAPTER_GONE)

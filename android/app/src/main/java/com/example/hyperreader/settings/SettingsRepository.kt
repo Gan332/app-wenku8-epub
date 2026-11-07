@@ -58,6 +58,9 @@ class SettingsRepository(private val context: Context) {
      */
     val directEntry: Flow<DirectEntry> = data.safeData().map { DirectEntry.fromName(it[DIRECT_ENTRY]) }
 
+    /** 在线阅读数据源；默认内置解析，非法值同样回退内置。 */
+    val onlineSource: Flow<OnlineSource> = data.safeData().map { OnlineSource.fromName(it[ONLINE_SOURCE]) }
+
     val readerSettings: Flow<ReaderSettings> = data.safeData().map { prefs ->
         val default = ReaderSettings()
         ReaderSettings(
@@ -124,6 +127,7 @@ class SettingsRepository(private val context: Context) {
 
     /** 切换首选直连入口；只影响之后发出的请求，不影响已落库的 URL。 */
     suspend fun setDirectEntry(entry: DirectEntry) = edit { it[DIRECT_ENTRY] = entry.name }
+    suspend fun setOnlineSource(source: OnlineSource) = edit { it[ONLINE_SOURCE] = source.name }
     suspend fun setDynamicColor(enabled: Boolean) = edit { it[USE_DYNAMIC_COLOR] = enabled }
     suspend fun setAccentColor(color: Int) = edit { it[ACCENT_COLOR] = color }
 
@@ -170,6 +174,8 @@ class SettingsRepository(private val context: Context) {
 
         /** 首选直连入口（`DirectEntry.name`）；缺省或非法值视为 `.net`。 */
         val DIRECT_ENTRY = stringPreferencesKey("direct_entry")
+        /** 在线阅读数据源（`OnlineSource.name`）；缺省或非法值视为内置解析。 */
+        val ONLINE_SOURCE = stringPreferencesKey("online_source")
         val USE_DYNAMIC_COLOR = booleanPreferencesKey("use_dynamic_color")
         val ACCENT_COLOR = intPreferencesKey("accent_color")
         val READER_FONT_SIZE = floatPreferencesKey("reader_font_size")

@@ -39,6 +39,7 @@ import com.example.hyperreader.BuildConfig
 import com.example.hyperreader.settings.AppThemeMode
 import com.example.hyperreader.settings.AppThemeSettings
 import com.example.hyperreader.settings.DirectEntry
+import com.example.hyperreader.settings.OnlineSource
 import com.example.hyperreader.settings.ReaderBackground
 import com.example.hyperreader.settings.ReaderPageTurnMode
 import top.yukonga.miuix.kmp.basic.Button
@@ -796,6 +797,21 @@ private fun ReaderSection(state: StudioUiState, viewModel: StudioViewModel, onIm
                     onCheckedChange = viewModel::setReaderImmersive,
                     insideMargin = PreferenceRowMargin,
                 )
+            }
+        },
+        { SectionTitle("在线阅读") },
+        {
+            val onlineSource by viewModel.onlineSource.collectAsStateWithLifecycle(initialValue = OnlineSource.BUILTIN)
+            PreferencePanel {
+                OnlineSource.entries.forEach { source ->
+                    RadioButtonPreference(
+                        title = source.label,
+                        summary = source.summary,
+                        selected = onlineSource == source,
+                        onClick = { viewModel.setOnlineSource(source) },
+                        insideMargin = PreferenceRowMargin,
+                    )
+                }
             }
         },
         { SectionTitle("正文清洗") },

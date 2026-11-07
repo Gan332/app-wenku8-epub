@@ -85,6 +85,14 @@ class Wenku8Application : Application() {
     val exploreDetailRepository: com.example.hyperreader.core.ExploreDetailRepository by lazy { com.example.hyperreader.core.ExploreDetailRepository(this) }
     val coverRepository: com.example.hyperreader.ui.cover.CoverRepository by lazy { com.example.hyperreader.ui.cover.CoverRepository(this) }
     val onlineReaderSource: com.example.hyperreader.reader.OnlineReaderSource by lazy { com.example.hyperreader.reader.OnlineReaderSource(File(filesDir, "online-cache"), jobManager.httpClient()) }
+
+    /** LNR 书源版在线阅读；与内置源分缓存目录，避免两种装配结果互相覆盖。 */
+    val lnrOnlineReaderSource: com.example.hyperreader.reader.LnrOnlineReadingSource by lazy {
+        com.example.hyperreader.reader.LnrOnlineReadingSource(
+            bookSource = bookSource,
+            cache = com.example.hyperreader.reader.OnlineChapterCache(File(filesDir, "online-cache-lnr")),
+        )
+    }
 }
 
 /**

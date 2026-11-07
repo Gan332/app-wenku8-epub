@@ -13,6 +13,7 @@ import com.example.hyperreader.reader.OnlineLoadedChapter
 import com.example.hyperreader.reader.OnlineReaderProgress
 import com.example.hyperreader.reader.OnlineTextFetcher
 import com.example.hyperreader.reader.ReaderBlock
+import com.example.hyperreader.reader.onlineChapterOutline
 import com.example.hyperreader.reader.isAuthWall
 import com.example.hyperreader.reader.decodeOnlineReaderProgress
 import com.example.hyperreader.reader.onlineChapterAtPage
@@ -274,6 +275,26 @@ class OnlineReaderTest {
         } finally {
             directory.deleteRecursively()
         }
+    }
+
+    @Test
+    fun outlineKeepsTheWholeCatalogAndMarksOnlyLoadedChapters() {
+        val catalog = listOf(
+            chapter("100"),
+            chapter("101"),
+            chapter("102"),
+        )
+        // 只加载了第 1 章与第 3 章（第 2 章可能正文为空，被续章逻辑跳过）
+        val outline = onlineChapterOutline(
+            catalog,
+            mapOf("100" to (0 to 4), "102" to (5 to 9)),
+        )
+        assertEquals(3, outline.size)
+        assertEquals("第一章", outline[0].title)
+        assertTrue(outline[0].loaded)
+        assertFalse(outline[1].loaded)
+        assertEquals(5, outline[2].startPage)
+        assertEquals(9, outline[2].endPageInclusive)
     }
 
     @Test

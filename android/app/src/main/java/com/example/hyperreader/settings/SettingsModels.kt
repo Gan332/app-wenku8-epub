@@ -123,3 +123,22 @@ enum class DirectEntry(val label: String, val base: String) {
         fun fromName(raw: String?): DirectEntry = entries.firstOrNull { it.name == raw } ?: NET
     }
 }
+
+/**
+ * 在线阅读数据源（设置 → 阅读器设置）。
+ *
+ * - [BUILTIN]：本工程的目录/正文解析链路（[com.example.hyperreader.reader.OnlineReaderSource]）
+ * - [LNR]：LightNovelReader 书源契约（`Wenku8BookSource`）加一层阅读器适配
+ *
+ * 两条链路都只用 AGENTS §4.2 的匿名公开端点，并共享同一份限流客户端。
+ */
+@Serializable
+enum class OnlineSource(val label: String, val summary: String) {
+    BUILTIN("内置解析", "目录与正文由本工程解析，默认"),
+    LNR("LNR 书源", "走 LightNovelReader 书源契约取目录与正文"),
+    ;
+
+    companion object {
+        fun fromName(raw: String?): OnlineSource = entries.firstOrNull { it.name == raw } ?: BUILTIN
+    }
+}

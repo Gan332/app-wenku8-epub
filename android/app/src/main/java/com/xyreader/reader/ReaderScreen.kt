@@ -123,6 +123,7 @@ import com.xyreader.core.ReaderDimens
 import com.xyreader.core.BookmarkEntity
 import com.xyreader.core.PageSource
 import com.xyreader.core.Chapter
+import com.xyreader.core.ChapterOutline
 import com.xyreader.core.ImageScale
 import com.xyreader.core.MangaDirection
 import com.xyreader.core.NovelFontFamily
@@ -198,6 +199,11 @@ fun ReaderScreen(
      * 为 null 时设置面板只显示一行「去设置页」的提示。
      */
     onOpenReaderConfig: (() -> Unit)? = null,
+    /**
+     * 目录点名「尚未加载且在页轴起点之前」的章节时由宿主重开阅读（从该章开始）。
+     * 在线阅读传入；本地格式的目录全部带页码，不会触发。
+     */
+    onOpenChapter: ((chapterIndex: Int) -> Unit)? = null,
 ) {
     val viewModel: ReaderViewModel = viewModel(key = "reader_$bookId") {
         // CreationExtras 里取 Application；非标准宿主（如预览）拿不到，会直接抛错——阅读器不支持预览
@@ -382,17 +388,27 @@ fun ReaderScreen(
                 // 使“源未变”判断成立，避免滚动位置回退并污染落库进度
                 var currentReadingPage by rememberSaveable { mutableIntStateOf(state.initialPage) }
                 var lastAppliedInitialPage by rememberSaveable { mutableIntStateOf(-1) }
-                var lastAppliedPageCount by rememberSaveable { mutableIntStateOf(-1) }
+                // 目录点击未加载章节后的待跳页：等 pageCount 重组完成再滚动，避免用旧上界被夹到末尾
+                var pendingJumpPage by remember { mutableIntStateOf(-1) }
+                LaunchedEffect(state.pageCount, pendingJumpPage) {
+                    val target = pendingJumpPage
+                    if (target >= 0 && target < state.pageCount) {
+                        pendingJumpPage = -1
+                        if (upDown) verticalListState.scrollToItem(target) else pagerState.scrollToPage(target)
+                    }
+                }
                 LaunchedEffect(state.initialPage, state.pageCount, upDown) {
+                    // 目录触发的待跳页优先，别被「按当前页重定位」覆盖。
+                    if (pendingJumpPage >= 0) return@LaunchedEffect
                     // 分页重建后用 ViewModel 的字符锚点结果重定位；仅切模式时沿用当前页。
-                    val sourcePositionChanged =
-                        state.initialPage != lastAppliedInitialPage || state.pageCount != lastAppliedPageCount
+                    // 只看 initialPage：在线续章会单独增加 pageCount，那不代表页轴重建，
+                    // 否则每次续章都会把用户拽回本次阅读的起始页。
+                    val sourcePositionChanged = state.initialPage != lastAppliedInitialPage
                     val target = (if (sourcePositionChanged) state.initialPage else currentReadingPage)
                         .coerceIn(0, (state.pageCount - 1).coerceAtLeast(0))
                     currentReadingPage = target
                     if (upDown) verticalListState.scrollToItem(target) else pagerState.scrollToPage(target)
                     lastAppliedInitialPage = state.initialPage
-                    lastAppliedPageCount = state.pageCount
                 }
                 LaunchedEffect(pagerState, verticalListState, upDown) {
                     snapshotFlow {
@@ -428,6 +444,33 @@ fun ReaderScreen(
                         else pagerState.animateScrollToPage(safeTarget)
                     }
                 }
+                val firstLoadedOutline = state.chapterOutline.indexOfFirst { it.loaded }
+                // 目录跳章：已加载章节直接跳页；后续章节按需续抓；起点之前则交给宿主重开。
+                val jumpToChapter: (Int) -> Unit = { index ->
+                    val outline = state.chapterOutline.getOrNull(index)
+                    if (outline?.startPage != null) {
+                        jumpTo(outline.startPage)
+                    } else {
+                        showDirectory = false
+                        if (firstLoadedOutline >= 0 && index < firstLoadedOutline && onOpenChapter != null) {
+                            onOpenChapter(index)
+                        } else {
+                            scope.launch {
+                                // 不要把 showSnackbar 写在前面 await：它会挂起到自动消失，
+                                // 把真正的网络加载推迟好几秒。
+                                launch { snackbarHostState.showSnackbar("正在加载章节…") }
+                                val page = viewModel.loadChapterPage(index)
+                                if (page != null) {
+                                    pendingJumpPage = page
+                                } else {
+                                    snackbarHostState.showSnackbar(
+                                        if (onOpenChapter != null) "该章加载失败，请稍后重试" else "该章暂未加载",
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
                 ReaderPagerArea(
                     pagerState = pagerState,
                     verticalListState = verticalListState,
@@ -446,12 +489,13 @@ fun ReaderScreen(
                 // 全屏目录弹层（替换早期版本的抽屉）
                 if (showDirectory) {
                     DirectoryDialog(
-                        chapters = state.chapters,
+                        outline = state.chapterOutline,
                         bookmarks = bookmarks.filter { it.bookId == bookId },
                         currentPage = currentReadingPage,
                         tab = directoryTab,
                         onTabChange = { directoryTab = it },
                         onJumpTo = jumpTo,
+                        onOpenChapter = jumpToChapter,
                         onRemoveBookmark = viewModel::removeBookmark,
                         onDismiss = { showDirectory = false },
                     )
@@ -1694,12 +1738,13 @@ private fun SheetFontGroup(prefs: ReaderPrefs, onUpdate: ((ReaderPrefs) -> Reade
  */
 @Composable
 private fun DirectoryDialog(
-    chapters: List<Chapter>,
+    outline: List<ChapterOutline>,
     bookmarks: List<BookmarkEntity>,
     currentPage: Int,
     tab: Int,
     onTabChange: (Int) -> Unit,
     onJumpTo: (Int) -> Unit,
+    onOpenChapter: (Int) -> Unit,
     onRemoveBookmark: (Long) -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -1731,7 +1776,7 @@ private fun DirectoryDialog(
                         )
                     }
                     Text(
-                        text = if (chapters.isEmpty()) "目录" else "共 ${chapters.size} 章",
+                        text = if (outline.isEmpty()) "目录" else "共 ${outline.size} 章",
                         modifier = Modifier.weight(1f),
                         style = MiuixTheme.textStyles.title3,
                         fontWeight = FontWeight.SemiBold,
@@ -1753,9 +1798,10 @@ private fun DirectoryDialog(
                         onRemoveBookmark = onRemoveBookmark,
                     )
                     else -> ChapterList(
-                        chapters = chapters,
+                        outline = outline,
                         currentPage = currentPage,
                         onJumpTo = onJumpTo,
+                        onOpenChapter = onOpenChapter,
                     )
                 }
             }
@@ -1766,11 +1812,12 @@ private fun DirectoryDialog(
 /** 目录 tab 内容：章节列表（标题 + X-Y 页码小字），当前章行背景与文字用 primary 高亮 */
 @Composable
 private fun ChapterList(
-    chapters: List<Chapter>,
+    outline: List<ChapterOutline>,
     currentPage: Int,
     onJumpTo: (Int) -> Unit,
+    onOpenChapter: (Int) -> Unit,
 ) {
-    if (chapters.isEmpty()) {
+    if (outline.isEmpty()) {
         Text(
             text = "本书没有章节结构",
             modifier = Modifier.padding(start = ReaderDimens.pagePadding, end = ReaderDimens.pagePadding, top = ReaderDimens.spaceM),
@@ -1780,12 +1827,16 @@ private fun ChapterList(
         return
     }
     var query by remember { mutableStateOf("") }
-    val visible = remember(chapters, query) {
-        if (query.isBlank()) chapters else chapters.filter { it.title.contains(query, true) }
+    val visible = remember(outline, query) {
+        outline.withIndex().filter { query.isBlank() || it.value.title.contains(query, true) }
     }
     val listState = rememberLazyListState()
     val currentIndex = remember(visible, currentPage) {
-        visible.indexOfFirst { currentPage in it.startPage..it.endPageInclusive }
+        visible.indexOfFirst { item ->
+            val start = item.value.startPage ?: return@indexOfFirst false
+            val end = item.value.endPageInclusive ?: start
+            currentPage in start..end
+        }
     }
     // 打开目录时直接定位到当前章。几百章的书从第一章开始翻是没必要的折磨；
     // 只跑一次（清空筛选后亦然），用户之后自己滚动不会被拽回去。
@@ -1811,9 +1862,11 @@ private fun ChapterList(
             )
         } else {
             LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
-                items(visible) { chapter ->
+                items(visible, key = { it.index }) { item ->
+                    val chapter = item.value
+                    val start = chapter.startPage
                     // 当前章 = 当前页落在该章闭区间内：背景 primary 微透明 + 文字 primary
-                    val isCurrent = currentPage in chapter.startPage..chapter.endPageInclusive
+                    val isCurrent = start != null && currentPage in start..(chapter.endPageInclusive ?: start)
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -1824,7 +1877,9 @@ private fun ChapterList(
                                     Color.Transparent
                                 },
                             )
-                            .clickable { onJumpTo(chapter.startPage) }
+                            .clickable {
+                                if (start != null) onJumpTo(start) else onOpenChapter(item.index)
+                            }
                             .padding(start = ReaderDimens.pagePadding, end = ReaderDimens.pagePadding, top = ReaderDimens.spaceS, bottom = ReaderDimens.spaceS),
                     ) {
                         Text(
@@ -1839,8 +1894,12 @@ private fun ChapterList(
                             overflow = TextOverflow.Ellipsis,
                         )
                         Text(
-                            // 页码按 1 起展示："起始页-结束页"
-                            text = "${chapter.startPage + 1}-${chapter.endPageInclusive + 1}",
+                            // 页码按 1 起展示："起始页-结束页"；未加载章节显示提示
+                            text = if (start != null) {
+                                "${start + 1}-${(chapter.endPageInclusive ?: start) + 1}"
+                            } else {
+                                "点击加载"
+                            },
                             style = MiuixTheme.textStyles.footnote1,
                             color = if (isCurrent) {
                                 MiuixTheme.colorScheme.primary.copy(alpha = 0.8f)

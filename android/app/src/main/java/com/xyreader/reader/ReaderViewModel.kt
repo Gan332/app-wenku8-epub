@@ -16,6 +16,7 @@ import com.xyreader.core.ArchiveFactory
 import com.xyreader.core.BookEntity
 import com.xyreader.core.BookmarkEntity
 import com.xyreader.core.Chapter
+import com.xyreader.core.ChapterOutline
 import com.xyreader.core.ImageQuality
 import com.xyreader.core.NovelFonts
 import com.xyreader.core.NovelFontWeight
@@ -73,6 +74,11 @@ data class ReaderState(
     val pageCount: Int = 0,
     /** 章节结构（目录抽屉用）；无章节结构的格式（PDF/MOBI/扁平包）为空列表 */
     val chapters: List<Chapter> = emptyList(),
+    /**
+     * 完整目录（可含未加载章节）。本地格式与 [chapters] 等长且全部带页码；
+     * 在线阅读会展示全书目录，尚未抓取的章节页码为 null。
+     */
+    val chapterOutline: List<ChapterOutline> = emptyList(),
     val errorMessage: String? = null,
 )
 
@@ -508,6 +514,7 @@ class ReaderViewModel(
             // 章节结构：打开成功后普通属性读取（实现已在 open 时建好索引，非 suspend）；
             // 兜底异常转空列表，避免个别格式章节解析失败拖垮整本书的打开
             val chapters = runCatching { src.chapters }.getOrDefault(emptyList())
+            val chapterOutline = runCatching { src.chapterOutline }.getOrDefault(emptyList())
             // 起始页：重建模式保留当前页；首次打开则"从头开始"优先，其次书签跳转 > 0，最后续读 book.currentPage
             val start = (
                 if (reopen) {
@@ -540,6 +547,7 @@ class ReaderViewModel(
                 initialPage = start,
                 pageCount = count,
                 chapters = chapters,
+                chapterOutline = chapterOutline,
             )
             preloadAround(start)
             scheduleLatestStyleSync()
@@ -822,9 +830,29 @@ class ReaderViewModel(
             _state.value = _state.value.copy(
                 pageCount = newCount,
                 chapters = runCatching { src.chapters }.getOrDefault(emptyList()),
+                chapterOutline = runCatching { src.chapterOutline }.getOrDefault(emptyList()),
             )
             preloadAround(currentPage)
         }
+    }
+
+    /**
+     * 目录跳章：让页面源把目标章接到页轴并返回其起始页。
+     *
+     * 本地格式的 [PageSource.loadChapterPage] 直接命中既有页码；在线阅读会向前抓取。
+     * 返回 null 表示目标章在本次阅读起点之前，界面应改走「从该章重开」。
+     */
+    suspend fun loadChapterPage(index: Int): Int? {
+        val src = source ?: return null
+        val page = runCatching { src.loadChapterPage(index) }.getOrNull() ?: return null
+        if (src !== source) return null
+        val newCount = src.pageCount
+        _state.value = _state.value.copy(
+            pageCount = newCount,
+            chapters = runCatching { src.chapters }.getOrDefault(emptyList()),
+            chapterOutline = runCatching { src.chapterOutline }.getOrDefault(emptyList()),
+        )
+        return page
     }
 
     /** 收藏 / 取消收藏（结果经 books Flow 刷新回 UI） */

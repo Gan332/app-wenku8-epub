@@ -13,6 +13,21 @@ data class Chapter(
 )
 
 /**
+ * 目录条目：章节标题 + 可选的页区间。
+ *
+ * 与 [Chapter] 的区别是页区间可空：在线阅读逐章抓取，打开时只知道当前章节，
+ * 但**目录必须展示全书章节**。已加载的章节带页码，未加载的（[startPage] 为 null）
+ * 只能展示标题，点击时再由页面源按需加载。本地 EPUB / 压缩包的目录全部非空。
+ */
+data class ChapterOutline(
+    val title: String,
+    val startPage: Int? = null,
+    val endPageInclusive: Int? = null,
+) {
+    val loaded: Boolean get() = startPage != null
+}
+
+/**
  * 一本书的页面数据源契约。所有格式（CBZ/CBR/CB7/CBT/PDF/EPUB/图片目录/MOBI）都实现此接口。
  *
  * 实现要求：
@@ -33,6 +48,25 @@ interface PageSource : Closeable {
      */
     val chapters: List<Chapter>
         get() = emptyList()
+
+    /**
+     * 完整目录（阅读器目录抽屉用）：允许包含尚未分页的章节。
+     *
+     * 默认把 [chapters] 原样映射过去；在线阅读会额外返回全书目录，
+     * 未加载章节的 [ChapterOutline.startPage] 为 null。
+     */
+    val chapterOutline: List<ChapterOutline>
+        get() = chapters.map { ChapterOutline(it.title, it.startPage, it.endPageInclusive) }
+
+    /**
+     * 按目录序号取章节起始页；尚未加载时尝试加载。
+     *
+     * 默认实现只回答已存在的章节（本地格式没有「未加载」状态）。
+     * 在线阅读实现会向前抓取到目标章，返回 null 表示该章在当前页轴起点之前，
+     * 调用方应重开页面源（从该章开始）而不是简单跳页。
+     */
+    suspend fun loadChapterPage(index: Int): Int? =
+        chapterOutline.getOrNull(index)?.startPage
 
     /** 渲染第 index 页（0 起） */
     suspend fun renderPage(index: Int): ImageBitmap

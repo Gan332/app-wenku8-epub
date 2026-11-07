@@ -88,6 +88,16 @@ class Wenku8BookSource(
     private val offlineFlow = MutableStateFlow(false)
     override val isOffLineFlow: StateFlow<Boolean> = offlineFlow.asStateFlow()
 
+    /**
+     * 卷目录短缓存。
+     *
+     * `getChapterContent` 会调用 [neighbourChapters] 找上一/下一章；若每次都重新
+     * 抓目录，在线阅读每翻一章就多一次 1 秒限流请求。缓存 5 分钟，既保留目录更新
+     * 的可见性，又让连续阅读只付出一次目录请求。
+     */
+    private data class CachedVolumes(val value: BookVolumes, val at: Long)
+    private val volumesCache = java.util.concurrent.ConcurrentHashMap<String, CachedVolumes>()
+
     override var offLine: Boolean = false
         private set
 
@@ -140,6 +150,10 @@ class Wenku8BookSource(
         withContext(Dispatchers.IO) {
             val bookId = id.filter(Char::isDigit)
             if (bookId.isBlank()) return@withContext err("参数错误", "书本编号无效：$id")
+            val cached = volumesCache[bookId]
+            if (cached != null && System.currentTimeMillis() - cached.at < VOLUME_CACHE_TTL_MS) {
+                return@withContext Ok(cached.value)
+            }
             runCatching {
                 val directoryUrl = directoryUrlOf(bookId)
                 val page = http.fetchTextInteractive(directoryUrl, "source:index:$bookId", Wenku8Urls.BASE)
@@ -153,7 +167,9 @@ class Wenku8BookSource(
                             chapters = chapters.map { ChapterInformation(it.id, it.title) },
                         )
                     }
-                Ok(BookVolumes(bookId, volumes))
+                val value = BookVolumes(bookId, volumes)
+                volumesCache[bookId] = CachedVolumes(value, System.currentTimeMillis())
+                Ok(value)
             }.getOrElse { err("获取目录失败", it.message ?: "网络请求时出现了错误", it) }
         }
 
@@ -266,6 +282,7 @@ class Wenku8BookSource(
         private const val PROBE_JOB_ID = "source:probe"
         private const val CACHE_MAX_COUNT = 32
         private const val CACHE_TTL_MS = 30 * 60 * 1000
+        private const val VOLUME_CACHE_TTL_MS = 5 * 60 * 1000L
         private val DATE_FORMATTER: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
     }
 }

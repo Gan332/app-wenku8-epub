@@ -10,9 +10,12 @@ import com.xyreader.archive.NovelPageSource
 import com.xyreader.archive.NovelStyle
 import com.xyreader.archive.Paragraph
 import com.xyreader.core.Chapter as ReaderChapter
+import com.xyreader.core.ChapterOutline
 import com.xyreader.core.PageSource
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /**
  * 在线阅读的页面源：**按章抓取 → 用与本地 EPUB 完全同一套 `StaticLayout` 分页 → 位图页**。
@@ -61,8 +64,13 @@ class OnlinePageSource private constructor(
     @Volatile
     private var nextIndex: Int = startIndex + 1
 
-    /** 同一时刻只允许一个抓取在跑（`ReaderViewModel` 也会去重，这里是双保险）。 */
-    private val loading = java.util.concurrent.atomic.AtomicBoolean(false)
+    /**
+     * 同一时刻只允许一个抓取在跑（`ReaderViewModel` 也会去重，这里是双保险）。
+     *
+     * 用 [Mutex] 而不是 AtomicBoolean：目录跳章与「读到末尾自动续章」可能同时请求，
+     * 后到者应当排队而不是直接失败——否则点了后面的章节却什么都没发生。
+     */
+    private val loading = Mutex()
 
     override val growable: Boolean = true
     override val styleDependent: Boolean get() = true
@@ -105,6 +113,26 @@ class OnlinePageSource private constructor(
             }
         }
 
+    /**
+     * 全书目录：**目录序号与源站目录一致**，已加载的章节带页区间，未加载的只有标题。
+     *
+     * 阅读器目录因此能一次展示整本书；未加载章节点击后由 [loadChapterPage] 按需续抓。
+     */
+    override val chapterOutline: List<ChapterOutline>
+        get() = onlineChapterOutline(catalog, loadedPageRanges())
+
+    private fun loadedPageRanges(): Map<String, Pair<Int, Int>> {
+        val ranges = HashMap<String, Pair<Int, Int>>(snapshot.size)
+        var offset = 0
+        for (chapter in snapshot) {
+            val pages = chapter.source.pageCount
+            val start = offset
+            offset += pages
+            ranges[chapter.id] = start to (offset - 1).coerceAtLeast(start)
+        }
+        return ranges
+    }
+
     override suspend fun renderPage(index: Int): ImageBitmap {
         checkPage(index)
         val pages = snapshot
@@ -146,36 +174,58 @@ class OnlinePageSource private constructor(
      *
      * @return 确实新增了页则 `true`。
      */
-    override suspend fun loadMore(): Boolean {
-        if (!loading.compareAndSet(false, true)) return false
-        try {
-            var cursor = nextIndex
-            while (cursor < catalog.size) {
-                val chapter = catalog[cursor]
-                cursor += 1
-                nextIndex = cursor
-                val content = runCatching { fetchContent(chapter) }.getOrDefault(OnlineChapterContent(emptyList()))
-                val paragraphs = content.paragraphs
-                if (paragraphs.isEmpty()) continue
-                val source = runCatching {
-                    NovelPageSource.open(
-                        context = context,
-                        paragraphs = paragraphs.map { Paragraph(it, chapterIndex = 0) },
-                        marks = listOf(ChapterMark(chapter.title, 0)),
-                        style = style,
-                        imageGroups = content.images
-                            .filter { (index, bytes) -> index in 0..paragraphs.size && bytes.isNotEmpty() }
-                            .map { (index, bytes) -> EpubImageGroup(index, listOf(bytes)) },
-                    )
-                }.getOrNull() ?: continue
-                if (source.pageCount <= 0) continue
-                snapshot = snapshot + LoadedChapter(chapter.id, chapter.title, source)
-                return true
-            }
-            return false
-        } finally {
-            loading.set(false)
+    override suspend fun loadMore(): Boolean = loading.withLock {
+        var cursor = nextIndex
+        while (cursor < catalog.size) {
+            val chapter = catalog[cursor]
+            cursor += 1
+            nextIndex = cursor
+            val content = runCatching { fetchContent(chapter) }.getOrDefault(OnlineChapterContent(emptyList()))
+            val paragraphs = content.paragraphs
+            if (paragraphs.isEmpty()) continue
+            val source = runCatching {
+                NovelPageSource.open(
+                    context = context,
+                    paragraphs = paragraphs.map { Paragraph(it, chapterIndex = 0) },
+                    marks = listOf(ChapterMark(chapter.title, 0)),
+                    style = style,
+                    imageGroups = content.images
+                        .filter { (index, bytes) -> index in 0..paragraphs.size && bytes.isNotEmpty() }
+                        .map { (index, bytes) -> EpubImageGroup(index, listOf(bytes)) },
+                )
+            }.getOrNull() ?: continue
+            if (source.pageCount <= 0) continue
+            snapshot = snapshot + LoadedChapter(chapter.id, chapter.title, source)
+            return@withLock true
         }
+        false
+    }
+
+    /**
+     * 目录跳章：目标章在当前页轴之后时向前抓取到它；在起点之前则返回 null。
+     *
+     * 页轴只从本次阅读的起始章向后生长（AGENTS §4.8 的续读语义），
+     * 因此**不**尝试把章节插到已渲染页之前——那会让当前页码整体位移、进度错位。
+     * 调用方收到 null 后应当从目标章重开阅读（[OnlineReaderActivity] 用
+     * `EXTRA_START_CHAPTER` 重建页轴）。
+     */
+    override suspend fun loadChapterPage(index: Int): Int? {
+        val target = catalog.getOrNull(index) ?: return null
+        pageForChapter(index)?.let { return it }
+        val firstLoaded = catalog.indexOfFirst { it.id == snapshot.firstOrNull()?.id }
+        if (firstLoaded < 0 || index < firstLoaded) return null
+        // 抓取目标章；loadMore 会跳过空章并继续往后，所以循环条件以「页轴上已出现
+        // 目标或目标之后的章」为准，而不是严格的 nextIndex == index。
+        while (pageForChapter(index) == null && nextIndex <= index) {
+            if (!loadMore()) break
+        }
+        // 目标章正文为空时跳它后面第一个有正文的章，避免点击后停在原地。
+        if (pageForChapter(index) == null) {
+            for (candidate in index + 1 until catalog.size) {
+                pageForChapter(candidate)?.let { return it }
+            }
+        }
+        return pageForChapter(index)
     }
 
     override fun close() {
@@ -300,4 +350,19 @@ class OnlinePageSource private constructor(
             )
         }
     }
+}
+
+/**
+ * 目录装配纯函数：按源站目录顺序输出全书章节，已分页的带页区间，其余留空。
+ *
+ * 阅读器的目录必须一眼看到整本书，不能只看到 snapshot 里已抓取的几章；
+ * 这也是在线阅读「目录只有一章」缺陷的回归锚点。
+ */
+internal fun onlineChapterOutline(
+    catalog: List<HostChapter>,
+    pageRanges: Map<String, Pair<Int, Int>>,
+): List<ChapterOutline> = catalog.map { chapter ->
+    pageRanges[chapter.id]?.let { (start, end) ->
+        ChapterOutline(chapter.title, start, end)
+    } ?: ChapterOutline(chapter.title)
 }

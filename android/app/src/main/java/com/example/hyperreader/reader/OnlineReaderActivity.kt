@@ -84,8 +84,18 @@ class OnlineReaderActivity : ComponentActivity() {
     private fun loadIndexAndOpen() {
         lifecycleScope.launch {
             val app = application as Wenku8Application
+            // 设置里选的是「下次打开阅读器」生效；这里只在打开时读一次，
+            // 避免阅读中途切换数据源导致页轴与缓存错位。
+            val source = withContext(Dispatchers.IO) {
+                val mode = app.settingsRepository.onlineSource.first()
+                if (mode == com.example.hyperreader.settings.OnlineSource.LNR) {
+                    app.lnrOnlineReaderSource
+                } else {
+                    app.onlineReaderSource
+                }
+            }
             val result = withContext(Dispatchers.IO) {
-                app.onlineReaderSource.loadIndex(
+                source.loadIndex(
                     hostBookId,
                     title = bookTitle,
                     author = intent.getStringExtra(EXTRA_AUTHOR).orEmpty(),
@@ -113,7 +123,7 @@ class OnlineReaderActivity : ComponentActivity() {
                             repository.importLegacySettings(app.settingsRepository.readerSettings.first())
                         }
                     }
-                    val opener = OnlinePageSourceOpener(app.onlineReaderSource, app, hostBookId)
+                    val opener = OnlinePageSourceOpener(source, app, hostBookId)
                     opener.prepare(index.catalog.chapters)
                     val stored = repository.currentProgress()
                     // 起始章与起始页一并决定：显式指定章时页码归零（页进度与页轴配对，AGENTS §4.8）
@@ -144,6 +154,11 @@ class OnlineReaderActivity : ComponentActivity() {
                                         opener.open(context, readerBook, style).also(repository::attach)
                                     },
                                     onOpenReaderConfig = { showReaderConfig = true },
+                                    onOpenChapter = { chapterIndex ->
+                                        index.catalog.chapters.getOrNull(chapterIndex)?.let { chapter ->
+                                            reopenAtChapter(chapter.id)
+                                        }
+                                    },
                                 )
                             }
                         }
@@ -160,6 +175,18 @@ class OnlineReaderActivity : ComponentActivity() {
                     }
             }
         }
+    }
+
+    /** 目录点了本次阅读起点之前的章节：从该章重建页轴（页轴只向后生长，不能前插）。 */
+    private fun reopenAtChapter(chapterId: String) {
+        val next = Intent(this, OnlineReaderActivity::class.java)
+            .putExtra(EXTRA_BOOK_ID, hostBookId)
+            .putExtra(EXTRA_TITLE, bookTitle)
+            .putExtra(EXTRA_AUTHOR, intent.getStringExtra(EXTRA_AUTHOR).orEmpty())
+            .putExtra(EXTRA_BOOKSHELF_ID, bookshelfId)
+            .putExtra(EXTRA_START_CHAPTER, chapterId)
+        startActivity(next)
+        finish()
     }
 
     private fun showOpenError(message: String, canVerify: Boolean = false) {

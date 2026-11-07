@@ -146,7 +146,7 @@ class OnlineReaderRepository(
                 pageIndex = pageIndex,
                 createdAt = System.currentTimeMillis(),
                 snippet = snippet,
-                // ,0 Bridge 7��R^�o(�f� hostBookId s wenku8 fM�
+                // ,0 Bridge 7��R^�o(�f� hostBookId s wenku8 fM�
                 hostBookId = hostBookId,
                 bookTitle = book.title,
                 bookSource = BOOK_SOURCE_ONLINE,
@@ -201,7 +201,7 @@ class OnlineReaderRepository(
 
 /** 同步 sourceOpener 的在线适配器；目录与起始章在 Activity 中预先加载。 */
 class OnlinePageSourceOpener(
-    private val source: OnlineReaderSource,
+    private val source: OnlineReadingSource,
     private val app: Wenku8Application,
     private val bookId: String,
 ) {

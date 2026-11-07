@@ -326,6 +326,14 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch { runCatching { settingsRepository.setDirectEntry(entry) } }
     }
 
+    /** 在线阅读数据源：内置解析或 LNR 书源；下次打开阅读器时生效。 */
+    val onlineSource: kotlinx.coroutines.flow.Flow<com.example.hyperreader.settings.OnlineSource> =
+        settingsRepository.onlineSource
+
+    fun setOnlineSource(source: com.example.hyperreader.settings.OnlineSource) {
+        viewModelScope.launch { runCatching { settingsRepository.setOnlineSource(source) } }
+    }
+
     /**
      * 官方标签（登录后从 `tags.php` 拉取）；未登录或抓取失败时为空，标签区只显示本地内容。
      * 声明必须在 `init` 之前：冷启动的 collector 会经 [mergedTags] 读到它。
