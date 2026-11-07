@@ -5,7 +5,7 @@ name: Dependabot auto-merge
 #
 # 自动合并的门槛（缺一不可）：
 #   1. dependency-review 通过（高危漏洞依赖会被拦下）；
-#   2. 对应生态的 CI 通过：npm → Web verify，github_actions → actionlint + Android APK，
+#   2. 对应生态的 CI 通过：npm → Web verify，github_actions → actionlint，
 #      gradle/cargo → Android APK；
 #   3. 不是 major 更新，且 PR 没有 do-not-merge 标签。
 on:
@@ -145,8 +145,8 @@ jobs:
               wait_for web-verify.yml 60
               ;;
             github_actions)
+              # 工作流文件的改动不会影响 APK，Android 构建已按 paths-ignore 跳过。
               wait_for actionlint.yml 60
-              wait_for android-apk.yml 60
               ;;
             *)
               wait_for android-apk.yml 60
