@@ -2,11 +2,11 @@ package com.example.hyperreader.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -19,8 +19,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -34,7 +32,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.hyperreader.core.Wenku8Endpoint
@@ -47,17 +44,20 @@ import com.example.hyperreader.settings.ReaderPageTurnMode
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.ColorPicker
-import top.yukonga.miuix.kmp.basic.Icon
+import top.yukonga.miuix.kmp.basic.DropdownItem
 import top.yukonga.miuix.kmp.basic.HorizontalDivider
-import top.yukonga.miuix.kmp.basic.Slider
-import top.yukonga.miuix.kmp.basic.Switch
+import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.overlay.OverlayBottomSheet
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
-import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.ChevronForward
+import top.yukonga.miuix.kmp.preference.ArrowPreference
+import top.yukonga.miuix.kmp.preference.OverlayDropdownPreference
+import top.yukonga.miuix.kmp.preference.OverlaySpinnerPreference
+import top.yukonga.miuix.kmp.preference.RadioButtonPreference
+import top.yukonga.miuix.kmp.preference.SliderPreference
+import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 
@@ -181,7 +181,6 @@ private fun SettingsSection.toSettingsCategory(): SettingsCategory? = when (this
 @Composable
 private fun SettingsOverview(state: StudioUiState, viewModel: StudioViewModel) {
     var railOpen by remember { mutableStateOf(false) }
-    var engineSheet by remember { mutableStateOf(false) }
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val wide = maxWidth >= UiDimens.wideBreakpoint
         Row(Modifier.fillMaxSize()) {
@@ -232,15 +231,13 @@ private fun SettingsOverview(state: StudioUiState, viewModel: StudioViewModel) {
                     SETTINGS_GROUPS.forEach { (groupTitle, categories) ->
                         // 分组标题：LNR `SectionHeader` 用 24dp 左右外边距、10dp 上下外边距。
                         item(key = "group-$groupTitle") {
-                            Text(
-                                groupTitle,
-                                modifier = Modifier.padding(
+                            SmallTitle(
+                                text = groupTitle,
+                                textColor = secondaryTextColor(),
+                                insideMargin = PaddingValues(
                                     horizontal = UiDimens.spaceXS,
                                     vertical = UiDimens.spaceXXS,
                                 ),
-                                fontSize = UiDimens.captionSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = secondaryTextColor(),
                             )
                         }
                         // 一个分组 = **一张**圆角组卡，组内多行（不是每分类一张卡）：
@@ -283,11 +280,21 @@ private fun SettingsOverview(state: StudioUiState, viewModel: StudioViewModel) {
                                         val engine by viewModel.exportEngine.collectAsStateWithLifecycle(
                                             initialValue = com.example.hyperreader.settings.EpubEngine.CLASSIC,
                                         )
-                                        SettingsEntryRow(
+                                        val engines = com.example.hyperreader.settings.EpubEngine.entries
+                                        OverlaySpinnerPreference(
                                             title = "EPUB 导出引擎",
-                                            summary = "${engine.label} · ${engine.summary}",
-                                            glyph = "出",
-                                            onClick = { engineSheet = true },
+                                            summary = engine.summary,
+                                            items = engines.map { DropdownItem(text = it.label, summary = it.summary) },
+                                            selectedIndex = engines.indexOf(engine).coerceAtLeast(0),
+                                            onSelectedIndexChange = { viewModel.setExportEngine(engines[it]) },
+                                            insideMargin = PreferenceRowMargin,
+                                            bottomAction = {
+                                                Text(
+                                                    "只影响之后创建的导出任务；已导出的文件不受影响。",
+                                                    fontSize = UiDimens.captionSmall,
+                                                    color = secondaryTextColor(),
+                                                )
+                                            },
                                         )
                                         SettingsEntryRow(
                                             title = "导出记录",
@@ -316,91 +323,40 @@ private fun SettingsOverview(state: StudioUiState, viewModel: StudioViewModel) {
                 )
             }
         }
-        if (engineSheet) {
-            val engine by viewModel.exportEngine.collectAsStateWithLifecycle(
-                initialValue = com.example.hyperreader.settings.EpubEngine.CLASSIC,
-            )
-            OverlayBottomSheet(show = true, onDismissRequest = { engineSheet = false }) {
-                Column(
-                    modifier = Modifier.padding(UiDimens.spaceL),
-                    verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS),
-                ) {
-                    Text("EPUB 导出引擎", fontSize = UiDimens.section, fontWeight = FontWeight.Bold)
-                    Text(
-                        "只影响之后创建的导出任务；已导出的文件不受影响。",
-                        fontSize = UiDimens.captionSmall,
-                        color = secondaryTextColor(),
-                    )
-                    com.example.hyperreader.settings.EpubEngine.entries.forEach { option ->
-                        TextButton(
-                            text = (if (option == engine) "✓ ${option.label}" else option.label),
-                            onClick = { viewModel.setExportEngine(option) },
-                            modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
-                        )
-                    }
-                    Text(engine.summary, fontSize = UiDimens.captionSmall, color = MiuixTheme.colorScheme.primary)
-                }
-            }
-        }
     }
 }
 
 /**
- * 设置组内的一行（1:1 对齐 LNR `SettingsClickableEntry`）。
+ * 设置组内的一行：使用 MiuiX [ArrowPreference] 承载标题、摘要与右侧箭头。
  *
- * LNR 的设置页没有「每项一张卡」，而是：分组标题（`SectionHeader`，24dp 外边距）
- * + 一个 `16dp` 圆角容器，容器内每行 `2dp` 间距、行高按内容自适应。
- * 本工程此前是每分类一张 MiuiX `Card`（16dp 内边距），行与行之间有卡片间隙，
- * 视觉密度与 LNR 不同；此处改为组内扁平行。
- *
- * 行高不写死 48dp：LNR 的行是内容自适应（标题 + 描述两行），
- * 用 [UiDimens.touchMin] 只作下限，保证触摸目标不小于 48dp（AGENTS §4.4）。
+ * 分组仍是「一张 16dp 圆角组卡 + 组内扁平行」（对齐 LNR `SettingsClickableEntry`），
+ * 但行的交互、按压反馈、箭头与最小高度（56dp）交给 MiuiX，避免自绘一套。
+ * 行内边距与组卡内边距相加后回到标准的 16dp。
  */
 @Composable
 private fun SettingsEntryRow(title: String, summary: String, glyph: String, onClick: () -> Unit) {
-    val interaction = remember { MutableInteractionSource() }
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = UiDimens.touchMin)
-            .clip(RoundedCornerShape(UiDimens.panelCorner))
-            .clickable(interactionSource = interaction, indication = null, onClick = onClick)
-            .pressableScale(interaction)
-            .padding(horizontal = UiDimens.spaceS, vertical = UiDimens.spaceS),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceM),
-    ) {
-        Box(
-            modifier = Modifier
-                .size(UiDimens.settingGlyph)
-                .clip(RoundedCornerShape(UiDimens.cardCorner))
-                .background(MiuixTheme.colorScheme.primaryContainer),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                glyph,
-                color = MiuixTheme.colorScheme.onPrimaryContainer,
-                fontSize = UiDimens.caption,
-                fontWeight = FontWeight.Bold,
-            )
-        }
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXXS)) {
-            Text(title, fontWeight = FontWeight.SemiBold, fontSize = UiDimens.bodyStrong, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(
-                summary,
-                fontSize = UiDimens.captionSmall,
-                color = secondaryTextColor(),
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-        Icon(
-            imageVector = MiuixIcons.ChevronForward,
-            contentDescription = null,
-            tint = tertiaryTextColor(),
-            modifier = Modifier.size(UiDimens.spaceS),
-        )
-    }
+    ArrowPreference(
+        title = title,
+        summary = summary,
+        onClick = onClick,
+        insideMargin = PreferenceRowMargin,
+        startAction = {
+            Box(
+                modifier = Modifier
+                    .size(UiDimens.settingGlyph)
+                    .clip(RoundedCornerShape(UiDimens.cardCorner))
+                    .background(MiuixTheme.colorScheme.primaryContainer),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    glyph,
+                    color = MiuixTheme.colorScheme.onPrimaryContainer,
+                    fontSize = UiDimens.caption,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+        },
+    )
 }
 /** 分类侧栏（Kazumi `_RailDestination`）：宽屏常驻左侧，窄屏在 Sheet 里。 */
 @Composable
@@ -516,28 +472,30 @@ private fun NetworkSection(state: StudioUiState, viewModel: StudioViewModel, onO
                     fontSize = UiDimens.captionSmall,
                     color = secondaryTextColor(),
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
+                Column {
                     DirectEntry.entries.forEach { entry ->
-                        ChoiceButton(
-                            text = entry.label,
+                        RadioButtonPreference(
+                            title = entry.label,
+                            summary = entry.base,
                             selected = preferred == entry,
                             onClick = {
                                 viewModel.setDirectEntry(entry)
                                 shownBase = entry.base
                             },
+                            insideMargin = PaddingValues(vertical = UiDimens.spaceXXS),
                         )
                     }
                 }
-                    Text(
-                        "当前首选：${preferred.label}（源自社区实现实测：不同网络下被拦的镜像并不相同）",
-                        fontSize = UiDimens.captionSmall,
-                        color = MiuixTheme.colorScheme.primary,
-                    )
-                    TextButton(
-                        text = "刷新入口状态",
-                        onClick = { shownBase = Wenku8Endpoint.activeDirectBase() },
-                        modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
-                    )
+                Text(
+                    "当前首选：${preferred.label}（源自社区实现实测：不同网络下被拦的镜像并不相同）",
+                    fontSize = UiDimens.captionSmall,
+                    color = MiuixTheme.colorScheme.primary,
+                )
+                TextButton(
+                    text = "刷新入口状态",
+                    onClick = { shownBase = Wenku8Endpoint.activeDirectBase() },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
+                )
             }
         },
         {
@@ -651,23 +609,13 @@ private fun RelaySettings(viewModel: StudioViewModel) {
         else -> "端点已保存，开关关闭中；开启后公开页走中继"
     }
     StudioPanel {
-            Row(
-                modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(Modifier.weight(1f)) {
-                    Text("第三方中继（仅公开页）", fontWeight = FontWeight.Bold, fontSize = UiDimens.bodyStrong)
-                    Text(
-                        "书目索引、公开榜单与封面改走中继；登录与搜索始终直连，不发送任何 Cookie。",
-                        fontSize = UiDimens.captionSmall,
-                        color = secondaryTextColor(),
-                    )
-                }
-                Switch(
-                    checked = enabled,
-                    onCheckedChange = viewModel::setRelayEnabled,
-                )
-            }
+            SwitchPreference(
+                title = "第三方中继（仅公开页）",
+                summary = "书目索引、公开榜单与封面改走中继；登录与搜索始终直连，不发送任何 Cookie。",
+                checked = enabled,
+                onCheckedChange = viewModel::setRelayEnabled,
+                insideMargin = PaddingValues(vertical = UiDimens.spaceXXS),
+            )
             TextField(
                 value = editing,
                 onValueChange = { editing = it },
@@ -695,32 +643,26 @@ private fun AppearanceSection(viewModel: StudioViewModel) {
     SettingsScaffold("主题与外观", viewModel::backSettings, listOf(
         { SectionTitle("配色模式") },
         {
-            StudioPanel {
-                Row(horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
-                    AppThemeMode.entries.forEach { mode ->
-                        ChoiceButton(
-                            text = when (mode) { AppThemeMode.SYSTEM -> "系统"; AppThemeMode.LIGHT -> "浅色"; AppThemeMode.DARK -> "深色"; AppThemeMode.MONET -> "动态色" },
-                            selected = theme.mode == mode,
-                            onClick = { viewModel.setThemeMode(mode) },
-                            modifier = Modifier.weight(1f),
-                        )
-                    }
+            PreferencePanel {
+                AppThemeMode.entries.forEach { mode ->
+                    RadioButtonPreference(
+                        title = mode.label(),
+                        selected = theme.mode == mode,
+                        onClick = { viewModel.setThemeMode(mode) },
+                        insideMargin = PreferenceRowMargin,
+                    )
                 }
             }
         },
         {
-            Card(
-                Modifier.fillMaxWidth(),
-                cornerRadius = UiDimens.panelCorner,
-                insideMargin = PaddingValues(UiDimens.spaceM),
-            ) {
-                Row(Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin), verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text("使用系统动态色", fontWeight = FontWeight.Bold)
-                        Text("关闭后使用固定 MiuiX 配色", fontSize = UiDimens.captionSmall, color = secondaryTextColor())
-                    }
-                    Switch(checked = theme.useDynamicColor, onCheckedChange = viewModel::setDynamicColor)
-                }
+            PreferencePanel {
+                SwitchPreference(
+                    title = "使用系统动态色",
+                    summary = "关闭后使用固定 MiuiX 配色",
+                    checked = theme.useDynamicColor,
+                    onCheckedChange = viewModel::setDynamicColor,
+                    insideMargin = PreferenceRowMargin,
+                )
             }
         },
         { SectionTitle("强调色") },
@@ -755,63 +697,123 @@ private fun AppearanceSection(viewModel: StudioViewModel) {
 private fun ReaderSection(state: StudioUiState, viewModel: StudioViewModel, onImportFont: () -> Unit) {
     val settings = state.readerSettings
     val stripGaps by viewModel.stripCjkGaps.collectAsStateWithLifecycle(initialValue = true)
+    val backgrounds = ReaderBackground.entries
     SettingsScaffold("阅读器设置", viewModel::backSettings, listOf(
         { SectionTitle("背景") },
         {
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
-                items(ReaderBackground.entries.toList()) { background ->
-                    ChoiceButton(
-                        text = when (background) {
-                            ReaderBackground.PAPER -> "米黄"; ReaderBackground.LIGHT -> "白纸"; ReaderBackground.GREEN -> "护眼"
-                            ReaderBackground.DARK -> "夜间"; ReaderBackground.OLED -> "OLED"; ReaderBackground.CUSTOM -> "自定义"
-                        },
-                        selected = settings.background == background,
-                        onClick = { viewModel.setReaderBackground(background) },
-                    )
-                }
+            PreferencePanel {
+                OverlayDropdownPreference(
+                    title = "阅读背景",
+                    summary = "选择阅读器正文的背景色",
+                    items = backgrounds.map { it.label() },
+                    selectedIndex = backgrounds.indexOf(settings.background).coerceAtLeast(0),
+                    onSelectedIndexChange = { viewModel.setReaderBackground(backgrounds[it]) },
+                    insideMargin = PreferenceRowMargin,
+                )
             }
         },
         { SectionTitle("自定义背景色") },
         { ColorSwatchRow(selectedColor = if (settings.background == ReaderBackground.CUSTOM) settings.customBackgroundColor else null) { viewModel.setReaderBackgroundColor(it) } },
         { SectionTitle("文字颜色") },
         { ColorSwatchRow(selectedColor = settings.textColor) { viewModel.setReaderTextColor(it) } },
-        { SectionTitle("字号：${settings.fontSizeSp.toInt()} sp") },
-        { Slider(settings.fontSizeSp, { viewModel.setReaderFontSize(it) }, valueRange = 12f..32f, steps = 19) },
-        { SectionTitle("字重：${settings.fontWeight}") },
-        { Slider(settings.fontWeight.toFloat(), { viewModel.setReaderFontWeight(it.toInt()) }, valueRange = 100f..900f, steps = 7) },
-        { SectionTitle("行高：${"%.1f".format(settings.lineHeight)}") },
-        { Slider(settings.lineHeight, { viewModel.setReaderLineHeight(it) }, valueRange = 1.2f..2.6f, steps = 13) },
-        { SectionTitle("段距：${settings.paragraphSpacingDp} dp") },
-        { Slider(settings.paragraphSpacingDp.toFloat(), { viewModel.setReaderSpacing(it.toInt()) }, valueRange = 0f..48f, steps = 47) },
-        { SectionTitle("左右边距：${settings.horizontalPaddingDp} dp") },
-        { Slider(settings.horizontalPaddingDp.toFloat(), { viewModel.setReaderPadding(it.toInt()) }, valueRange = 0f..48f, steps = 47) },
+        { SectionTitle("排版") },
         {
-            StudioPanel("翻页方式") {
-                Row(horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
-                    ReaderPageTurnMode.entries.forEach { mode ->
-                        ChoiceButton(
-                            text = if (mode == ReaderPageTurnMode.HORIZONTAL) "左右章节" else "上下滚动",
-                            selected = settings.pageTurnMode == mode,
-                            onClick = { viewModel.setReaderPageMode(mode) },
-                            modifier = Modifier.weight(1f),
-                        )
-                    }
+            PreferencePanel {
+                SliderPreference(
+                    title = "字号",
+                    valueText = "${settings.fontSizeSp.toInt()} sp",
+                    value = settings.fontSizeSp,
+                    onValueChange = viewModel::setReaderFontSize,
+                    valueRange = 12f..32f,
+                    steps = 19,
+                    insideMargin = PreferenceRowMargin,
+                )
+                SliderPreference(
+                    title = "字重",
+                    valueText = "${settings.fontWeight}",
+                    value = settings.fontWeight.toFloat(),
+                    onValueChange = { viewModel.setReaderFontWeight(it.toInt()) },
+                    valueRange = 100f..900f,
+                    steps = 7,
+                    insideMargin = PreferenceRowMargin,
+                )
+                SliderPreference(
+                    title = "行高",
+                    valueText = "%.1f".format(settings.lineHeight),
+                    value = settings.lineHeight,
+                    onValueChange = viewModel::setReaderLineHeight,
+                    valueRange = 1.2f..2.6f,
+                    steps = 13,
+                    insideMargin = PreferenceRowMargin,
+                )
+                SliderPreference(
+                    title = "段距",
+                    valueText = "${settings.paragraphSpacingDp} dp",
+                    value = settings.paragraphSpacingDp.toFloat(),
+                    onValueChange = { viewModel.setReaderSpacing(it.toInt()) },
+                    valueRange = 0f..48f,
+                    steps = 47,
+                    insideMargin = PreferenceRowMargin,
+                )
+                SliderPreference(
+                    title = "左右边距",
+                    valueText = "${settings.horizontalPaddingDp} dp",
+                    value = settings.horizontalPaddingDp.toFloat(),
+                    onValueChange = { viewModel.setReaderPadding(it.toInt()) },
+                    valueRange = 0f..48f,
+                    steps = 47,
+                    insideMargin = PreferenceRowMargin,
+                )
+            }
+        },
+        { SectionTitle("翻页方式") },
+        {
+            PreferencePanel {
+                ReaderPageTurnMode.entries.forEach { mode ->
+                    RadioButtonPreference(
+                        title = if (mode == ReaderPageTurnMode.HORIZONTAL) "左右章节" else "上下滚动",
+                        selected = settings.pageTurnMode == mode,
+                        onClick = { viewModel.setReaderPageMode(mode) },
+                        insideMargin = PreferenceRowMargin,
+                    )
                 }
             }
         },
+        { SectionTitle("阅读显示") },
         {
-            StudioPanel("阅读显示") {
-                ToggleRow("保持屏幕常亮", "阅读时不让屏幕自动熄灭", settings.keepScreenOn, viewModel::setReaderKeepScreenOn)
-                ToggleRow("沉浸模式", "隐藏系统栏，只留下正文", settings.immersiveMode, viewModel::setReaderImmersive)
+            PreferencePanel {
+                SwitchPreference(
+                    title = "保持屏幕常亮",
+                    summary = "阅读时不让屏幕自动熄灭",
+                    checked = settings.keepScreenOn,
+                    onCheckedChange = viewModel::setReaderKeepScreenOn,
+                    insideMargin = PreferenceRowMargin,
+                )
+                SwitchPreference(
+                    title = "沉浸模式",
+                    summary = "隐藏系统栏，只留下正文",
+                    checked = settings.immersiveMode,
+                    onCheckedChange = viewModel::setReaderImmersive,
+                    insideMargin = PreferenceRowMargin,
+                )
             }
         },
+        { SectionTitle("正文清洗") },
         {
-            StudioPanel("正文清洗") {
-                ToggleRow("移除汉字间多余空格", "清理序列化产生的伪空格", stripGaps, viewModel::setStripCjkGaps)
-                Text(
-                    "EPUB 里因序列化缩进与行内标签边界产生的汉字间空格会被抹掉。若你的书（诗歌、手稿）本就要靠汉字间距排版，关掉即可保留。",
-                    fontSize = UiDimens.captionSmall,
-                    color = secondaryTextColor(),
+            PreferencePanel {
+                SwitchPreference(
+                    title = "移除汉字间多余空格",
+                    summary = "清理序列化产生的伪空格",
+                    checked = stripGaps,
+                    onCheckedChange = viewModel::setStripCjkGaps,
+                    insideMargin = PreferenceRowMargin,
+                    bottomAction = {
+                        Text(
+                            "EPUB 里因序列化缩进与行内标签边界产生的汉字间空格会被抹掉。若你的书（诗歌、手稿）本就要靠汉字间距排版，关掉即可保留。",
+                            fontSize = UiDimens.captionSmall,
+                            color = secondaryTextColor(),
+                        )
+                    },
                 )
             }
         },
@@ -961,25 +963,48 @@ internal fun SettingsScaffold(@Suppress("UNUSED_PARAMETER") title: String, @Supp
     }
 }
 
-/** 页名已被顶栏接管（0.19.0-alpha05）；保留参数只为让调用点改动最小。 */
-@Composable
-internal fun SectionTitle(text: String) = SectionHeader(text, minRowHeight = false)
+/** 设置分组的行内边距：与组卡的 4dp 相加后回到 MiuiX 标准的 16dp。 */
+private val PreferenceRowMargin = PaddingValues(
+    horizontal = UiDimens.spaceS,
+    vertical = UiDimens.spaceXS,
+)
 
+/** MiuiX preference 组：一张 4dp 内边距的卡，行内自带 12dp，合计标准 16dp。 */
 @Composable
-private fun ToggleRow(label: String, summary: String, checked: Boolean, onChange: (Boolean) -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = UiDimens.touchMin)
-            .padding(vertical = UiDimens.spaceXS),
-        verticalAlignment = Alignment.CenterVertically,
+private fun PreferencePanel(content: @Composable ColumnScope.() -> Unit) {
+    Card(
+        Modifier.fillMaxWidth(),
+        cornerRadius = UiDimens.panelCorner,
+        insideMargin = PaddingValues(UiDimens.spaceXXS),
     ) {
-        Column(Modifier.weight(1f)) {
-            Text(label, fontSize = UiDimens.bodyStrong)
-            Text(summary, fontSize = UiDimens.captionSmall, color = secondaryTextColor())
-        }
-        Switch(checked = checked, onCheckedChange = onChange)
+        Column(content = content)
     }
+}
+
+/** 设置分区标题：统一用 MiuiX [SmallTitle]，不再自绘强调条与另一套字号。 */
+@Composable
+internal fun SectionTitle(text: String) = SmallTitle(
+    text = text,
+    insideMargin = PaddingValues(
+        horizontal = UiDimens.spaceXS,
+        vertical = UiDimens.spaceXXS,
+    ),
+)
+
+private fun AppThemeMode.label(): String = when (this) {
+    AppThemeMode.SYSTEM -> "系统"
+    AppThemeMode.LIGHT -> "浅色"
+    AppThemeMode.DARK -> "深色"
+    AppThemeMode.MONET -> "动态色"
+}
+
+private fun ReaderBackground.label(): String = when (this) {
+    ReaderBackground.PAPER -> "米黄"
+    ReaderBackground.LIGHT -> "白纸"
+    ReaderBackground.GREEN -> "护眼"
+    ReaderBackground.DARK -> "夜间"
+    ReaderBackground.OLED -> "OLED"
+    ReaderBackground.CUSTOM -> "自定义"
 }
 
 @Composable

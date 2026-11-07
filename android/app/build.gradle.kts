@@ -91,6 +91,7 @@ dependencies {
     implementation(libs.miuix.ui)
     implementation(libs.miuix.core)
     implementation(libs.miuix.icons)
+    implementation(libs.miuix.preference)
     // material / material3 / material-icons 已于 0.9.3 全量移除：界面全部走 MiuiX
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.core.ktx)
