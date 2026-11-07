@@ -12,6 +12,13 @@ updates:
       time: "06:00"
       timezone: "Asia/Shanghai"
     open-pull-requests-limit: 5
+    # 新版本先观察一周再提 PR，降低供应链投毒窗口；security update 不受影响。
+    cooldown:
+      default-days: 7
+      semver-major-days: 30
+      semver-minor-days: 7
+      semver-patch-days: 3
+    rebase-strategy: "auto"
     labels:
       - "dependencies"
       - "ci"
@@ -35,6 +42,12 @@ updates:
       time: "06:00"
       timezone: "Asia/Shanghai"
     open-pull-requests-limit: 10
+    cooldown:
+      default-days: 7
+      semver-major-days: 30
+      semver-minor-days: 7
+      semver-patch-days: 3
+    rebase-strategy: "auto"
     labels:
       - "dependencies"
       - "android"
@@ -78,9 +91,21 @@ updates:
       time: "06:00"
       timezone: "Asia/Shanghai"
     open-pull-requests-limit: 10
+    cooldown:
+      default-days: 7
+      semver-major-days: 30
+      semver-minor-days: 7
+      semver-patch-days: 3
+    rebase-strategy: "auto"
     labels:
       - "dependencies"
       - "javascript"
+    # 网页版运行在 Node 20；@types/node 必须与运行时同大版本，
+    # 26.x 的类型定义会接受 Node 20 不存在的 API，必须随 Node 升级手动改。
+    ignore:
+      - dependency-name: "@types/node"
+        update-types:
+          - "version-update:semver-major"
     commit-message:
       prefix: "build"
       include: "scope"
@@ -105,6 +130,12 @@ updates:
       time: "06:00"
       timezone: "Asia/Shanghai"
     open-pull-requests-limit: 5
+    cooldown:
+      default-days: 7
+      semver-major-days: 30
+      semver-minor-days: 7
+      semver-patch-days: 3
+    rebase-strategy: "auto"
     labels:
       - "dependencies"
       - "rust"

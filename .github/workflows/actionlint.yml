@@ -1,0 +1,39 @@
+name: Actionlint
+
+# 工作流静态检查：YAML 结构、表达式、shell 片段。
+# 与 Android APK 分开，改 CI 配置时不必等 7 分钟的 APK 构建。
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/**"
+      - ".github/actions/**"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/**"
+      - ".github/actions/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: actionlint-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  actionlint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v7
+
+      - name: Run actionlint
+        uses: raven-actions/actionlint@v2
+        with:
+          shellcheck: true
+          pyflakes: false

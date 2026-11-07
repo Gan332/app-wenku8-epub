@@ -1,0 +1,85 @@
+# Release Drafter：把 main 上的改动汇总成下一版草稿 Release。
+# 只生成草稿，不会自动打标签或发布；正式发版仍走 AGENTS §7 的人工流程。
+name-template: "v$RESOLVED_VERSION"
+tag-template: "v$RESOLVED_VERSION"
+
+categories:
+  - title: "新增"
+    labels:
+      - "feat"
+      - "enhancement"
+  - title: "修复"
+    labels:
+      - "fix"
+      - "bug"
+  - title: "文档"
+    labels:
+      - "documentation"
+  - title: "维护"
+    labels:
+      - "ci"
+      - "refactor"
+      - "test"
+  - title: "其他"
+    labels:
+      - "*"
+
+change-template: "- $TITLE @$AUTHOR (#$NUMBER)"
+change-title-escapes: '\<*_&'
+no-changes-template: "- 没有变更"
+exclude-labels:
+  - "skip-changelog"
+  - "dependencies"
+sync-labels: false
+
+version-resolver:
+  major:
+    labels:
+      - "major"
+  minor:
+    labels:
+      - "minor"
+      - "feat"
+      - "enhancement"
+  patch:
+    labels:
+      - "patch"
+      - "fix"
+      - "bug"
+      - "documentation"
+      - "ci"
+      - "refactor"
+      - "test"
+  default: patch
+
+autolabeler:
+  - labels: ["feat"]
+    title:
+      - '/^feat(?:\(.+\))?!?:/i'
+  - labels: ["fix"]
+    title:
+      - '/^fix(?:\(.+\))?!?:/i'
+  - labels: ["documentation"]
+    title:
+      - '/^docs(?:\(.+\))?!?:/i'
+  - labels: ["ci"]
+    title:
+      - '/^ci(?:\(.+\))?!?:/i'
+  - labels: ["test"]
+    title:
+      - '/^test(?:\(.+\))?!?:/i'
+  - labels: ["refactor"]
+    title:
+      - '/^refactor(?:\(.+\))?!?:/i'
+  - labels: ["dependencies"]
+    title:
+      - '/^build\(deps(?:-dev)?\)/i'
+
+template: |
+  ## 变更
+
+  $CHANGES
+
+  ---
+
+  完整对比：https://github.com/Gan332/app-wenku8-epub/compare/$PREVIOUS_TAG...$RESOLVED_VERSION

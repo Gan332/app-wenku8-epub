@@ -12,6 +12,18 @@ on:
       - 'docs/**'
       - '.github/ISSUE_TEMPLATE/**'
       - 'LICENSE'
+      # 网页版由 web-verify.yml 负责，不必为 Node 改动重跑 Android 构建
+      - 'src/**'
+      - 'public/**'
+      - 'test/**'
+      - 'relay/**'
+      - 'scripts/**/*.js'
+      - 'server.js'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/dependabot.yml'
+      - '.github/labeler.yml'
+      - '.github/release-drafter.yml'
   pull_request:
     branches:
       - main
@@ -20,6 +32,17 @@ on:
       - 'docs/**'
       - '.github/ISSUE_TEMPLATE/**'
       - 'LICENSE'
+      - 'src/**'
+      - 'public/**'
+      - 'test/**'
+      - 'relay/**'
+      - 'scripts/**/*.js'
+      - 'server.js'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/dependabot.yml'
+      - '.github/labeler.yml'
+      - '.github/release-drafter.yml'
   workflow_dispatch:
 
 permissions:
@@ -185,8 +208,12 @@ jobs:
           git_short="${git_sha:0:7}"
           version_name="$(grep -oP 'versionName = "\K[^"]+' android/app/build.gradle.kts | head -n 1)"
           version_code="$(grep -oP 'versionCode = \K\d+' android/app/build.gradle.kts | head -n 1)"
-          release_apk="$(ls android/app/build/outputs/apk/release/*.apk | head -n 1)"
-          debug_apk="$(ls android/app/build/outputs/apk/debug/*.apk | head -n 1)"
+          release_apk="$(find android/app/build/outputs/apk/release -maxdepth 1 -name '*.apk' -print -quit)"
+          debug_apk="$(find android/app/build/outputs/apk/debug -maxdepth 1 -name '*.apk' -print -quit)"
+          [ -n "$release_apk" ] && [ -n "$debug_apk" ] || {
+            echo "::error::未找到 APK 产物（release=$release_apk debug=$debug_apk）"
+            exit 1
+          }
           title="文库 EPUB 工坊 · CI 最新构建 (main)"
           notes="$RUNNER_TEMP/ci-latest-notes.md"
 

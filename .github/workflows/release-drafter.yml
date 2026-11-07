@@ -1,0 +1,42 @@
+name: Release drafter
+
+# push 到 main 时更新下一版草稿 Release；PR 事件只负责给标题加分类标签。
+# 不 publish、不打 tag，正式发版仍按 AGENTS §7 手动执行。
+on:
+  push:
+    branches:
+      - main
+  pull_request_target:
+    types: [opened, reopened, synchronize, edited]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: release-drafter-${{ github.event_name }}-${{ github.event.pull_request.number || 'main' }}
+  cancel-in-progress: false
+
+jobs:
+  update_release_draft:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Update draft release
+        uses: release-drafter/release-drafter@v7
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  autolabel:
+    if: github.event_name == 'pull_request_target'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Label by conventional title
+        uses: release-drafter/release-drafter/autolabeler@v7
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

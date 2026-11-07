@@ -1,7 +1,13 @@
 name: Dependabot auto-merge
 
 # pull_request_target 才能在 Dependabot PR 上拿到可写 token；
-# 本工作流不 checkout 也不执行 PR 里的任何代码，只调 gh / fetch-metadata，风险可控。
+# 本工作流不 checkout、不执行 PR 里的任何代码，只调 gh / fetch-metadata，风险可控。
+#
+# 自动合并的门槛（缺一不可）：
+#   1. dependency-review 通过（高危漏洞依赖会被拦下）；
+#   2. 对应生态的 CI 通过：npm → Web verify，github_actions → actionlint + Android APK，
+#      gradle/cargo → Android APK；
+#   3. 不是 major 更新，且 PR 没有 do-not-merge 标签。
 on:
   pull_request_target:
     types: [opened, reopened, synchronize, ready_for_review]
@@ -20,18 +26,21 @@ jobs:
   auto-merge:
     if: github.event.pull_request.user.login == 'dependabot[bot]'
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 75
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      REPO: ${{ github.repository }}
+      PR_URL: ${{ github.event.pull_request.html_url }}
+      HEAD_REF: ${{ github.event.pull_request.head.ref }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
     steps:
       - name: Fetch Dependabot metadata
         id: meta
-        uses: dependabot/fetch-metadata@v2
+        uses: dependabot/fetch-metadata@v3
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Ensure labels exist
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REPO: ${{ github.repository }}
         run: |
           gh label create dependencies --repo "$REPO" --color "0366d6" --description "Dependency updates" --force
           gh label create ci --repo "$REPO" --color "0e8a16" --description "GitHub Actions / CI" --force
@@ -39,74 +48,120 @@ jobs:
           gh label create javascript --repo "$REPO" --color "f1e05a" --description "Node.js / web" --force
           gh label create rust --repo "$REPO" --color "dea584" --description "Rust core" --force
           gh label create major-update --repo "$REPO" --color "d93f0b" --description "Major version bump; review before merge" --force
+          gh label create security --repo "$REPO" --color "ee0701" --description "Security update" --force
+          gh label create do-not-merge --repo "$REPO" --color "b60205" --description "Opt out of Dependabot auto-merge" --force
 
       - name: Label the pull request
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_URL: ${{ github.event.pull_request.html_url }}
           ECOSYSTEM: ${{ steps.meta.outputs.package-ecosystem }}
           UPDATE_TYPE: ${{ steps.meta.outputs.update-type }}
+          GHSA_ID: ${{ steps.meta.outputs.ghsa-id }}
         run: |
           set -euo pipefail
           gh pr edit "$PR_URL" --add-label "dependencies"
           case "$ECOSYSTEM" in
             github_actions) gh pr edit "$PR_URL" --add-label "ci" ;;
             gradle) gh pr edit "$PR_URL" --add-label "android" ;;
-            npm) gh pr edit "$PR_URL" --add-label "javascript" ;;
+            npm|npm_and_yarn) gh pr edit "$PR_URL" --add-label "javascript" ;;
             cargo) gh pr edit "$PR_URL" --add-label "rust" ;;
           esac
           if [ "$UPDATE_TYPE" = "version-update:semver-major" ]; then
             gh pr edit "$PR_URL" --add-label "major-update"
           fi
+          if [ -n "$GHSA_ID" ]; then
+            gh pr edit "$PR_URL" --add-label "security"
+          fi
 
-      - name: Approve minor and patch updates
-        if: >-
-          steps.meta.outputs.update-type == 'version-update:semver-patch' ||
-          steps.meta.outputs.update-type == 'version-update:semver-minor'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_URL: ${{ github.event.pull_request.html_url }}
-        run: gh pr review --approve "$PR_URL"
-
-      - name: Wait for the PR's Android APK run
-        if: >-
-          steps.meta.outputs.update-type == 'version-update:semver-patch' ||
-          steps.meta.outputs.update-type == 'version-update:semver-minor'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REPO: ${{ github.repository }}
-          HEAD_REF: ${{ github.event.pull_request.head.ref }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      - name: Check opt-out label
+        id: guard
         run: |
           set -euo pipefail
-          run_id=""
-          # Dependabot 推送后 android-apk.yml 才会被创建，先等它出现（最多 10 分钟）
-          for _ in $(seq 1 60); do
-            run_id="$(gh run list \
-              --repo "$REPO" \
-              --workflow android-apk.yml \
-              --event pull_request \
-              --branch "$HEAD_REF" \
-              --limit 10 \
-              --json databaseId,headSha \
-              --jq ".[] | select(.headSha == \"$HEAD_SHA\") | .databaseId" | head -n 1)"
-            if [ -n "$run_id" ]; then
-              break
+          labels="$(gh pr view "$PR_URL" --json labels --jq '.labels[].name')"
+          if printf '%s\n' "$labels" | grep -qx 'do-not-merge'; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Decide whether to auto-merge
+        id: policy
+        if: steps.guard.outputs.skip != 'true'
+        env:
+          UPDATE_TYPE: ${{ steps.meta.outputs.update-type }}
+        run: |
+          set -euo pipefail
+          case "$UPDATE_TYPE" in
+            version-update:semver-patch|version-update:semver-minor|security-update)
+              echo "merge=true" >> "$GITHUB_OUTPUT" ;;
+            *)
+              echo "merge=false" >> "$GITHUB_OUTPUT" ;;
+          esac
+
+      - name: Wait for required checks
+        if: steps.guard.outputs.skip != 'true' && steps.policy.outputs.merge == 'true'
+        env:
+          ECOSYSTEM: ${{ steps.meta.outputs.package-ecosystem }}
+        run: |
+          set -euo pipefail
+
+          # Dependabot 推送后工作流才会被创建；先等它出现，再等它跑完。
+          # 只看本次 head SHA，避免把旧提交的绿灯当成新提交的结果。
+          wait_for() {
+            workflow="$1"
+            max_attempts="$2"
+            run_id=""
+
+            for _ in $(seq 1 "$max_attempts"); do
+              run_id="$(gh run list \
+                --repo "$REPO" \
+                --workflow "$workflow" \
+                --event pull_request \
+                --branch "$HEAD_REF" \
+                --limit 20 \
+                --json databaseId,headSha \
+                --jq "first(.[] | select(.headSha == \"$HEAD_SHA\") | .databaseId) // empty")"
+              if [ -n "$run_id" ]; then
+                break
+              fi
+              sleep 10
+            done
+
+            if [ -z "$run_id" ]; then
+              echo "::error::10 分钟内没有找到 head $HEAD_SHA 的 $workflow 运行"
+              gh run list --repo "$REPO" --workflow "$workflow" --limit 10 \
+                --json databaseId,headSha,status,conclusion \
+                --jq '.[] | [.databaseId,.headSha,.status,.conclusion] | @tsv' || true
+              exit 1
             fi
+
+            echo "==> 等待 $workflow (run $run_id)"
+            gh run watch "$run_id" --repo "$REPO" --exit-status --interval 20
+          }
+
+          wait_for dependency-review.yml 60
+
+          case "$ECOSYSTEM" in
+            npm|npm_and_yarn)
+              wait_for web-verify.yml 60
+              ;;
+            github_actions)
+              wait_for actionlint.yml 60
+              wait_for android-apk.yml 60
+              ;;
+            *)
+              wait_for android-apk.yml 60
+              ;;
+          esac
+
+      - name: Squash merge after required checks pass
+        if: steps.guard.outputs.skip != 'true' && steps.policy.outputs.merge == 'true'
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            if gh pr merge "$PR_URL" --squash --delete-branch; then
+              exit 0
+            fi
+            echo "::warning::第 $attempt 次合并失败，10 秒后重试"
             sleep 10
           done
-          if [ -z "$run_id" ]; then
-            echo "::error::10 分钟内没有找到 head $HEAD_SHA 的 Android APK 运行"
-            exit 1
-          fi
-          # 只有整条 CI（Rust + 单元测试 + APK）通过才继续；失败则本工作流停在红色
-          gh run watch "$run_id" --repo "$REPO" --exit-status --interval 20
-
-      - name: Squash merge after CI passes
-        if: >-
-          steps.meta.outputs.update-type == 'version-update:semver-patch' ||
-          steps.meta.outputs.update-type == 'version-update:semver-minor'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_URL: ${{ github.event.pull_request.html_url }}
-        run: gh pr merge "$PR_URL" --squash --delete-branch
+          exit 1
