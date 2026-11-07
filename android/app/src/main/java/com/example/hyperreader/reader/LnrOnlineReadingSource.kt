@@ -7,8 +7,7 @@ import com.example.hyperreader.model.BookIndex
 import com.example.hyperreader.model.Chapter
 import com.example.hyperreader.model.ContentBlock
 import com.example.hyperreader.model.ParsedChapter
-import com.github.michaelbull.result.Err
-import com.github.michaelbull.result.Ok
+import com.github.michaelbull.result.getOrElse
 import io.nightfish.lightnovelreader.api.book.ChapterContent
 import io.nightfish.lightnovelreader.api.error.WebRequestError
 import kotlinx.coroutines.Dispatchers
@@ -49,9 +48,8 @@ class LnrOnlineReadingSource(
         if (id.isBlank()) {
             return@withContext OnlineReaderResult.Failed("书籍编号无效。", "INVALID_BOOK_ID")
         }
-        val volumes = when (val result = bookSource.getBookVolumes(id)) {
-            is Ok -> result.value
-            is Err -> return@withContext result.error.toOnlineFailure()
+        val volumes = bookSource.getBookVolumes(id).getOrElse { error ->
+            return@withContext error.toOnlineFailure()
         }
         val chapters = volumes.volumes.flatMap { volume ->
             volume.chapters.map { chapter ->
@@ -87,9 +85,8 @@ class LnrOnlineReadingSource(
                 fromCache = true,
             )
         }
-        val content = when (val result = bookSource.getChapterContent(chapter.id, bookId)) {
-            is Ok -> result.value
-            is Err -> return@withContext result.error.toOnlineFailure()
+        val content = bookSource.getChapterContent(chapter.id, bookId).getOrElse { error ->
+            return@withContext error.toOnlineFailure()
         }
         val parsed = content.toParsedChapter(chapter)
         val reader = parsed.toReaderChapter()

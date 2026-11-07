@@ -134,8 +134,8 @@ class OnlineReaderSource(
 
     override suspend fun loadIndex(
         bookId: String,
-        title: String = "",
-        author: String = "",
+        title: String,
+        author: String,
     ): OnlineReaderResult<OnlineIndex> = withContext(Dispatchers.IO) {
         val id = bookId.filter(Char::isDigit)
         if (id.isBlank()) return@withContext OnlineReaderResult.Failed("书籍编号无效。", "INVALID_BOOK_ID")
