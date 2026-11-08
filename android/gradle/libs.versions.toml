@@ -17,7 +17,7 @@ security = "1.1.0"
 documentfile = "1.0.1"
 # xy-reader 阅读器引入（0.13.0）：压缩包页面源
 commonsCompress = "1.28.0"
-junrar = "7.5.5"
+junrar = "8.1.2"
 # LNR 书源体系引入（0.14.0）：Result 类型 + XML 构建
 kotlinResult = "2.3.1"
 dom4j = "2.2.0"
