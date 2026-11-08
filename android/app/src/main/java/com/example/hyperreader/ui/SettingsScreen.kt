@@ -806,6 +806,23 @@ private fun ReaderSection(state: StudioUiState, viewModel: StudioViewModel, onIm
                 )
             }
         },
+        { SectionTitle("显示性能") },
+        {
+            val refreshRate by viewModel.refreshRate.collectAsStateWithLifecycle(
+                initialValue = com.example.hyperreader.settings.RefreshRate.ADAPTIVE,
+            )
+            PreferencePanel {
+                com.example.hyperreader.settings.RefreshRate.entries.forEach { rate ->
+                    RadioButtonPreference(
+                        title = rate.label,
+                        summary = rate.summary,
+                        selected = refreshRate == rate,
+                        onClick = { viewModel.setRefreshRate(rate) },
+                        insideMargin = PreferenceRowMargin,
+                    )
+                }
+            }
+        },
         { SectionTitle("在线阅读") },
         {
             val onlineSource by viewModel.onlineSource.collectAsStateWithLifecycle(initialValue = OnlineSource.BUILTIN)

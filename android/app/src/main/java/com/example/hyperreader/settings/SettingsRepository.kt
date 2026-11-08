@@ -62,6 +62,9 @@ class SettingsRepository(private val context: Context) {
     /** 在线阅读数据源；默认内置解析，非法值同样回退内置。 */
     val onlineSource: Flow<OnlineSource> = data.safeData().map { OnlineSource.fromName(it[ONLINE_SOURCE]) }
 
+    /** 屏幕刷新率策略；默认自适应（不向系统提要求）。 */
+    val refreshRate: Flow<RefreshRate> = data.safeData().map { RefreshRate.fromName(it[REFRESH_RATE]) }
+
     /** 是否在启动时自动检查书架更新（默认开）。 */
     val autoCheckUpdates: Flow<Boolean> = data.safeData().map { it[AUTO_CHECK_UPDATES] ?: true }
 
@@ -141,6 +144,7 @@ class SettingsRepository(private val context: Context) {
     /** 切换首选直连入口；只影响之后发出的请求，不影响已落库的 URL。 */
     suspend fun setDirectEntry(entry: DirectEntry) = edit { it[DIRECT_ENTRY] = entry.name }
     suspend fun setOnlineSource(source: OnlineSource) = edit { it[ONLINE_SOURCE] = source.name }
+    suspend fun setRefreshRate(rate: RefreshRate) = edit { it[REFRESH_RATE] = rate.name }
     suspend fun setAutoCheckUpdates(value: Boolean) = edit { it[AUTO_CHECK_UPDATES] = value }
     suspend fun setLastUpdateCheckAt(value: Long) = edit { it[LAST_UPDATE_CHECK_AT] = value }
     suspend fun setCacheOnWifiOnly(value: Boolean) = edit { it[CACHE_WIFI_ONLY] = value }
@@ -212,6 +216,8 @@ class SettingsRepository(private val context: Context) {
         val DIRECT_ENTRY = stringPreferencesKey("direct_entry")
         /** 在线阅读数据源（`OnlineSource.name`）；缺省或非法值视为内置解析。 */
         val ONLINE_SOURCE = stringPreferencesKey("online_source")
+        /** 屏幕刷新率策略（`RefreshRate.name`）；缺省或非法值视为自适应。 */
+        val REFRESH_RATE = stringPreferencesKey("refresh_rate")
         /** 启动时自动检查书架更新，默认 true。 */
         val AUTO_CHECK_UPDATES = booleanPreferencesKey("auto_check_updates")
         /** 上次检查全部更新的时间戳，0 = 从未检查。 */

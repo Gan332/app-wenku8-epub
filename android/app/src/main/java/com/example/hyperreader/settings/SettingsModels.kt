@@ -142,3 +142,24 @@ enum class OnlineSource(val label: String, val summary: String) {
         fun fromName(raw: String?): OnlineSource = entries.firstOrNull { it.name == raw } ?: BUILTIN
     }
 }
+
+/**
+ * 屏幕刷新率策略（设置 → 阅读器设置 → 阅读显示）。
+ *
+ * 只影响本 App 窗口（`Window.attributes.preferredRefreshRate`），不修改系统设置；
+ * 设备不支持目标帧率时由系统钳到最接近的模式。
+ *
+ * [ADAPTIVE] 不指定帧率，交给系统按内容/触控调度——这是 Android 默认行为，也最省电。
+ */
+@Serializable
+enum class RefreshRate(val label: String, val summary: String, val hz: Float?) {
+    ADAPTIVE("自适应", "由系统按内容调度，最省电（推荐）", null),
+    HZ_60("60 Hz", "固定 60 帧，续航优先", 60f),
+    HZ_90("90 Hz", "固定 90 帧，流畅与耗电均衡", 90f),
+    HZ_120("120 Hz", "固定 120 帧，翻页最顺滑但更耗电", 120f),
+    ;
+
+    companion object {
+        fun fromName(raw: String?): RefreshRate = entries.firstOrNull { it.name == raw } ?: ADAPTIVE
+    }
+}

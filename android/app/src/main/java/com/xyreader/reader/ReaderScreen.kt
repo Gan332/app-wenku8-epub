@@ -92,6 +92,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -232,12 +233,26 @@ fun ReaderScreen(
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner, viewModel) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_STOP) viewModel.flushProgress()
+            when (event) {
+                Lifecycle.Event.ON_START -> viewModel.onHostResumed()
+                Lifecycle.Event.ON_STOP -> {
+                    // 退后台：先落库，再停掉渲染队列（省电，见 ReaderViewModel.onHostPaused）
+                    viewModel.flushProgress()
+                    viewModel.onHostPaused()
+                }
+                else -> Unit
+            }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
+        // 回到组合（如从阅读配置页返回）时 Activity 可能从未 STOP，不会再有 ON_START：
+        // 这里补一次恢复，避免阅读器停在暂停状态。
+        if (lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
+            viewModel.onHostResumed()
+        }
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
             viewModel.flushProgress()
+            viewModel.onHostPaused()
         }
     }
 
@@ -587,6 +602,19 @@ private fun ReaderPagerArea(
     var showSearchSheet by remember { mutableStateOf(false) }
     val isTextNovel by viewModel.isTextNovel.collectAsState()
 
+    // 宿主是否处于前台（RESUMED）：自动翻页与预取都只在用户真正看着屏幕时进行。
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var hostResumed by remember {
+        mutableStateOf(lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED))
+    }
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, _ ->
+            hostResumed = lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
     fun turnTo(target: Int) {
         if (target in 0 until pageCount) {
             scope.launch {
@@ -625,7 +653,7 @@ private fun ReaderPagerArea(
     }
 
     // 自动翻页：浮层打开 / 锁定 / 缩放中暂停；手动翻页只重新计时，不叠加推进。
-    LaunchedEffect(prefs.autoTurnSeconds, pageCount, upDown, overlayVisible) {
+    LaunchedEffect(prefs.autoTurnSeconds, pageCount, upDown, overlayVisible, hostResumed) {
         val interval = prefs.autoTurnSeconds
         if (interval <= 0) return@LaunchedEffect
         var lastSeen = if (upDown) verticalListState.firstVisibleItemIndex else pagerState.currentPage
@@ -636,7 +664,7 @@ private fun ReaderPagerArea(
                 lastSeen = current
                 continue
             }
-            val paused = locked || toolbarVisible || overlayVisible || showSettings ||
+            val paused = !hostResumed || locked || toolbarVisible || overlayVisible || showSettings ||
                 showCopyDialog || showSearchSheet || pageZoom.scale > 1f || columnZoomState.scale > 1f
             if (paused) continue
             if (current >= pageCount - 1) break
@@ -864,14 +892,40 @@ private fun ReaderPagerArea(
                         tint = Color.White,
                     )
                 }
-                Text(
-                    text = title,
-                    modifier = Modifier.weight(1f),
-                    color = Color.White,
-                    style = MiuixTheme.textStyles.title4,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = title,
+                        color = Color.White,
+                        style = MiuixTheme.textStyles.title4,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    // 章节名作为副标题：长篇里「第几章」比页码更能定位当前位置。
+                    val chapterTitle = chapters
+                        .getOrNull(chapters.indexOfFirst { currentPage in it.startPage..it.endPageInclusive })
+                        ?.title
+                    if (!chapterTitle.isNullOrBlank()) {
+                        Text(
+                            text = chapterTitle,
+                            color = Color.White.copy(alpha = 0.65f),
+                            style = MiuixTheme.textStyles.footnote2,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+                if (prefs.autoTurnSeconds > 0) {
+                    // 自动翻页进行中：点一下立即关闭，不用再打开设置面板
+                    Text(
+                        text = "自动 ${prefs.autoTurnSeconds}s",
+                        color = Color.White.copy(alpha = 0.8f),
+                        style = MiuixTheme.textStyles.footnote2,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(50))
+                            .clickable { viewModel.updatePrefs { it.copy(autoTurnSeconds = 0) } }
+                            .padding(horizontal = ReaderDimens.spaceS, vertical = ReaderDimens.spaceXXS),
+                    )
+                }
                 IconButton(onClick = { viewModel.addBookmark(currentPage) }) {
                     Icon(
                         imageVector = ImageVector.vectorResource(R.drawable.outline_bookmark_24px),
@@ -980,7 +1034,8 @@ private fun ReaderPagerArea(
                     // 页码与滑条同一行，砍掉独立页码行
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            text = "${shownPage + 1}/${pageCount.coerceAtLeast(1)}",
+                            text = "${shownPage + 1}/${pageCount.coerceAtLeast(1)} · " +
+                                "${((shownPage + 1) * 100 / pageCount.coerceAtLeast(1))}%",
                             color = Color.White.copy(alpha = 0.85f),
                             style = MiuixTheme.textStyles.footnote2,
                         )

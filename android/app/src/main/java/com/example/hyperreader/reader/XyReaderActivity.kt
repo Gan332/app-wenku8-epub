@@ -20,6 +20,7 @@ import com.xyreader.core.BookFormat
 import com.xyreader.core.ReaderGraph
 import com.xyreader.reader.ReaderScreen
 import com.xyreader.ui.ReaderConfigScreen
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
@@ -47,6 +48,15 @@ class XyReaderActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         applyReaderWindowInsets()
+        // 阅读器窗口的刷新率策略：设置读取失败时保持系统默认（自适应）。
+        lifecycleScope.launch {
+            val rate = runCatching {
+                (application as Wenku8Application).settingsRepository.refreshRate.first()
+            }.getOrNull()
+            if (rate != null) {
+                com.example.hyperreader.settings.RefreshRateController.apply(this@XyReaderActivity.window, rate)
+            }
+        }
 
         val uri = intent.getStringExtra(EXTRA_URI).orEmpty()
         hostBookId = intent.getStringExtra(EXTRA_BOOK_ID).orEmpty()

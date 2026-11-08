@@ -59,6 +59,14 @@ class OnlineReaderActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         applyReaderWindowInsets()
+        lifecycleScope.launch {
+            val rate = runCatching {
+                (application as Wenku8Application).settingsRepository.refreshRate.first()
+            }.getOrNull()
+            if (rate != null) {
+                com.example.hyperreader.settings.RefreshRateController.apply(this@OnlineReaderActivity.window, rate)
+            }
+        }
         hostBookId = intent.getStringExtra(EXTRA_BOOK_ID).orEmpty().filter(Char::isDigit)
         bookTitle = intent.getStringExtra(EXTRA_TITLE).orEmpty()
         bookshelfId = intent.getStringExtra(EXTRA_BOOKSHELF_ID)

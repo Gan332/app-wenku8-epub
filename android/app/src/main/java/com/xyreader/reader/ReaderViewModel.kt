@@ -2,6 +2,7 @@ package com.xyreader.reader
 
 import android.app.Application
 import android.content.Context
+import android.os.PowerManager
 import android.util.LruCache
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.ui.graphics.ImageBitmap
@@ -120,6 +121,7 @@ class ReaderViewModel(
 ) : ViewModel() {
 
     private val appContext = app.applicationContext
+    private val powerManager = appContext.getSystemService(PowerManager::class.java)
     private val repository = ReaderGraph.readerRepository()
 
     /** 页面数据源，打开后持有，onCleared 关闭 */
@@ -149,6 +151,13 @@ class ReaderViewModel(
 
     /** 上下滚动模式下的视口外预渲染页：只进 LRU，不占 [_pages]，滚动到时零等待。 */
     private var prefetchIndices: Set<Int> = emptySet()
+
+    /**
+     * 宿主是否在后台。后台时不再排队渲染：省电，也避免 Activity 停止后
+     * 单 worker 继续解码大位图（无意义且会与系统回收抢内存）。
+     */
+    @Volatile
+    private var hostPaused = false
     private val pageCache = PageBitmapCache()
     private val aspectRatioCache = mutableMapOf<Int, Float>()
 
@@ -586,6 +595,7 @@ class ReaderViewModel(
 
     /** UI 请求渲染一页；请求进入有界优先队列，避免滚动过快时积压整段预载。 */
     fun requestPage(page: Int) {
+        if (hostPaused) return
         val src = source ?: return
         val count = _state.value.pageCount
         if (count <= 0 || page !in 0 until count || !isNearCurrent(page)) return
@@ -745,6 +755,7 @@ class ReaderViewModel(
 
     /** 预载顺序按可见目标优先；快速滚动会丢弃尚未开始且已远离视口的旧请求。 */
     private fun preloadAround(center: Int) {
+        if (hostPaused) return
         val count = _state.value.pageCount
         val generation = activeGeneration
         if (count <= 0 || source == null) return
@@ -776,7 +787,28 @@ class ReaderViewModel(
         // 每次上报都重建预取集：横向模式不再上报预取，旧集合不能留到下一次预载。
         prefetchIndices = emptySet()
         prunePages()
+        if (hostPaused) return
         valid.forEach(::requestPage)
+    }
+
+    /** 宿主进入后台：清空队列并停掉渲染 worker（下次回前台由 [onHostResumed] 重建）。 */
+    fun onHostPaused() {
+        hostPaused = true
+        synchronized(queueLock) {
+            queuedPages.clear()
+            inFlight.clear()
+            renderWorker?.cancel()
+            renderWorker = null
+        }
+        prefetchIndices = emptySet()
+    }
+
+    /** 宿主回到前台：恢复当前页与邻页预载。 */
+    fun onHostResumed() {
+        if (!hostPaused) return
+        hostPaused = false
+        requestPage(currentPage)
+        preloadAround(currentPage)
     }
 
     /**
@@ -784,6 +816,9 @@ class ReaderViewModel(
      * 页真正滚进视口时 [requestPage] 直接命中 LRU，占位帧几乎不可见。
      */
     fun prefetchPages(pages: List<Int>) {
+        if (hostPaused) return
+        // 省电模式不再做视口外预渲染（可见页照常渲染）：用户主动省电时不抢 CPU/GPU。
+        if (powerManager?.isPowerSaveMode == true) return
         val count = _state.value.pageCount
         if (count <= 0 || source == null) return
         val valid = pages.filter { it in 0 until count }.toSet()

@@ -233,6 +233,13 @@ private fun StudioApp(
     // 书签中心按书聚合的分组；随两个阅读器 Bridge 的写入实时更新。
     val bookmarkGroups by viewModel.bookmarkGroups.collectAsStateWithLifecycle(initialValue = emptyList())
     val context = LocalContext.current
+    // 刷新率策略：自适应 / 60 / 90 / 120，实时应用到主窗口（阅读器 Activity 在各自 onCreate 应用）。
+    val refreshRate by viewModel.refreshRate.collectAsStateWithLifecycle(
+        initialValue = com.example.hyperreader.settings.RefreshRate.ADAPTIVE,
+    )
+    LaunchedEffect(refreshRate) {
+        com.example.hyperreader.settings.RefreshRateController.apply(context, refreshRate)
+    }
     // 标题与返回动作都从 PageChrome 的两个纯函数读（0.19.0-alpha05）：
     // 顶栏标题、顶栏返回按钮、系统返回键三处共用同一份决策，不会各写一遍 `when`。
     val chromeTitle = state.chromeTitle()

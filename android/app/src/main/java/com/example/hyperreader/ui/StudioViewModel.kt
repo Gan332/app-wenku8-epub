@@ -352,6 +352,14 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch { runCatching { settingsRepository.setOnlineSource(source) } }
     }
 
+    /** 屏幕刷新率策略（自适应 / 60 / 90 / 120）；主界面与阅读器窗口各自应用。 */
+    val refreshRate: kotlinx.coroutines.flow.Flow<com.example.hyperreader.settings.RefreshRate> =
+        settingsRepository.refreshRate
+
+    fun setRefreshRate(rate: com.example.hyperreader.settings.RefreshRate) {
+        viewModelScope.launch { runCatching { settingsRepository.setRefreshRate(rate) } }
+    }
+
     /**
      * 官方标签（登录后从 `tags.php` 拉取）；未登录或抓取失败时为空，标签区只显示本地内容。
      * 声明必须在 `init` 之前：冷启动的 collector 会经 [mergedTags] 读到它。
