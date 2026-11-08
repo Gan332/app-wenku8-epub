@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>页面走丢了 · 文库 EPUB 工坊</title>
+  <meta name="robots" content="noindex">
+  <meta name="theme-color" content="#F7F1E7">
+  <link rel="icon" href="./assets/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./styles.css">
+  <script>
+    (function () {
+      var root = document.documentElement;
+      try {
+        var saved = localStorage.getItem('wenku8-theme');
+        var dark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        root.dataset.theme = saved || (dark ? 'dark' : 'light');
+      } catch (e) {
+        root.dataset.theme = 'light';
+      }
+    })();
+  </script>
+</head>
+<body>
+  <main class="not-found">
+    <img src="./assets/icon.svg" alt="" width="64" height="64">
+    <p class="eyebrow">404</p>
+    <h1>这一页不在书里</h1>
+    <p class="lede">链接可能已经改过，或者章节被移动了。回到首页继续找吧。</p>
+    <div class="actions">
+      <a class="btn primary" href="./">返回首页</a>
+      <a class="btn ghost" href="https://github.com/Gan332/app-wenku8-epub/releases" target="_blank" rel="noopener">查看发布</a>
+    </div>
+  </main>
+</body>
+</html>

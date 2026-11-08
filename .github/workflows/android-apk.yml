@@ -10,6 +10,7 @@ on:
     paths-ignore:
       - '**/*.md'
       - 'docs/**'
+      - 'site/**'
       - '.github/ISSUE_TEMPLATE/**'
       - 'LICENSE'
       # 网页版由 web-verify.yml 负责，不必为 Node 改动重跑 Android 构建
@@ -31,6 +32,7 @@ on:
     paths-ignore:
       - '**/*.md'
       - 'docs/**'
+      - 'site/**'
       - '.github/ISSUE_TEMPLATE/**'
       - 'LICENSE'
       - 'src/**'

@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" role="img" aria-label="文库 EPUB 工坊">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="108" y2="108" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#B65C3D"/>
+      <stop offset="1" stop-color="#87371F"/>
+    </linearGradient>
+  </defs>
+  <rect width="108" height="108" rx="24" fill="url(#bg)"/>
+  <path fill="#F7F1E6" d="M54 34C47 30.5 38 29.5 30 31.5V73C38 71 47 72 53 75.6Z"/>
+  <path fill="#F7F1E6" d="M54 34C61 30.5 70 29.5 78 31.5V73C70 71 61 72 55 75.6Z"/>
+  <path fill="#25221E" d="M50 26H58V42L54 45.2L50 42Z"/>
+  <g stroke="#A34B2F" stroke-width="2.4" stroke-linecap="round">
+    <path d="M36 44H45M36 51H45M36 58H42"/>
+    <path d="M63 44H72M63 51H72M63 58H69"/>
+  </g>
+</svg>
