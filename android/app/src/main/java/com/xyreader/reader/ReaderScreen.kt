@@ -152,6 +152,7 @@ import top.yukonga.miuix.kmp.icon.extended.Search
 import top.yukonga.miuix.kmp.icon.extended.Tune
 import top.yukonga.miuix.kmp.icon.extended.Unlock
 import kotlin.math.roundToInt
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.distinctUntilChanged
 import com.xyreader.core.ReaderMotion
@@ -162,6 +163,9 @@ private val BarCorner = RoundedCornerShape(ReaderDimens.panelCorner)
 
 /** 页内双击放大的目标倍数 */
 private const val PAGE_ZOOM = 2.5f
+
+/** 上下滚动模式视口外预渲染页数（前、后各若干页） */
+private const val VERTICAL_PREFETCH_PAGES = 2
 
 /** 沿 ContextWrapper 链找宿主 Activity；拿不到时返回 null（调用方判空降级） */
 private tailrec fun Context.findActivity(): ComponentActivity? = when (this) {
@@ -423,7 +427,24 @@ fun ReaderScreen(
                     if (upDown) {
                         snapshotFlow { verticalListState.layoutInfo.visibleItemsInfo.map { it.index } }
                             .distinctUntilChanged()
-                            .collect(viewModel::onVisiblePagesChanged)
+                            .collect { visible ->
+                                viewModel.onVisiblePagesChanged(visible)
+                                // 视口外再预渲染两页：滚动到它们时直接命中 LRU，
+                                // 不再先看到占位再出图（页与页之间无白块、无转圈）。
+                                if (visible.isNotEmpty()) {
+                                    val first = visible.min()
+                                    val last = visible.max()
+                                    val band = buildList {
+                                        for (page in last + 1..last + VERTICAL_PREFETCH_PAGES) {
+                                            if (page < state.pageCount) add(page)
+                                        }
+                                        for (page in first - 1 downTo first - VERTICAL_PREFETCH_PAGES) {
+                                            if (page >= 0) add(page)
+                                        }
+                                    }
+                                    viewModel.prefetchPages(band)
+                                }
+                            }
                     } else {
                         snapshotFlow { listOf(pagerState.currentPage) }
                             .distinctUntilChanged()
@@ -485,6 +506,7 @@ fun ReaderScreen(
                     onOpenDirectory = { showDirectory = true },
                     onBack = onBack,
                     onOpenReaderConfig = onOpenReaderConfig,
+                    overlayVisible = showDirectory,
                 )
                 // 全屏目录弹层（替换早期版本的抽屉）
                 if (showDirectory) {
@@ -531,6 +553,7 @@ private fun ReaderPagerArea(
     onOpenDirectory: () -> Unit,
     onBack: () -> Unit,
     onOpenReaderConfig: (() -> Unit)? = null,
+    overlayVisible: Boolean = false,
 ) {
     val scope = rememberCoroutineScope()
     val upDown = prefs.pageMode == PageMode.UP_DOWN
@@ -598,6 +621,28 @@ private fun ReaderPagerArea(
         snapshotFlow { if (upDown) verticalListState.firstVisibleItemIndex else pagerState.currentPage }
             .distinctUntilChanged().collect {
             pageZoom.reset()
+        }
+    }
+
+    // 自动翻页：浮层打开 / 锁定 / 缩放中暂停；手动翻页只重新计时，不叠加推进。
+    LaunchedEffect(prefs.autoTurnSeconds, pageCount, upDown, overlayVisible) {
+        val interval = prefs.autoTurnSeconds
+        if (interval <= 0) return@LaunchedEffect
+        var lastSeen = if (upDown) verticalListState.firstVisibleItemIndex else pagerState.currentPage
+        while (true) {
+            delay(interval * 1000L)
+            val current = if (upDown) verticalListState.firstVisibleItemIndex else pagerState.currentPage
+            if (current != lastSeen) {
+                lastSeen = current
+                continue
+            }
+            val paused = locked || toolbarVisible || overlayVisible || showSettings ||
+                showCopyDialog || showSearchSheet || pageZoom.scale > 1f || columnZoomState.scale > 1f
+            if (paused) continue
+            if (current >= pageCount - 1) break
+            val next = current + 1
+            if (upDown) verticalListState.animateScrollToItem(next) else pagerState.animateScrollToPage(next)
+            lastSeen = next
         }
     }
 
@@ -722,6 +767,8 @@ private fun ReaderPagerArea(
                             onNeedRender = viewModel::requestPage,
                             modifier = pageModifier,
                             panX = { columnZoomState.offset.x },
+                            // 连续列表：占位只留背景色，避免滚动时页中间冒出转圈
+                            showLoading = false,
                         )
                     }
                 }
@@ -1563,7 +1610,7 @@ private fun SheetGroupPage(content: @Composable () -> Unit) {
 
 // ---------- 组 1：翻页模式 ----------
 
-/** 左右翻页 / 上下滚动 快捷切换 */
+/** 左右翻页 / 上下滚动 快捷切换 + 自动翻页 */
 
 @Composable
 private fun SheetModeGroup(prefs: ReaderPrefs, onUpdate: ((ReaderPrefs) -> ReaderPrefs) -> Unit) {
@@ -1576,7 +1623,47 @@ private fun SheetModeGroup(prefs: ReaderPrefs, onUpdate: ((ReaderPrefs) -> Reade
             )
         }
     }
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = "自动翻页",
+                style = MiuixTheme.textStyles.button,
+                fontWeight = FontWeight.SemiBold,
+                color = MiuixTheme.colorScheme.primary,
+            )
+            Text(
+                text = "每 ${if (prefs.autoTurnSeconds > 0) "${prefs.autoTurnSeconds} 秒" else "—"} 翻一页；浮层打开或锁定阅读时暂停。",
+                style = MiuixTheme.textStyles.footnote2,
+                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+            )
+        }
+        Switch(
+            checked = prefs.autoTurnSeconds > 0,
+            onCheckedChange = { on ->
+                onUpdate { it.copy(autoTurnSeconds = if (on) AUTO_TURN_DEFAULT_SECONDS else 0) }
+            },
+        )
+    }
+    if (prefs.autoTurnSeconds > 0) {
+        Row(horizontalArrangement = Arrangement.spacedBy(ReaderDimens.spaceXS)) {
+            AUTO_TURN_OPTIONS.forEach { seconds ->
+                FilterChip(
+                    selected = prefs.autoTurnSeconds == seconds,
+                    onClick = { onUpdate { it.copy(autoTurnSeconds = seconds) } },
+                    label = { Text("${seconds}s") },
+                )
+            }
+        }
+    }
 }
+
+/** 自动翻页可选间隔（秒）与默认值。 */
+private val AUTO_TURN_OPTIONS = listOf(5, 10, 15, 30)
+private const val AUTO_TURN_DEFAULT_SECONDS = 10
 
 // ---------- 组 2：页面 ----------
 
@@ -2004,6 +2091,7 @@ private fun ReaderPage(
     onNeedRender: (Int) -> Unit,
     modifier: Modifier = Modifier.fillMaxSize(),
     panX: () -> Float = { 0f },
+    showLoading: Boolean = true,
 ) {
     Box(
         modifier.background(bgColor),
@@ -2045,7 +2133,7 @@ private fun ReaderPage(
                 style = MiuixTheme.textStyles.body2,
             )
 
-            else -> CircularProgressIndicator()
+            else -> if (showLoading) CircularProgressIndicator()
         }
     }
     LaunchedEffect(page) {

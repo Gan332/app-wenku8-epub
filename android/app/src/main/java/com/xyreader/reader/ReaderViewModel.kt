@@ -146,6 +146,9 @@ class ReaderViewModel(
     private var renderWorker: Job? = null
     @Volatile
     private var visiblePageIndices: Set<Int> = emptySet()
+
+    /** 上下滚动模式下的视口外预渲染页：只进 LRU，不占 [_pages]，滚动到时零等待。 */
+    private var prefetchIndices: Set<Int> = emptySet()
     private val pageCache = PageBitmapCache()
     private val aspectRatioCache = mutableMapOf<Int, Float>()
 
@@ -475,6 +478,7 @@ class ReaderViewModel(
         pageCache.lru.evictAll()
         aspectRatioCache.clear()
         visiblePageIndices = emptySet()
+        prefetchIndices = emptySet()
         _pages.clear()
         _pageAspectRatios.clear()
         openSource(book, reopen = true, novelAnchor = novelAnchor, oldPage = oldPage)
@@ -536,6 +540,7 @@ class ReaderViewModel(
             pageCache.lru.evictAll()
             aspectRatioCache.clear()
             visiblePageIndices = emptySet()
+            prefetchIndices = emptySet()
             synchronized(queueLock) {
                 queuedPages.clear()
                 inFlight.clear()
@@ -745,7 +750,7 @@ class ReaderViewModel(
         if (count <= 0 || source == null) return
         val ordered = listOf(center, center + 1, center - 1, center + 2, center - 2)
             .filter { it in 0 until count }
-        val keep = ordered.toSet()
+        val keep = ordered.toSet() + prefetchIndices
         synchronized(queueLock) {
             val removed = queuedPages.filter { it.generation == generation && it.page !in keep }
             queuedPages.removeAll(removed.toSet())
@@ -768,8 +773,32 @@ class ReaderViewModel(
     fun onVisiblePagesChanged(pages: List<Int>) {
         val valid = pages.filter { it in 0 until _state.value.pageCount }.toSet()
         visiblePageIndices = valid
+        // 每次上报都重建预取集：横向模式不再上报预取，旧集合不能留到下一次预载。
+        prefetchIndices = emptySet()
         prunePages()
         valid.forEach(::requestPage)
+    }
+
+    /**
+     * 视口外预渲染（上下滚动用）：只填位图 LRU，不发布 Ready，不占 `_pages` 内存。
+     * 页真正滚进视口时 [requestPage] 直接命中 LRU，占位帧几乎不可见。
+     */
+    fun prefetchPages(pages: List<Int>) {
+        val count = _state.value.pageCount
+        if (count <= 0 || source == null) return
+        val valid = pages.filter { it in 0 until count }.toSet()
+        prefetchIndices = valid
+        if (valid.isEmpty()) return
+        val generation = activeGeneration
+        synchronized(queueLock) {
+            valid.forEach { page ->
+                if (pageCache.lru.get(page) != null) return@forEach
+                val key = RenderKey(generation, page)
+                if (inFlight.add(key)) queuedPages.add(key)
+            }
+            sortQueuedPagesLocked(currentPage)
+            ensureRenderWorkerLocked()
+        }
     }
 
     /**

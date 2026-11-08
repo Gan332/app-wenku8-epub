@@ -22,6 +22,22 @@ android {
     versionCode = 30
     versionName = "0.19.0-alpha05"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        // Rust EPUB 快路径（libepub_core.so）只随主流手机 ABI 打包；
+        // x86_64 模拟器/ChromeOS 退回 Kotlin legacy 解析（能力不降级，仅少一层加速）。
+        ndk {
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
+        }
+    }
+
+    // 只保留中文资源：依赖库自带的几十种语言字符串不进 APK。
+    androidResources {
+        localeFilters += listOf("zh")
+    }
+
+    // 依赖元数据块只服务于 Play Console，侧载 APK 不需要。
+    dependenciesInfo {
+        includeInApk = false
+        includeInBundle = false
     }
 
     buildFeatures {
@@ -45,7 +61,13 @@ android {
     }
 
     packaging {
-        resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        resources.excludes += setOf(
+            "/META-INF/{AL2.0,LGPL2.1}",
+            "/META-INF/*.version",
+            "/META-INF/*.kotlin_module",
+            "DebugProbesKt.bin",
+            "kotlin-tooling-metadata.json",
+        )
     }
 
     // 签名配置全部来自环境变量（CI 由 GitHub Secrets 注入），
@@ -98,7 +120,8 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.appcompat)
-    implementation(libs.google.material)
+    // 不再依赖 com.google.android.material：XML 主题改用 AppCompat 父主题，
+    // 省下 Material Components 的整套资源/组件（界面本来就是 MiuiX）。
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.okhttp)
     implementation(libs.jsoup)
@@ -107,7 +130,6 @@ dependencies {
     implementation(libs.junrar)
     // LNR 书源体系引入（0.14.0）：Result 类型 + 书源 XML 构建
     implementation(libs.kotlin.result)
-    implementation(libs.kotlin.result.coroutines)
     implementation(libs.dom4j)
 
     testImplementation(libs.junit)

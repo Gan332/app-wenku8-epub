@@ -109,6 +109,13 @@ data class ReaderPrefs(
     val doubleTapZoom: Boolean = true,
     /** 阅读时屏幕常亮 */
     val keepScreenOn: Boolean = false,
+    /**
+     * 自动翻页间隔（秒）；0 = 关闭。
+     *
+     * 仅在无浮层（目录 / 设置 / 搜索 / 复制）且未锁定时推进；
+     * 手动翻页会重新计时，读到全书末尾自动停止。
+     */
+    val autoTurnSeconds: Int = 0,
     /** 图片缩放模式 */
     val imageScale: ImageScale = ImageScale.FIT,
     /**
