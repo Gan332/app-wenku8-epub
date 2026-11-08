@@ -69,6 +69,7 @@ class OnlineIndexStore(private val rootDirectory: File) {
         )
     }
 
+    @Synchronized
     fun write(index: BookIndex): Boolean {
         val bookId = index.bookId?.filter(Char::isDigit).orEmpty()
         if (bookId.isBlank() || index.chapters.isEmpty()) return false
@@ -108,10 +109,12 @@ class OnlineIndexStore(private val rootDirectory: File) {
         return true
     }
 
+    @Synchronized
     fun delete(bookId: String) {
         runCatching { fileFor(bookId).delete() }
     }
 
+    @Synchronized
     fun clear() {
         runCatching { rootDirectory.deleteRecursively() }
     }

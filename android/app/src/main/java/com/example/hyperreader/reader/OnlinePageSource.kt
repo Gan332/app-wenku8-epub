@@ -14,7 +14,7 @@ import com.xyreader.core.ChapterOutline
 import com.xyreader.core.PageSource
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.isActive
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -275,8 +275,9 @@ class OnlinePageSource private constructor(
         onProgress(0, total)
 
         for ((index, chapter) in catalog.withIndex()) {
-            // 用户取消 / 换书 / 关面板后立即停手，不继续打扰源站
-            if (!currentCoroutineContext().isActive) break
+            // 用户取消 / 换书 / 关面板后立即停手；必须抛出取消而不是返回部分结果，
+            // 否则调用方会把半轮搜索当成成功。
+            currentCoroutineContext().ensureActive()
 
             val content = try {
                 fetchContent(chapter)

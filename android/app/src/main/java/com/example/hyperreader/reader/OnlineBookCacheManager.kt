@@ -2,9 +2,11 @@ package com.example.hyperreader.reader
 
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -60,21 +62,31 @@ class OnlineBookCacheManager(
     val jobs: StateFlow<Map<String, OnlineCacheJob>> = mutable.asStateFlow()
 
     private val running = mutableMapOf<String, Job>()
+    /** 用户删除缓存/清空全部后，正在收尾的协程不得再把 CANCELED 行写回列表。 */
+    private val suppressed = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+    /** 删除期间禁止同一本书重新开任务，否则新任务的数据会被删除流程清掉。 */
+    private val deleting = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+    private var clearingAll = false
     private val lock = Any()
 
     fun start(bookId: String, title: String, author: String = "") {
         val id = normalize(bookId)
         if (id.isBlank()) return
         synchronized(lock) {
-            if (running[id]?.isActive == true) return
-            running[id] = scope.launch { execute(id, title, author) }
+            if (clearingAll || id in deleting || running[id]?.isActive == true) return
+            suppressed.remove(id)
+            val task = scope.launch(start = CoroutineStart.LAZY) { execute(id, title, author) }
+            running[id] = task
+            task.start()
         }
     }
 
     /** 取消后已下载的章节保留，再点一次从断点继续。 */
     fun cancel(bookId: String) {
         val id = normalize(bookId)
-        val job = synchronized(lock) { running.remove(id) }
+        // 不在这里从 running 移除：由 execute 的 finally 按身份移除，
+        // 避免删除缓存与「取消后立刻重开」之间出现空窗。
+        val job = synchronized(lock) { running[id] }
         job?.cancel()
         mutate(id) {
             it.copy(status = OnlineCacheStatus.CANCELED, message = "已取消，已缓存章节会保留")
@@ -87,23 +99,49 @@ class OnlineBookCacheManager(
         mutable.update { it - id }
     }
 
-    /** 删除一本书的正文缓存与目录快照。 */
-    fun deleteCache(bookId: String) {
+    /**
+     * 删除一本书的正文缓存与目录快照。
+     *
+     * 先等正在写的协程真正停下再清目录：否则它可能在本方法返回后把刚下载的
+     * 一章重新写回缓存。
+     */
+    suspend fun deleteCache(bookId: String) {
         val id = normalize(bookId)
-        synchronized(lock) { running.remove(id)?.cancel() }
-        cache.clear(bookId = id)
-        indexStore.delete(id)
-        mutable.update { it - id }
+        val job = synchronized(lock) {
+            deleting.add(id)
+            running[id]?.also { active ->
+                suppressed.add(id)
+                active.cancel()
+            }
+        }
+        try {
+            job?.cancelAndJoin()
+            synchronized(lock) { running.remove(id) }
+            cache.clear(bookId = id)
+            indexStore.delete(id)
+            mutable.update { it - id }
+        } finally {
+            synchronized(lock) { deleting.remove(id) }
+        }
     }
 
-    fun clearAll() {
-        synchronized(lock) {
-            running.values.forEach { it.cancel() }
-            running.clear()
+    suspend fun clearAll() {
+        val jobs = synchronized(lock) {
+            clearingAll = true
+            running.keys.forEach { id -> suppressed.add(id) }
+            val active = running.values.toList()
+            active.forEach { it.cancel() }
+            active
         }
-        cache.clear()
-        indexStore.clear()
-        mutable.value = emptyMap()
+        try {
+            jobs.forEach { it.cancelAndJoin() }
+            synchronized(lock) { running.clear() }
+            cache.clear()
+            indexStore.clear()
+            mutable.value = emptyMap()
+        } finally {
+            synchronized(lock) { clearingAll = false }
+        }
     }
 
     fun diskUsageBytes(): Long = cache.totalBytes() + indexStore.totalBytes()
@@ -126,6 +164,7 @@ class OnlineBookCacheManager(
 
     private suspend fun execute(id: String, title: String, author: String) {
         if (id.isBlank()) return
+        val self = currentCoroutineContext()[Job]
         val displayTitle = title.ifBlank { "书籍 $id" }
         mutate(id) { it.copy(title = displayTitle, message = "正在获取目录…") }
         try {
@@ -216,32 +255,48 @@ class OnlineBookCacheManager(
                     )
                 }
             }
-            mutable.update { map ->
-                val current = map[id] ?: OnlineCacheJob(id, displayTitle)
-                map + (
-                    id to current.copy(
-                        total = chapters.size,
-                        cached = cached,
-                        failed = failed,
-                        status = if (failed > 0) OnlineCacheStatus.PARTIAL else OnlineCacheStatus.COMPLETED,
-                        message = if (failed > 0) {
-                            "已缓存 $cached 章，$failed 章失败（可再次点击重试）"
-                        } else {
-                            "已缓存全部 $cached 章，可离线阅读"
-                        },
+            if (isCurrentJob(id, self) && id !in suppressed) {
+                mutable.update { map ->
+                    val current = map[id] ?: OnlineCacheJob(id, displayTitle)
+                    map + (
+                        id to current.copy(
+                            total = chapters.size,
+                            cached = cached,
+                            failed = failed,
+                            status = if (failed > 0) OnlineCacheStatus.PARTIAL else OnlineCacheStatus.COMPLETED,
+                            message = if (failed > 0) {
+                                "已缓存 $cached 章，$failed 章失败（可再次点击重试）"
+                            } else {
+                                "已缓存全部 $cached 章，可离线阅读"
+                            },
+                        )
                     )
-                )
+                }
             }
         } catch (canceled: CancellationException) {
-            mutate(id) {
-                it.copy(status = OnlineCacheStatus.CANCELED, message = "已取消，已缓存章节会保留")
+            if (isCurrentJob(id, self)) {
+                mutate(id) {
+                    it.copy(status = OnlineCacheStatus.CANCELED, message = "已取消，已缓存章节会保留")
+                }
             }
             throw canceled
         } catch (error: Throwable) {
-            fail(id, error.message ?: "缓存失败，请稍后重试。")
+            if (isCurrentJob(id, self)) fail(id, error.message ?: "缓存失败，请稍后重试。")
         } finally {
-            synchronized(lock) { running.remove(id) }
+            // 只移除自己的登记：start() 可能在旧协程收尾前已经登记了新任务，
+            // 无条件 remove 会把新任务从追踪表里踢掉。
+            synchronized(lock) {
+                if (self != null && running[id] === self) running.remove(id)
+            }
+            // 不在这里移除 suppressed：删除缓存后旧协程可能仍在收尾，
+            // 让它继续保持静默，直到用户下次 start() 才解除。
         }
+    }
+
+    /** 直接调用 [cacheBook] 时没有登记到 running，此时视为当前任务。 */
+    private fun isCurrentJob(id: String, self: Job?): Boolean = synchronized(lock) {
+        val tracked = running[id]
+        tracked == null || tracked === self
     }
 
     private fun fail(id: String, message: String, cached: Int? = null, failed: Int? = null) {
@@ -257,6 +312,7 @@ class OnlineBookCacheManager(
 
     /** job 不存在时用当前已知标题补一条，避免进度区出现空行。 */
     private fun mutate(id: String, transform: (OnlineCacheJob) -> OnlineCacheJob) {
+        if (id in suppressed) return
         mutable.update { map ->
             val base = map[id] ?: OnlineCacheJob(id)
             map + (id to transform(base))

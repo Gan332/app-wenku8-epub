@@ -1,5 +1,6 @@
 package com.example.hyperreader.settings
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
@@ -351,9 +352,14 @@ object ConfigTransfer {
         var written = 0
         var failed = 0
         plan.changes.forEach { change ->
-            runCatching { change.writeTo(repository) }
-                .onSuccess { written++ }
-                .onFailure { failed++ }
+            try {
+                change.writeTo(repository)
+                written++
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Throwable) {
+                failed++
+            }
         }
         return ApplyResult(written, failed)
     }

@@ -2,8 +2,10 @@ package com.example.hyperreader.core
 
 import android.content.Context
 import java.io.File
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -71,14 +73,25 @@ class CatalogRepository(private val context: Context) {
                 if (mutable.value.loading) return@launch
                 mutable.value = mutable.value.copy(loading = true, message = null, progress = 0 to detailBudget)
             }
-            val result = runCatching {
-                withContext(Dispatchers.IO) {
-                    val newEntries = HashMap(entries)
-                    val newCursor = crawler.crawlOnce(newEntries, cursor, detailBudget) { fetched, budget ->
-                        mutable.value = mutable.value.copy(progress = fetched to budget)
+            val result: Result<Pair<HashMap<String, CatalogEntry>, CatalogCursor>> = try {
+                Result.success(
+                    withContext(Dispatchers.IO) {
+                        val newEntries = HashMap(entries)
+                        val newCursor = crawler.crawlOnce(newEntries, cursor, detailBudget) { fetched, budget ->
+                            mutable.value = mutable.value.copy(progress = fetched to budget)
+                        }
+                        newEntries to newCursor
+                    },
+                )
+            } catch (cancelled: CancellationException) {
+                withContext(NonCancellable) {
+                    lock.withLock {
+                        mutable.value = mutable.value.copy(loading = false, progress = null)
                     }
-                    newEntries to newCursor
                 }
+                throw cancelled
+            } catch (error: Throwable) {
+                Result.failure(error)
             }
             lock.withLock {
                 result.onSuccess { (newEntries, newCursor) ->
@@ -108,11 +121,15 @@ class CatalogRepository(private val context: Context) {
                 onDone(existing)
                 return@launch
             }
-            val entry = withContext(Dispatchers.IO) {
-                runCatching {
+            val entry = try {
+                withContext(Dispatchers.IO) {
                     val page = http.fetchText(Wenku8Urls.articleInfo(id), "catalog-one", Wenku8Urls.BASE)
                     Wenku8Parser.parseCatalogEntry(page.html, page.finalUrl)
-                }.getOrNull()
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Throwable) {
+                null
             }
             if (entry != null) {
                 lock.withLock {
@@ -183,10 +200,14 @@ class CatalogRepository(private val context: Context) {
                 onEntry(cached)
                 continue
             }
-            val fetched = runCatching {
+            val fetched = try {
                 val detail = http.fetchTextInteractive(Wenku8Urls.articleInfo(link.id), "catalog-author", Wenku8Urls.BASE)
                 Wenku8Parser.parseCatalogEntry(detail.html, detail.finalUrl)
-            }.getOrNull()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Throwable) {
+                null
+            }
             if (fetched == null) {
                 // 详情补全失败（限流/挑战/单页解析失败）时先给书名占位；
                 // **不写入索引**，否则下次 ensureBook 会把这个残缺条目当成已有数据。

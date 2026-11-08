@@ -20,6 +20,7 @@ import com.xyreader.core.BookFormat
 import com.xyreader.core.ReaderGraph
 import com.xyreader.reader.ReaderScreen
 import com.xyreader.ui.ReaderConfigScreen
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -121,7 +122,15 @@ class XyReaderActivity : ComponentActivity() {
             val seconds = ((SystemClock.elapsedRealtime() - started) / 1000L).coerceIn(0L, MAX_SESSION_SECONDS)
             if (seconds > 0) {
                 val stats = (application as Wenku8Application).readingStatsRepository
-                lifecycleScope.launch { runCatching { stats.recordSession(hostBookId, bookTitle, seconds) } }
+                lifecycleScope.launch {
+                    try {
+                        stats.recordSession(hostBookId, bookTitle, seconds)
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (_: Throwable) {
+                        // 统计写入失败不影响阅读。
+                    }
+                }
             }
         }
         super.onStop()

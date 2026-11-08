@@ -21,6 +21,7 @@ import com.xyreader.core.ReadBackground
 import com.xyreader.core.ReaderPrefs
 import com.xyreader.core.ReaderRepository
 import java.io.File
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -100,8 +101,13 @@ class OnlineReaderRepository(
      * 因此每次重开都按最新进度重新定位，不能复用 Activity 只读一次的旧页码。
      */
     suspend fun resolveStartChapterId(catalog: List<com.example.hyperreader.model.Chapter>): String? {
-        val progress = currentProgress() ?: runCatching { legacyProgress(hostBookId) }.getOrNull()
-            ?: return catalog.firstOrNull()?.id
+        val progress = currentProgress() ?: (try {
+            legacyProgress(hostBookId)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Throwable) {
+            null
+        }) ?: return catalog.firstOrNull()?.id
         return when {
             progress is OnlineReaderProgress -> catalog.firstOrNull { it.id == progress.startChapterId }?.id
                 ?: catalog.firstOrNull { it.id == progress.currentChapterId }?.id
@@ -125,7 +131,13 @@ class OnlineReaderRepository(
                     onlineProgressJson.encodeToString<OnlineReaderProgress>(progress)
             }
         }
-        runCatching { app.bookshelfRepository.recordRead(bookshelfId) }
+        try {
+            app.bookshelfRepository.recordRead(bookshelfId)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Throwable) {
+            // 书架时间戳写入失败不影响阅读进度。
+        }
     }
 
     override suspend fun toggleFavorite(bookId: Long) {
@@ -252,11 +264,15 @@ class OnlinePageSourceOpener(
                 is ReaderBlock.Paragraph -> block.text.trim().takeIf(String::isNotBlank)?.let(paragraphs::add)
                 is ReaderBlock.Image -> imageBytes[block.path]?.let { bytes ->
                     images += paragraphs.size to bytes
-                } ?: runCatching {
+                } ?: try {
                     app.coverRepository.loadBytes(block.path)?.also { bytes ->
                         imageBytes[block.path] = bytes
                         images += paragraphs.size to bytes
                     }
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    // 单张插图失败不影响正文；取消仍需向上传播。
                 }
             }
         }

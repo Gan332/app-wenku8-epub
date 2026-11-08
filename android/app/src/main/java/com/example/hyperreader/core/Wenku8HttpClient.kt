@@ -3,6 +3,7 @@ package com.example.hyperreader.core
 import com.example.hyperreader.http.HttpRateLimiter
 import com.example.hyperreader.model.DownloadedImage
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import okhttp3.Call
 import okhttp3.CookieJar
@@ -74,7 +75,7 @@ class Wenku8HttpClient(private val cacheDirectory: File, private val sessionCook
      * 换的是边缘入口而不是接口语义：端点集合、白名单、限流与退避都不变。
      * 两个入口都试过则原样抛出，避免把全部镜像都打进风控。
      */
-    private fun execute(
+    private suspend fun execute(
         rawUrl: String,
         jobId: String,
         maxBytes: Int,
@@ -134,7 +135,7 @@ class Wenku8HttpClient(private val cacheDirectory: File, private val sessionCook
         }
     }
 
-    private fun executeOnce(
+    private suspend fun executeOnce(
         rawUrl: String,
         jobId: String,
         maxBytes: Int,
@@ -159,14 +160,13 @@ class Wenku8HttpClient(private val cacheDirectory: File, private val sessionCook
                 .build()
             val call = if (http1) http1Client.newCall(request) else client.newCall(request)
             activeCalls.computeIfAbsent(jobId) { ConcurrentHashMap.newKeySet() }.add(call)
+            try {
             val response = try {
                 call.execute()
             } catch (error: SSLPeerUnverifiedException) {
                 throw tlsError(error, current, mismatch = true)
             } catch (error: SSLHandshakeException) {
                 throw tlsError(error, current, mismatch = false)
-            } finally {
-                activeCalls[jobId]?.remove(call)
             }
             val status = response.code
             if (status in REDIRECT_CODES) {
@@ -179,11 +179,11 @@ class Wenku8HttpClient(private val cacheDirectory: File, private val sessionCook
             }
             if (status == 429 || status == 408 || status >= 500) {
                 val retryAfter = HttpRateLimiter.retryAfterMs(response.header("Retry-After"))
-                val delay = if (status == 429) max(retryAfter, HttpRateLimiter.fallbackDelayMs()) else max(retryAfter, 750L shl attempt)
+                val waitMs = if (status == 429) max(retryAfter, HttpRateLimiter.fallbackDelayMs()) else max(retryAfter, 750L shl attempt)
                 response.close()
                 if (attempt < MAX_RETRIES) {
-                    HttpRateLimiter.defer(delay)
-                    Thread.sleep(delay)
+                    HttpRateLimiter.defer(waitMs)
+                    delay(waitMs)
                     attempt += 1
                     continue
                 }
@@ -223,6 +223,13 @@ class Wenku8HttpClient(private val cacheDirectory: File, private val sessionCook
             val result = HttpResult(bytes, response.header("Content-Type").orEmpty(), status, current.toString())
             response.close()
             return result
+            } finally {
+                // 保留到响应体读完：取消任务时要能真正中断阻塞中的 body read。
+                activeCalls.computeIfPresent(jobId) { _, calls ->
+                    calls.remove(call)
+                    if (calls.isEmpty()) null else calls
+                }
+            }
         }
         throw Wenku8Exception("资源重定向次数过多。", "TOO_MANY_REDIRECTS")
     }

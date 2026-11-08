@@ -36,6 +36,7 @@ import io.nightfish.lightnovelreader.api.web.search.SearchType
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -106,9 +107,14 @@ class Wenku8BookSource(
      * 失败即视为离线；结果同步进 [offLine] 与 [isOffLineFlow]。
      */
     override suspend fun isOffLine(): Boolean {
-        val down = runCatching {
+        val down = try {
             http.fetchTextInteractive(Wenku8Urls.sugoi(currentYear()), PROBE_JOB_ID, Wenku8Urls.BASE)
-        }.isFailure
+            false
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Throwable) {
+            true
+        }
         offLine = down
         offlineFlow.value = down
         return down
@@ -118,26 +124,24 @@ class Wenku8BookSource(
         withContext(Dispatchers.IO) {
             val bookId = id.filter(Char::isDigit)
             if (bookId.isBlank()) return@withContext err("参数错误", "书本编号无效：$id")
-            runCatching {
+            request("获取书本详情失败") {
                 val url = Wenku8Urls.articleInfo(bookId)
                 val page = http.fetchTextInteractive(url, "source:info:$bookId", Wenku8Urls.BASE)
                 // 复用导出链路的解析器：它已处理 GBK 解码后的结构与登录页/风控页识别
                 val book = Wenku8Parser.parseBook(page.html, url)
-                Ok(
-                    BookInformation(
-                        id = bookId,
-                        title = book.title,
-                        author = book.author,
-                        coverUri = book.coverUrl?.toUriOrNull() ?: Uri.EMPTY,
-                        description = book.summary,
-                        tags = book.tags,
-                        publishingHouse = book.category,
-                        wordCount = book.wordCount?.let { WordCount(it.toInt()) } ?: WordCount(-1),
-                        lastUpdated = parseUpdatedAt(book.updatedAt),
-                        isComplete = book.isComplete,
-                    ),
+                BookInformation(
+                    id = bookId,
+                    title = book.title,
+                    author = book.author,
+                    coverUri = book.coverUrl?.toUriOrNull() ?: Uri.EMPTY,
+                    description = book.summary,
+                    tags = book.tags,
+                    publishingHouse = book.category,
+                    wordCount = book.wordCount?.let { WordCount(it.toInt()) } ?: WordCount(-1),
+                    lastUpdated = parseUpdatedAt(book.updatedAt),
+                    isComplete = book.isComplete,
                 )
-            }.getOrElse { err("获取书本详情失败", it.message ?: "网络请求时出现了错误", it) }
+            }
         }
 
     /**
@@ -154,7 +158,7 @@ class Wenku8BookSource(
             if (cached != null && System.currentTimeMillis() - cached.at < VOLUME_CACHE_TTL_MS) {
                 return@withContext Ok(cached.value)
             }
-            runCatching {
+            request("获取目录失败") {
                 val directoryUrl = directoryUrlOf(bookId)
                 val page = http.fetchTextInteractive(directoryUrl, "source:index:$bookId", Wenku8Urls.BASE)
                 val index = Wenku8Parser.parseIndex(page.html, page.finalUrl, bookId)
@@ -169,8 +173,8 @@ class Wenku8BookSource(
                     }
                 val value = BookVolumes(bookId, volumes)
                 volumesCache[bookId] = CachedVolumes(value, System.currentTimeMillis())
-                Ok(value)
-            }.getOrElse { err("获取目录失败", it.message ?: "网络请求时出现了错误", it) }
+                value
+            }
         }
 
     /**
@@ -188,7 +192,7 @@ class Wenku8BookSource(
         if (chapter.isBlank() || book.isBlank()) {
             return@withContext err("参数错误", "章节或书本编号无效：$bookId/$chapterId")
         }
-        runCatching {
+        request("获取章节失败") {
             val url = chapterUrl(book, chapter)
             val page = http.fetchTextInteractive(url, "source:chapter:$chapter", Wenku8Urls.BASE)
             if (Wenku8Parser.looksLikeLoginPage(page.html)) {
@@ -212,16 +216,14 @@ class Wenku8BookSource(
                 }
             }
             val neighbours = neighbourChapters(book, chapter)
-            Ok(
-                ChapterContent(
-                    id = chapter,
-                    title = parsed.title,
-                    content = content,
-                    prevChapter = neighbours.first,
-                    nextChapter = neighbours.second,
-                ),
+            ChapterContent(
+                id = chapter,
+                title = parsed.title,
+                content = content,
+                prevChapter = neighbours.first,
+                nextChapter = neighbours.second,
             )
-        }.getOrElse { err("获取章节失败", it.message ?: "网络请求时出现了错误", it) }
+        }
     }
 
     override val searchProvider: SearchProvider = Wenku8CatalogSearchProvider(catalogSearch)
@@ -230,15 +232,34 @@ class Wenku8BookSource(
 
     // ---- 内部工具 ----
 
+    /**
+     * 把一次网络请求折叠成 kotlin-result，但**取消必须继续向上传播**。
+     * 否则阅读器切页/退后台取消任务时，会被误当成网络失败继续跑。
+     */
+    private suspend fun <T> request(
+        message: String,
+        block: suspend () -> T,
+    ): Result<T, WebRequestError> = try {
+        Ok(block())
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (error: Throwable) {
+        err(message, error.message ?: "网络请求时出现了错误", error)
+    }
+
     /** `articleinfo.php` 解析出的目录页地址；拿不到就按默认分类号兜底。 */
     private suspend fun directoryUrlOf(bookId: String): String {
         val cached = cache.getCache<String>(bookId.hashCode())
         if (cached != null) return cached
         val url = Wenku8Urls.articleInfo(bookId)
-        val resolved = runCatching {
+        val resolved = try {
             val page = http.fetchTextInteractive(url, "source:dir:$bookId", Wenku8Urls.BASE)
             Wenku8Parser.parseBook(page.html, url).directoryUrl
-        }.getOrNull()
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Throwable) {
+            null
+        }
         val target = resolved?.takeIf { it.isNotBlank() } ?: Wenku8Urls.index(bookId)
         cache.cache(bookId.hashCode(), target)
         return target
@@ -346,10 +367,17 @@ private class Wenku8ListTapPage(
         val books = mutableListOf<SearchBook>()
         val seen = mutableSetOf<String>()
         urls.forEachIndexed { index, url ->
-            runCatching {
-                val page = http.fetchText(url, "$jobPrefix:$index", Wenku8Urls.BASE)
-                Wenku8Parser.parseSearchResults(page.html, page.finalUrl)
-            }.getOrDefault(emptyList()).forEach { book ->
+            val page = try {
+                http.fetchText(url, "$jobPrefix:$index", Wenku8Urls.BASE)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Throwable) {
+                null
+            }
+            val links = page?.let {
+                runCatching { Wenku8Parser.parseSearchResults(it.html, it.finalUrl) }.getOrDefault(emptyList())
+            }.orEmpty()
+            links.forEach { book ->
                 if (book.id.isNotBlank() && seen.add(book.id)) books += book
             }
         }
@@ -398,8 +426,12 @@ private class Wenku8CatalogSearchProvider(
             emit(SearchResult.Empty())
             return@flow
         }
-        val hits = runCatching { lookup(searchType.type, query) }.getOrElse {
-            emit(SearchResult.Error(it))
+        val hits = try {
+            lookup(searchType.type, query)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Throwable) {
+            emit(SearchResult.Error(error))
             return@flow
         }
         if (hits.isEmpty()) {

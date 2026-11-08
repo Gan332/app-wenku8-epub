@@ -54,6 +54,8 @@ class ExportNotificationService : Service() {
             // 任务已经结束：普通通知，点击进入书架的「导出记录」，不再占用前台服务。
             stopForeground(STOP_FOREGROUND_DETACH)
             NotificationManagerCompat.from(this).notify(NOTIFICATION_ID, notification)
+            // 终态后服务没有继续存在的理由：只 detach 通知会留下一个空服务进程。
+            stopSelf(startId)
         }
         return START_NOT_STICKY
     }

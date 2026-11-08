@@ -83,7 +83,9 @@ object Wenku8Parser {
                 val title = cleanInline(anchor.text())
                 if (title.isBlank() || title in setOf("上一页", "下一页", "返回目录")) continue
                 val url = direct(Wenku8Url.resolve(finalUrl, anchor.attr("href"))) ?: continue
-                runCatching { Wenku8Url.assertAllowed(url) }
+                // 目录页里的链接也必须过白名单：否则广告/外链会进入章节列表，
+                // 直到导出时才由 validateChapters 整批失败。
+                if (runCatching { Wenku8Url.assertAllowed(url) }.isFailure) continue
                 if (!seen.add(url)) continue
                 val id = Regex("/(\\d+)\\.html?$", RegexOption.IGNORE_CASE).find(java.net.URI(url).path.orEmpty())?.groupValues?.get(1) ?: (chapters.size + 1).toString()
                 chapters += Chapter(id, title, url, volume, chapters.size + 1, Regex("插图|插畫|彩页|彩頁").containsMatchIn(title))

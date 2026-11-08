@@ -193,12 +193,17 @@ class EpubReaderRepository(private val context: Context? = null, private val str
 
     /**
      * 是否抹掉汉字之间的多余空格：测试用 [stripCjkGapsOverride] 注入确定值，
-     * 生产读设置（解析发生在 IO 上下文，一次性读取可接受）。
+     * 生产读设置。用 lazy 只读一次：此前每解析一章都 runBlocking 一次 DataStore，
+     * 上千章的外部 EPUB 会因此反复阻塞 IO 线程。
      */
-    private fun stripCjkGaps(): Boolean = stripCjkGapsOverride ?: runCatching {
-        val app = context?.applicationContext as? com.example.hyperreader.Wenku8Application ?: return@runCatching true
-        kotlinx.coroutines.runBlocking { app.settingsRepository.stripCjkGaps.first() }
-    }.getOrDefault(true)
+    private val stripCjkGapsSetting: Boolean by lazy {
+        stripCjkGapsOverride ?: runCatching {
+            val app = context?.applicationContext as? com.example.hyperreader.Wenku8Application ?: return@runCatching true
+            kotlinx.coroutines.runBlocking { app.settingsRepository.stripCjkGaps.first() }
+        }.getOrDefault(true)
+    }
+
+    private fun stripCjkGaps(): Boolean = stripCjkGapsSetting
 
     /**
      * CJK 之间的多余空格：序列化缩进或行内标签边界会在「强调</b>与<i>斜体」这种

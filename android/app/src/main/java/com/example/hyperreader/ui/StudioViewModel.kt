@@ -29,6 +29,7 @@ import com.github.michaelbull.result.get
 import io.nightfish.lightnovelreader.api.book.BookInformation
 import java.time.LocalDateTime
 import com.example.hyperreader.model.SearchField
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -322,7 +323,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     /** 是否抹掉汉字之间的多余空格（0.19.0-alpha05；解析 EPUB 时读取）。 */
     val stripCjkGaps: kotlinx.coroutines.flow.Flow<Boolean> = settingsRepository.stripCjkGaps
 
-    fun setStripCjkGaps(value: Boolean) = viewModelScope.launch { runCatching { settingsRepository.setStripCjkGaps(value) } }
+    fun setStripCjkGaps(value: Boolean) = viewModelScope.launch { catching { settingsRepository.setStripCjkGaps(value) } }
 
     /** 第三方中继开关（仅公开页，AGENTS §4.11）。 */
     val relayEnabled: kotlinx.coroutines.flow.Flow<Boolean> = settingsRepository.relayEnabled
@@ -341,7 +342,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
 
     /** 切换首选直连入口；下一次请求即生效（Application 的 collector 会重排入口）。 */
     fun setDirectEntry(entry: com.example.hyperreader.settings.DirectEntry) {
-        viewModelScope.launch { runCatching { settingsRepository.setDirectEntry(entry) } }
+        viewModelScope.launch { catching { settingsRepository.setDirectEntry(entry) } }
     }
 
     /** 在线阅读数据源：内置解析或 LNR 书源；下次打开阅读器时生效。 */
@@ -349,7 +350,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         settingsRepository.onlineSource
 
     fun setOnlineSource(source: com.example.hyperreader.settings.OnlineSource) {
-        viewModelScope.launch { runCatching { settingsRepository.setOnlineSource(source) } }
+        viewModelScope.launch { catching { settingsRepository.setOnlineSource(source) } }
     }
 
     /** 屏幕刷新率策略（自适应 / 60 / 90 / 120）；主界面与阅读器窗口各自应用。 */
@@ -357,7 +358,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         settingsRepository.refreshRate
 
     fun setRefreshRate(rate: com.example.hyperreader.settings.RefreshRate) {
-        viewModelScope.launch { runCatching { settingsRepository.setRefreshRate(rate) } }
+        viewModelScope.launch { catching { settingsRepository.setRefreshRate(rate) } }
     }
 
     /**
@@ -367,7 +368,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     private var officialTags: List<String> = emptyList()
 
     fun setExportEngine(engine: com.example.hyperreader.settings.EpubEngine) {
-        viewModelScope.launch { runCatching { settingsRepository.setExportEngine(engine) } }
+        viewModelScope.launch { catching { settingsRepository.setExportEngine(engine) } }
     }
 
     /**
@@ -378,7 +379,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
      */
     fun setRelayEnabled(enabled: Boolean) {
         if (!enabled) {
-            viewModelScope.launch { runCatching { settingsRepository.setRelayEnabled(false) } }
+            viewModelScope.launch { catching { settingsRepository.setRelayEnabled(false) } }
             return
         }
         viewModelScope.launch {
@@ -388,7 +389,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
                 Wenku8Endpoint.normalizeRelayBase(current) == null ->
                     mutable.update { it.copy(message = RELAY_BASE_INVALID) }
 
-                else -> runCatching { settingsRepository.setRelayEnabled(true) }
+                else -> catching { settingsRepository.setRelayEnabled(true) }
             }
         }
     }
@@ -402,8 +403,8 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         if (trimmed.isEmpty()) {
             viewModelScope.launch {
                 Wenku8Endpoint.applyRelay(null)
-                runCatching { settingsRepository.setRelayEnabled(false) }
-                runCatching { settingsRepository.setRelayBase("") }
+                catching { settingsRepository.setRelayEnabled(false) }
+                catching { settingsRepository.setRelayBase("") }
             }
             return
         }
@@ -411,11 +412,20 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
             mutable.update { it.copy(message = RELAY_BASE_INVALID) }
             return
         }
-        viewModelScope.launch { runCatching { settingsRepository.setRelayBase(trimmed) } }
+        viewModelScope.launch { catching { settingsRepository.setRelayBase(trimmed) } }
     }
 
     /** 书架「读到哪了」：bookId → 阅读断点。 */
     val readingProgress = settingsRepository.allProgress()
+
+    /** 与 [runCatching] 相同，但协程取消必须继续向上抛，不能被当成业务失败。 */
+    private suspend fun <T> catching(block: suspend () -> T): Result<T> = try {
+        Result.success(block())
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (error: Throwable) {
+        Result.failure(error)
+    }
 
     init {
         refreshClearanceState()
@@ -441,6 +451,10 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         }
         viewModelScope.launch {
             settingsRepository.cacheOnWifiOnly.collect { value -> mutable.update { it.copy(cacheWifiOnly = value) } }
+        }
+        // 必须独立 collect：Flow.collect 不会正常返回，写在同一 launch 里的第二个
+        // collect 永远执行不到，离线模式开关就会与持久化设置脱节。
+        viewModelScope.launch {
             settingsRepository.offlineMode.collect { value -> mutable.update { it.copy(offlineMode = value) } }
         }
         // 冷启动自动检查更新：12 小时节流，仅在设置开启且书架有远程书时执行。
@@ -650,7 +664,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     /** 单次探测：只记录状态摘要，不抛异常。 */
     private suspend fun probe(label: String, clientKind: String, url: String, client: Wenku8HttpClient): EndpointProbe {
         val started = System.currentTimeMillis()
-        val status = runCatching {
+        val status = catching {
             val resource = client.fetchText(url, "diagnose", Wenku8Urls.BASE)
             "OK 200·${(System.currentTimeMillis() - started) / 1000}s·${resource.html.length / 1024}KB"
         }.getOrElse { error ->
@@ -691,7 +705,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch {
             mutable.update { it.copy(exploreBusy = true, exploreMessage = null, activeExplorePage = page) }
             var cards: List<SearchBook> = emptyList()
-            val ids = runCatching {
+            val ids = catching {
                 if (page.requiresAuth) {
                     // 登录墙内榜单：走共享限流客户端 + 用户会话 Cookie，
                     // 登录页识别与会话清理在数据源里完成（不尝试绕过）
@@ -792,7 +806,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         mutable.update { it.copy(activeTag = tag, tagResults = local) }
         if (!app.sessionStore.hasSession()) return
         viewModelScope.launch {
-            runCatching { exploreRepository.tagBooks(tag) }
+            catching { exploreRepository.tagBooks(tag) }
                 .onSuccess { server ->
                     if (server.isEmpty()) return@onSuccess
                     val serverIds = server.map { it.id }.toSet()
@@ -824,7 +838,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
 
     private fun loadOfficialTags() {
         viewModelScope.launch {
-            runCatching { exploreRepository.officialTags() }.onSuccess { tags ->
+            catching { exploreRepository.officialTags() }.onSuccess { tags ->
                 if (tags.isEmpty()) return@onSuccess
                 officialTags = tags
                 mutable.update { it.copy(exploreTags = mergedTags(catalogRepository.tagList())) }
@@ -873,7 +887,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     /** 删除单本书的离线缓存（正文 + 目录快照）。 */
     fun clearOnlineBookCache(bookId: String) {
         viewModelScope.launch(Dispatchers.IO) {
-            val cleared = runCatching { app.onlineBookCacheManager.deleteCache(bookId) }
+            val cleared = catching { app.onlineBookCacheManager.deleteCache(bookId) }
             val bytes = runCatching { app.onlineBookCacheManager.diskUsageBytes() }.getOrDefault(0L)
             val counts = runCatching { app.onlineBookCacheManager.cachedCounts() }.getOrDefault(emptyMap())
             mutable.update {
@@ -920,7 +934,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
                 return@launch
             }
             mutable.update { it.copy(checkingUpdates = true) }
-            val outcome = runCatching { app.bookshelfUpdateChecker.check(entry) }.getOrNull()
+            val outcome = catching { app.bookshelfUpdateChecker.check(entry) }.getOrNull()
             val text = when (outcome) {
                 is UpdateCheckOutcome.Checked ->
                     if (outcome.newChapters > 0) {
@@ -955,7 +969,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     ) {
         if (mutable.value.checkingUpdates) return
         mutable.update { it.copy(checkingUpdates = true) }
-        val outcomes = runCatching { app.bookshelfUpdateChecker.checkAll(entries, now) }.getOrDefault(emptyList())
+        val outcomes = catching { app.bookshelfUpdateChecker.checkAll(entries, now) }.getOrDefault(emptyList())
         val updated = outcomes.filterIsInstance<UpdateCheckOutcome.Checked>().count { it.newChapters > 0 }
         mutable.update {
             it.copy(
@@ -973,7 +987,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
 
     fun clearOnlineCache() {
         viewModelScope.launch(Dispatchers.IO) {
-            val cleared = runCatching { app.onlineBookCacheManager.clearAll() }
+            val cleared = catching { app.onlineBookCacheManager.clearAll() }
             // 清完重新量一次，与封面缓存同样的理由。
             val bytes = runCatching { app.onlineBookCacheManager.diskUsageBytes() }.getOrDefault(0L)
             mutable.update {
@@ -1025,7 +1039,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
                 )
             }
             val loaded = LinkedHashMap<String, SearchBook>()
-            runCatching {
+            catching {
                 catalogRepository.expandAuthor(
                     bookId = id,
                     onAuthor = { author ->
@@ -1238,7 +1252,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch {
             mutable.update { it.copy(message = "正在测试公开端点…") }
             val url = com.example.hyperreader.core.Wenku8Urls.articleInfo("2365")
-            runCatching { manager.httpClient().fetchTextInteractive(url, "relay-test", com.example.hyperreader.core.Wenku8Urls.BASE) }
+            catching { manager.httpClient().fetchTextInteractive(url, "relay-test", com.example.hyperreader.core.Wenku8Urls.BASE) }
                 .onSuccess { response ->
                     val ok = !com.example.hyperreader.core.Wenku8Parser.looksLikeChallenge(response.html)
                     mutable.update {
@@ -1273,7 +1287,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
             )
         }
         viewModelScope.launch {
-            runCatching { searchProvider.search(current.searchQuery, current.searchField, 1) }
+            catching { searchProvider.search(current.searchQuery, current.searchField, 1) }
                 .onSuccess { page ->
                     if (SearchPager.isCurrent(requestId, searchRequestId)) {
                         mutable.update { SearchPager.firstPage(it, page, app.sessionStore.hasSession()) }
@@ -1303,7 +1317,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         val nextPage = current.searchPage + 1
         mutable.update { it.copy(searchLoadingMore = true, searchMessage = null) }
         viewModelScope.launch {
-            runCatching { searchProvider.search(current.searchQuery, current.searchField, nextPage) }
+            catching { searchProvider.search(current.searchQuery, current.searchField, nextPage) }
                 .onSuccess { page ->
                     if (SearchPager.isCurrent(requestId, searchRequestId)) {
                         mutable.update { SearchPager.morePage(it, page, app.sessionStore.hasSession()) }
@@ -1359,7 +1373,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     private fun loadExploreDetail(bookId: String, seed: com.example.hyperreader.core.ExploreBookSeed? = null) {
         viewModelScope.launch {
             mutable.update { it.copy(exploreDetailLoading = true, exploreDetailError = null) }
-            runCatching { exploreDetailRepository.load(bookId, seed) }
+            catching { exploreDetailRepository.load(bookId, seed) }
                 .onSuccess { detail ->
                     mutable.update { it.copy(exploreDetailLoading = false, exploreDetail = detail, exploreDetailError = detail.indexError) }
                 }
@@ -1435,7 +1449,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         if (value.isEmpty()) { mutable.update { it.copy(busy = false, detailError = "缺少书籍来源网址。") }; return }
         viewModelScope.launch {
             mutable.update { it.copy(busy = true, detailError = null) }
-            runCatching { manager.parseSource(value) }
+            catching { manager.parseSource(value) }
                 .onSuccess { (book, index) -> mutable.update { ExportWizard.resolved(it, book, index) } }
                 .onFailure { error -> mutable.update { ExportWizard.failed(it, error.message ?: "目录解析失败。") } }
         }
@@ -1474,7 +1488,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         val chapters = current.index?.chapters?.filter { it.id in current.selectedIds } ?: return
         viewModelScope.launch {
             mutable.update { it.copy(busy = true, message = null) }
-            runCatching { manager.create(book, chapters, current.includeCover) }
+            catching { manager.create(book, chapters, current.includeCover) }
                 .onSuccess { job -> mutable.update { it.copy(busy = false, activeJobId = job.id, exportStep = ExportStep.PROGRESS) } }
                 .onFailure { error -> mutable.update { it.copy(busy = false, message = error.message ?: "无法创建任务。") } }
         }
@@ -1501,7 +1515,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         }
         viewModelScope.launch {
             mutable.update { it.copy(busy = true, message = null) }
-            runCatching { manager.create(book, detail.chapters, includeCover = true, engine = engine) }
+            catching { manager.create(book, detail.chapters, includeCover = true, engine = engine) }
                 .onSuccess { job ->
                     mutable.update {
                         it.copy(
@@ -1591,7 +1605,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
                         backupMutable.update { it.copy(busy = false, isError = true, message = decoded.reason) }
                     is BackupTransfer.DecodeResult.Success -> {
                         val document = decoded.document
-                        runCatching {
+                        catching {
                             bookshelfRepository.replaceAll(document.bookshelf)
                             settingsRepository.restorePreferences(document.preferences)
                             document.stats?.let { readingStatsRepository.replace(it) }
@@ -1661,7 +1675,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
                 return@launch
             }
             // 文件拷贝可能几十 MB，放到 IO 线程；完成/失败都要给回执，否则用户会反复点。
-            runCatching { withContext(Dispatchers.IO) { manager.save(id) } }
+            catching { withContext(Dispatchers.IO) { manager.save(id) } }
                 .onSuccess { mutable.update { it.copy(message = "已保存《${job.book.title}》到下载/EPUB。") } }
                 .onFailure { error -> mutable.update { it.copy(message = error.message ?: "保存失败。") } }
         }

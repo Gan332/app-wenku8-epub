@@ -141,8 +141,13 @@ class CoverRepository(context: Context) {
         val key = normalize(url)
         val file = cacheFile(key)
         if (file.isFile) runCatching { file.readBytes() }.getOrNull()?.let { return@withContext it }
-        val downloaded = runCatching { client.downloadImage(Wenku8Endpoint.toRelayUrl(key), REFERER, "reader-image", "image") }.getOrNull()
-            ?: return@withContext null
+        val downloaded = try {
+            client.downloadImage(Wenku8Endpoint.toRelayUrl(key), REFERER, "reader-image", "image")
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            return@withContext null
+        }
         val bytes = runCatching { File(downloaded.path).readBytes() }.getOrNull()
         File(downloaded.path).delete()
         bytes?.takeIf { it.isNotEmpty() }?.also {

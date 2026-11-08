@@ -31,13 +31,20 @@ class JobRepository(private val rootDirectory: File) {
 
     suspend fun save(job: ExportJob): Unit = withContext(Dispatchers.IO) { persistBlocking(job) }
 
-    suspend fun delete(id: String): Unit = withContext(Dispatchers.IO) {
+    suspend fun delete(id: String): Unit = withContext(Dispatchers.IO) { deleteBlocking(id) }
+
+    // 与 persistBlocking 共用同一把锁：否则删除后紧接的一次进度写入会把记录复活。
+    @Synchronized
+    private fun deleteBlocking(id: String) {
         File(jobsDirectory, "$id.json").delete()
         File(jobsDirectory, "$id.json.tmp").delete()
     }
 
     fun readBlocking(job: ExportJob): ExportJob = job
 
+    // cancel 与任务进度更新可能并发写同一条记录；共用 .tmp 文件时
+    // 未同步会出现写一半被另一线程 rename 的竞态。
+    @Synchronized
     private fun persistBlocking(job: ExportJob) {
         val target = File(jobsDirectory, "${job.id}.json")
         val temporary = File(jobsDirectory, "${job.id}.json.tmp")

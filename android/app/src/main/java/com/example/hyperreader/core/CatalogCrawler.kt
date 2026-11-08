@@ -4,6 +4,7 @@ import android.content.Context
 import java.io.File
 import java.time.Year
 import java.time.YearMonth
+import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.builtins.MapSerializer
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
@@ -117,10 +118,8 @@ class CatalogCrawler(context: Context) {
         // 1) 首次运行时抓种子页，得到初始书籍 ID
         if (queue.isEmpty()) {
             for (seed in sugoiSeeds() + booklistSeeds() + idSeeds()) {
-                val links = runCatching {
-                    val page = http.fetchText(seed.url, jobId, Wenku8Urls.BASE)
-                    Wenku8Parser.parseSeedList(page.html, page.finalUrl, seed.name)
-                }.getOrNull()
+                val page = fetchOrNull(seed.url, jobId)
+                val links = page?.let { Wenku8Parser.parseSeedList(it.html, it.finalUrl, seed.name) }
                 val ids = when (seed.kind) {
                     SeedKind.SEED_ID -> seed.bookIds
                     else -> links.orEmpty().map { it.bookId }
@@ -134,21 +133,20 @@ class CatalogCrawler(context: Context) {
         while (queue.isNotEmpty() && fetched < detailBudget && depth < queueDepthLimit) {
             val bookId = queue.removeFirst()
             if (!processed.add(bookId)) continue
-            var page: Wenku8HttpClient.TextResource? = null
-            runCatching { http.fetchText(Wenku8Urls.articleInfo(bookId), jobId, Wenku8Urls.BASE) }
-                .onSuccess {
-                    page = it
-                    runCatching { Wenku8Parser.parseCatalogEntry(it.html, it.finalUrl) }
-                        .onSuccess { entry ->
-                            entries[entry.id] = entry
-                            fetched++
-                            onProgress(fetched, detailBudget)
-                            runCatching { Wenku8Parser.parseAuthorLink(it.html, it.finalUrl) }.getOrNull()?.let(authorUrls::add)
-                        }
-                        .onFailure { skipped++ }
-                }
-                .onFailure { skipped++ }
-            page = null
+            val page = fetchOrNull(Wenku8Urls.articleInfo(bookId), jobId)
+            if (page != null) {
+                runCatching { Wenku8Parser.parseCatalogEntry(page.html, page.finalUrl) }
+                    .onSuccess { entry ->
+                        entries[entry.id] = entry
+                        fetched++
+                        onProgress(fetched, detailBudget)
+                        runCatching { Wenku8Parser.parseAuthorLink(page.html, page.finalUrl) }
+                            .getOrNull()?.let(authorUrls::add)
+                    }
+                    .onFailure { skipped++ }
+            } else {
+                skipped++
+            }
             depth++
         }
 
@@ -157,7 +155,7 @@ class CatalogCrawler(context: Context) {
             var pageNo = 1
             while (pageNo <= MAX_AUTHOR_PAGES && queue.size < detailBudget) {
                 val target = if (pageNo == 1) authorUrl else appendPage(authorUrl, pageNo)
-                val page = runCatching { http.fetchText(target, jobId, Wenku8Urls.BASE) }.getOrNull() ?: break
+                val page = fetchOrNull(target, jobId) ?: break
                 val links = runCatching { Wenku8Parser.parseBookLinks(page.html, page.finalUrl) }.getOrDefault(emptyList())
                 if (links.isEmpty()) break
                 links.forEach { if (it.id !in processed) queue.addLast(it.id) }
@@ -175,6 +173,15 @@ class CatalogCrawler(context: Context) {
         )
         persist(entries, nextCursor)
         return nextCursor
+    }
+
+    /** 公开页抓取：失败可跳过，但协程取消必须继续传播。 */
+    private suspend fun fetchOrNull(url: String, jobId: String): Wenku8HttpClient.TextResource? = try {
+        http.fetchText(url, jobId, Wenku8Urls.BASE)
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (_: Throwable) {
+        null
     }
 
     private fun appendPage(url: String, page: Int): String =

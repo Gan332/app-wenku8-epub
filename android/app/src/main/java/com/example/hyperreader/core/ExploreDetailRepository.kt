@@ -2,6 +2,7 @@ package com.example.hyperreader.core
 
 import com.example.hyperreader.model.Book
 import com.example.hyperreader.model.Chapter
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -64,10 +65,14 @@ class ExploreDetailRepository(context: android.content.Context) {
         // 目录页：拿章节列表。优先用详情页解析出的真实目录地址，缺失才按分类号兜底。
         // 失败时降级为「只有书籍信息」，不阻断详情展示。
         val directory = book.directoryUrl?.takeIf { it.isNotBlank() } ?: Wenku8Urls.index(id, fallback?.category)
-        val index = runCatching {
-            http.fetchTextInteractive(directory, "detail-index-$id", Wenku8Urls.BASE)
-        }.mapCatching { page ->
-            Wenku8Parser.parseIndex(page.html, page.finalUrl, id)
+        val index = try {
+            val page = http.fetchTextInteractive(directory, "detail-index-$id", Wenku8Urls.BASE)
+            Result.success(Wenku8Parser.parseIndex(page.html, page.finalUrl, id))
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Throwable) {
+            // 目录页失败可降级；但取消不是失败，必须继续向上传播。
+            Result.failure(error)
         }
 
         val detail = ExploreBookDetail(

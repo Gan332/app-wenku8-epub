@@ -4,6 +4,9 @@ import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlin.math.max
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /**
  * 全站共享的源站请求节流器。
@@ -43,17 +46,33 @@ object HttpRateLimiter {
     private var interactiveWindowStart = 0L
     private var interactiveUsed = 0
 
-    @Synchronized
-    fun acquire(mode: Mode = Mode.BATCH) {
-        val now = System.currentTimeMillis()
-        val interval = if (mode == Mode.INTERACTIVE && tryUseInteractive(now)) {
-            INTERACTIVE_INTERVAL_MS
-        } else {
-            BATCH_INTERVAL_MS
+    /**
+     * 预约下一个请求时隙；实际等待用协程 [delay]，因此取消请求时不会被
+     * 长退避（429 最多 120 秒）卡住，也不会占用 Dispatchers.IO 的线程。
+     */
+    private val acquireMutex = Mutex()
+
+    suspend fun acquire(mode: Mode = Mode.BATCH) {
+        // 串行化预约，且只在真正可以发请求时推进 nextAllowedAt：
+        // 否则取消/退避会让被取消的请求也占掉时隙，后续请求被白白拖慢。
+        acquireMutex.withLock {
+            while (true) {
+                val waitMs = synchronized(this) {
+                    max(0L, nextAllowedAt - System.currentTimeMillis())
+                }
+                if (waitMs <= 0L) break
+                delay(waitMs)
+            }
+            synchronized(this) {
+                val now = System.currentTimeMillis()
+                val interval = if (mode == Mode.INTERACTIVE && tryUseInteractive(now)) {
+                    INTERACTIVE_INTERVAL_MS
+                } else {
+                    BATCH_INTERVAL_MS
+                }
+                nextAllowedAt = max(now, nextAllowedAt) + interval
+            }
         }
-        val waitMs = max(0L, nextAllowedAt - now)
-        nextAllowedAt = max(now, nextAllowedAt) + interval
-        if (waitMs > 0) Thread.sleep(waitMs)
     }
 
     /**

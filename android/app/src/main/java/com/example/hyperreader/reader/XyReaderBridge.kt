@@ -21,6 +21,7 @@ import com.xyreader.core.ReaderPrefs
 import com.xyreader.core.ReaderRepository
 import java.io.File
 import java.util.zip.ZipFile
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -154,7 +155,13 @@ class XyReaderRepository(
         data.edit { p ->
             p[pageKey(hostBookId)] = "$page/$totalPages"
         }
-        runCatching { wenku8.bookshelfRepository.recordRead(hostBookId) }
+        try {
+            wenku8.bookshelfRepository.recordRead(hostBookId)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Throwable) {
+            // 书架时间戳写入失败不影响阅读进度。
+        }
     }
 
     /**

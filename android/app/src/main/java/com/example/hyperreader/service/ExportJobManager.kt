@@ -31,6 +31,7 @@ import com.example.hyperreader.ui.isOngoing
 import com.example.hyperreader.ui.formatEta
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
@@ -39,6 +40,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.io.File
 import java.text.Normalizer
@@ -58,7 +60,8 @@ class ExportJobManager(private val context: Context, sessionStore: Wenku8Session
     private val settings = com.example.hyperreader.settings.SettingsRepository(context)
     private val outputDirectory = File(context.filesDir, "output").apply { mkdirs() }
     private val queue = Channel<String>(Channel.UNLIMITED)
-    private val running = mutableMapOf<String, Job>()
+    // `cancel` 从主线程调用、`execute` 在 IO 消费者里读写，必须用并发容器。
+    private val running = java.util.concurrent.ConcurrentHashMap<String, Job>()
     private val state = MutableStateFlow<Map<String, ExportJob>>(emptyMap())
 
     val jobs: StateFlow<Map<String, ExportJob>> = state.asStateFlow()
@@ -72,7 +75,15 @@ class ExportJobManager(private val context: Context, sessionStore: Wenku8Session
             for (job in retained) if (job.status == JobStatus.queued || job.status == JobStatus.running) queue.send(job.id)
         }
         scope.launch {
-            for (id in queue) runCatching { execute(id) }
+            for (id in queue) {
+                try {
+                    execute(id)
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Throwable) {
+                    // execute 内部已把失败写进任务状态；这里只防止单次异常打断消费循环。
+                }
+            }
         }
     }
 
@@ -137,7 +148,11 @@ class ExportJobManager(private val context: Context, sessionStore: Wenku8Session
         running[id]?.cancel(CancellationException("用户取消"))
         http.cancelJob(id)
         scope.launch {
-            val canceled = job.copy(status = JobStatus.canceled, finishedAt = Instant.now().toString(), error = JobError("CANCELED", "任务已取消。"), progress = job.progress.copy(phase = JobPhase.canceled, message = "任务已取消"))
+            // 任务可能刚好在取消前完成；只有仍是进行中才改写成已取消，
+            // 否则会把刚生成的成品记录覆盖掉。
+            val current = state.value[id] ?: return@launch
+            if (!current.status.isOngoing()) return@launch
+            val canceled = current.copy(status = JobStatus.canceled, finishedAt = Instant.now().toString(), error = JobError("CANCELED", "任务已取消。"), progress = current.progress.copy(phase = JobPhase.canceled, message = "任务已取消"))
             update(canceled)
             ExportNotificationService.finish(context, canceled.id, canceled.book.title, canceled.progress.message, canceled.status)
         }
@@ -158,13 +173,19 @@ class ExportJobManager(private val context: Context, sessionStore: Wenku8Session
     private suspend fun execute(id: String) {
         val initial = state.value[id] ?: return
         if (initial.status != JobStatus.queued && initial.status != JobStatus.running) return
-        val task = scope.launch { runJob(initial) }
+        // 先登记再启动：否则 cancel() 可能落在 launch 与 running[id] 赋值之间，
+        // 任务收不到取消，最终把状态覆盖成 completed。
+        val task = scope.launch(start = CoroutineStart.LAZY) { runJob(initial) }
         running[id] = task
+        task.start()
         task.join()
         running.remove(id)
     }
 
     private suspend fun runJob(initial: ExportJob) {
+        // 排队期间可能已被取消/删除；不能再拿排队时的快照开跑。
+        val latest = state.value[initial.id]
+        if (latest == null || !latest.status.isOngoing()) return
         var job = initial.copy(status = JobStatus.running, progress = initial.progress.copy(phase = JobPhase.fetching, percent = 1, message = "开始获取章节…"))
         val warnings = mutableListOf<String>()
         val parsed = mutableListOf<ParsedChapter>()
@@ -253,7 +274,11 @@ class ExportJobManager(private val context: Context, sessionStore: Wenku8Session
                         ImageAsset(stored?.absolutePath ?: downloaded.path, downloaded.ext, downloaded.mime, downloaded.bytes)
                     }
                     cover = DownloadedImage("", "", 0, 0, "cover.${asset.ext}", "cover-image", asset.mime, asset.localPath, asset.ext, asset.bytes, true)
-                }.onFailure { warnings += "封面：${it.message ?: "下载失败"}" }
+                }.onFailure { error ->
+                    // 取消不是下载失败：不能吞掉后继续打包并标记完成。
+                    if (error is CancellationException) throw error
+                    warnings += "封面：${error.message ?: "下载失败"}"
+                }
             }
             job = job.copy(progress = job.progress.copy(phase = JobPhase.packaging, percent = 97, cacheHits = cacheHits, imageTotal = imageTotal, message = "正在写入 EPUB 容器…"))
             update(job)
@@ -306,8 +331,14 @@ class ExportJobManager(private val context: Context, sessionStore: Wenku8Session
             cancel(id)
             return
         }
-        state.value = state.value - id
-        runCatching { repository.delete(id) }
+        state.update { it - id }
+        try {
+            repository.delete(id)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Throwable) {
+            // 记录删除失败不影响内存中的移除；下次启动会按历史裁剪。
+        }
         job.output?.sourcePath?.let { path -> runCatching { File(path).delete() } }
     }
 
@@ -322,7 +353,13 @@ class ExportJobManager(private val context: Context, sessionStore: Wenku8Session
         if (stale.isEmpty()) return loaded
         val staleIds = stale.map { it.id }.toSet()
         for (job in stale) {
-            runCatching { repository.delete(job.id) }
+            try {
+                repository.delete(job.id)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Throwable) {
+                // 单条记录清理失败继续清理其余记录。
+            }
             job.output?.sourcePath?.let { path -> runCatching { File(path).delete() } }
         }
         return loaded.filterNot { it.id in staleIds }
@@ -356,7 +393,7 @@ class ExportJobManager(private val context: Context, sessionStore: Wenku8Session
             -1
         }
         val next = job.copy(updatedAt = Instant.now().toString(), progress = job.progress.copy(etaSeconds = eta))
-        state.value = state.value + (next.id to next)
+        state.update { it + (next.id to next) }
         val terminal = !next.status.isOngoing()
         val phaseChanged = next.progress.phase != lastPersistedPhase
         val due = terminal || phaseChanged || System.currentTimeMillis() - lastPersistedAt >= PERSIST_INTERVAL_MS

@@ -27,6 +27,7 @@ import com.xyreader.core.BookFormat
 import com.xyreader.core.ReaderGraph
 import com.xyreader.reader.ReaderScreen
 import com.xyreader.ui.ReaderConfigScreen
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -121,8 +122,12 @@ class OnlineReaderActivity : ComponentActivity() {
                         bookshelfId = bookshelfId,
                     )
                     if (!repository.hasStoredReaderPrefs()) {
-                        runCatching {
+                        try {
                             repository.importLegacySettings(app.settingsRepository.readerSettings.first())
+                        } catch (cancelled: CancellationException) {
+                            throw cancelled
+                        } catch (_: Throwable) {
+                            // 旧设置导入失败不影响阅读，继续用默认配置。
                         }
                     }
                     val opener = OnlinePageSourceOpener(source, app, hostBookId)
@@ -242,7 +247,13 @@ class OnlineReaderActivity : ComponentActivity() {
             if (seconds > 0) {
                 val stats = (application as Wenku8Application).readingStatsRepository
                 lifecycleScope.launch {
-                    runCatching { stats.recordSession(hostBookId, bookTitle, seconds) }
+                    try {
+                        stats.recordSession(hostBookId, bookTitle, seconds)
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (_: Throwable) {
+                        // 统计写入失败不影响阅读。
+                    }
                 }
             }
         }

@@ -58,6 +58,7 @@ class OnlineChapterCache(
      * 普通在线阅读只需要最近几十章（LRU 足够），而「缓存全书」的用户明确要求
      * 离线读完，淘汰会直接让功能失效。标记文件放在书目录内，[clear] 一并删除。
      */
+    @Synchronized
     fun pin(bookId: String): Boolean {
         val directory = bookDirectory(bookId)
         if (!directory.isDirectory && !directory.mkdirs()) return false
@@ -67,6 +68,7 @@ class OnlineChapterCache(
         }.getOrDefault(false)
     }
 
+    @Synchronized
     fun unpin(bookId: String) {
         runCatching { File(bookDirectory(bookId), pinnedSuffix).delete() }
     }
@@ -108,6 +110,7 @@ class OnlineChapterCache(
     }
 
     /** 写缓存。任何失败都只返回 false，不抛异常。 */
+    @Synchronized
     fun write(entry: OnlineChapterCacheEntry): Boolean {
         val directory = bookDirectory(entry.bookId)
         if (!directory.isDirectory && !directory.mkdirs()) return false
@@ -138,6 +141,7 @@ class OnlineChapterCache(
     /**
      * 标记章节已被源站删除。之后的读取直接短路返回失效，不重复打扰源站。
      */
+    @Synchronized
     fun markGone(bookId: String, chapterId: String): Boolean {
         val directory = bookDirectory(bookId)
         if (!directory.isDirectory && !directory.mkdirs()) return false
@@ -150,11 +154,13 @@ class OnlineChapterCache(
     fun isGone(bookId: String, chapterId: String): Boolean =
         File(bookDirectory(bookId), "${segment(chapterId)}$goneSuffix").isFile
 
+    @Synchronized
     fun clearGone(bookId: String, chapterId: String) {
         runCatching { File(bookDirectory(bookId), "${segment(chapterId)}$goneSuffix").delete() }
     }
 
     /** 淘汰超出上限的章节，返回被删掉的文件名（测试断言用）。固定书不淘汰。 */
+    @Synchronized
     fun evict(bookId: String): List<String> {
         if (isPinned(bookId)) return emptyList()
         val files = chapterFiles(bookId)
@@ -164,6 +170,7 @@ class OnlineChapterCache(
         return dropped.map { it.name }
     }
 
+    @Synchronized
     fun clear(bookId: String? = null) {
         val target = if (bookId == null) rootDirectory else bookDirectory(bookId)
         runCatching { target.deleteRecursively() }
