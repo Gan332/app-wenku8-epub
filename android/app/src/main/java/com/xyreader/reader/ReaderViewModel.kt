@@ -801,14 +801,19 @@ class ReaderViewModel(
             renderWorker = null
         }
         prefetchIndices = emptySet()
+        // 后台不再继续抓下一章：网络请求会唤醒无线电，且续章结果此时也没人看。
+        // 取消后 `loadMore` 不会推进游标（见 OnlinePageSource），回到前台可重试。
+        growJob?.cancel()
+        growJob = null
     }
 
-    /** 宿主回到前台：恢复当前页与邻页预载。 */
+    /** 宿主回到前台：恢复当前页与邻页预载；若仍接近末尾则重新触发续章。 */
     fun onHostResumed() {
         if (!hostPaused) return
         hostPaused = false
         requestPage(currentPage)
         preloadAround(currentPage)
+        maybeGrow(currentPage)
     }
 
     /**
@@ -886,7 +891,13 @@ class ReaderViewModel(
         if (count <= 0 || page < count - GROW_THRESHOLD) return
         if (growJob?.isActive == true) return
         growJob = viewModelScope.launch {
-            val grew = runCatching { src.loadMore() }.getOrDefault(false)
+            val grew = try {
+                src.loadMore()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                false
+            }
             // 换源后旧结果作废
             if (!grew || src !== source) return@launch
             val newCount = src.pageCount
@@ -908,7 +919,13 @@ class ReaderViewModel(
      */
     suspend fun loadChapterPage(index: Int): Int? {
         val src = source ?: return null
-        val page = runCatching { src.loadChapterPage(index) }.getOrNull() ?: return null
+        val page = try {
+            src.loadChapterPage(index)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            null
+        } ?: return null
         if (src !== source) return null
         val newCount = src.pageCount
         _state.value = _state.value.copy(

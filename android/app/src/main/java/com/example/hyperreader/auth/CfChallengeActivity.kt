@@ -156,6 +156,11 @@ private fun CfChallengeScreen(onClose: () -> Unit, onWebViewReady: (WebView) -> 
             AndroidView(
                 modifier = Modifier.fillMaxWidth().weight(1f),
                 factory = { context -> WebView(context).also(onWebViewReady) },
+                // 窗口关闭时销毁 WebView，避免其持有 Activity / 渲染进程直到 GC。
+                onRelease = { web ->
+                    web.stopLoading()
+                    web.destroy()
+                },
             )
             TextButton(
                 text = "关闭",

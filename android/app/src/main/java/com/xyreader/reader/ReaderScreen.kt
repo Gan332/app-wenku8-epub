@@ -922,6 +922,7 @@ private fun ReaderPagerArea(
                         style = MiuixTheme.textStyles.footnote2,
                         modifier = Modifier
                             .clip(RoundedCornerShape(50))
+                            .background(Color.White.copy(alpha = 0.12f))
                             .clickable { viewModel.updatePrefs { it.copy(autoTurnSeconds = 0) } }
                             .padding(horizontal = ReaderDimens.spaceS, vertical = ReaderDimens.spaceXXS),
                     )
@@ -1126,6 +1127,34 @@ private fun ReaderPagerArea(
                         onClick = { nextTarget?.let { turnTo(it) } },
                     )
                 }
+            }
+        }
+
+        // —— 自动翻页进行中的常驻胶囊：工具栏收起时也能看到并一键关闭 ——
+        AnimatedVisibility(
+            visible = prefs.autoTurnSeconds > 0 && !toolbarVisible && !locked &&
+                !showSettings && !overlayVisible,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom).asPaddingValues())
+                .padding(bottom = ReaderDimens.spaceXL),
+            enter = fadeIn(tween(barAnim)),
+            exit = fadeOut(tween(barAnim)),
+        ) {
+            Surface(
+                onClick = { viewModel.updatePrefs { it.copy(autoTurnSeconds = 0) } },
+                shape = CircleShape,
+                color = BarBackground,
+            ) {
+                Text(
+                    text = "自动 ${prefs.autoTurnSeconds}s · 点击关闭",
+                    color = Color.White.copy(alpha = 0.85f),
+                    style = MiuixTheme.textStyles.footnote2,
+                    modifier = Modifier.padding(
+                        horizontal = ReaderDimens.spaceS,
+                        vertical = ReaderDimens.spaceXXS,
+                    ),
+                )
             }
         }
 

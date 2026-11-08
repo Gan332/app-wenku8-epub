@@ -12,6 +12,7 @@ import com.xyreader.archive.Paragraph
 import com.xyreader.core.Chapter as ReaderChapter
 import com.xyreader.core.ChapterOutline
 import com.xyreader.core.PageSource
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.sync.Mutex
@@ -178,9 +179,17 @@ class OnlinePageSource private constructor(
         var cursor = nextIndex
         while (cursor < catalog.size) {
             val chapter = catalog[cursor]
+            // 抓取成功后才推进游标：网络失败时保留本章，下次续章会重试。
+            // 若先推进，一次瞬时限流/断网就会让这一章从页轴上永久消失。
+            val content = try {
+                fetchContent(chapter)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                return@withLock false
+            }
             cursor += 1
             nextIndex = cursor
-            val content = runCatching { fetchContent(chapter) }.getOrDefault(OnlineChapterContent(emptyList()))
             val paragraphs = content.paragraphs
             if (paragraphs.isEmpty()) continue
             val source = runCatching {
@@ -221,6 +230,9 @@ class OnlinePageSource private constructor(
         }
         // 目标章正文为空时跳它后面第一个有正文的章，避免点击后停在原地。
         if (pageForChapter(index) == null) {
+            // 抓取失败（游标仍停在目标或之前）时不要往后跳：返回 null 让宿主
+            // 从目标章重开，用户重试仍能读到这一章，而不是被带到下一章。
+            if (nextIndex <= index) return null
             for (candidate in index + 1 until catalog.size) {
                 pageForChapter(candidate)?.let { return it }
             }
@@ -266,7 +278,13 @@ class OnlinePageSource private constructor(
             // 用户取消 / 换书 / 关面板后立即停手，不继续打扰源站
             if (!currentCoroutineContext().isActive) break
 
-            val content = runCatching { fetchContent(chapter) }.getOrNull()
+            val content = try {
+                fetchContent(chapter)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                null
+            }
             // 匹配规则在纯函数里（matchChapterBody），这里只负责取正文与推进循环
             val matched = com.xyreader.reader.matchChapterBody(
                 content?.paragraphs.orEmpty(),
@@ -322,7 +340,15 @@ class OnlinePageSource private constructor(
             var first: LoadedChapter? = null
             while (cursor < catalog.size && first == null) {
                 val chapter = catalog[cursor]
-                val content = runCatching { fetchContent(chapter) }.getOrDefault(OnlineChapterContent(emptyList()))
+                // 抓取失败不能当成空章跳过，否则会静默从下一章开始读；
+                // 让调用方拿到错误并重试，用户至少知道这一章没打开。
+                val content = try {
+                    fetchContent(chapter)
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (error: Exception) {
+                    throw java.io.IOException("起始章节抓取失败：${chapter.title}", error)
+                }
                 val paragraphs = content.paragraphs
                 if (paragraphs.isNotEmpty()) {
                     val source = NovelPageSource.open(

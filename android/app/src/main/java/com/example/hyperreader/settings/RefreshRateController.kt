@@ -41,7 +41,12 @@ object RefreshRateController {
                 val best = sameSize
                     .ifEmpty { modes.toList() }
                     .filter { it.refreshRate > 0f }
-                    .minByOrNull { abs(it.refreshRate - target) }
+                    // 距离相同（如 90 在 60/120 面板上）优先高刷，避免用户
+                    // 选了「90」却被落到 60；设备只有更低模式时仍取最近的。
+                    .minWithOrNull(
+                        compareBy<android.view.Display.Mode> { abs(it.refreshRate - target) }
+                            .thenByDescending { it.refreshRate },
+                    )
                 if (best != null) {
                     attrs.preferredDisplayModeId = best.modeId
                     attrs.preferredRefreshRate = best.refreshRate
