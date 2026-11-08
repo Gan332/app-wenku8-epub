@@ -181,7 +181,7 @@ class SettingsRepository(private val context: Context) {
      */
     suspend fun backupPreferences(): Map<String, String> = data.safeData().first().asMap()
         .mapNotNull { (key, value) -> (value as? String)?.let { key.name to it } }
-        .filterKeys(BackupTransfer::isBackupPreferenceKey)
+        .filter { (key, _) -> BackupTransfer.isBackupPreferenceKey(key) }
         .toMap()
 
     /** 恢复备份：只写白名单内的键，其余静默忽略。 */
