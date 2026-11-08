@@ -192,8 +192,8 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * launchMode=singleTask 时，应用已在前台时通知点击走 onNewIntent 而不会再走 onCreate。
-     * 缺少这行会导致热启动时点了通知没反应。
+     * 通知的 PendingIntent 带 `SINGLE_TOP | CLEAR_TOP`，应用已在前台（包括停留在阅读器里）时
+     * 走 onNewIntent 而不会再走 onCreate。缺少这行会导致热启动时点了通知没反应。
      */
     override fun onNewIntent(intent: android.content.Intent) {
         super.onNewIntent(intent)

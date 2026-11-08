@@ -114,7 +114,7 @@ class ExportNotificationService : Service() {
             context,
             NotificationRoute.requestCodeFor(jobId),
             Intent(context, MainActivity::class.java).apply {
-                addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
                 putExtra(StudioViewModel.EXTRA_ROUTE, route)
                 putExtra(StudioViewModel.EXTRA_JOB_ID, jobId)
             },
