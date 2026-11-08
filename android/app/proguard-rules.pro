@@ -41,6 +41,9 @@
 -dontwarn org.conscrypt.**
 -dontwarn org.bouncycastle.**
 -dontwarn org.openjsse.**
+# security-crypto 内置的 Tink 用 errorprone 注解做静态检查（CLASS 保留，运行期不需要）；
+# 依赖里没有该注解包，R8 full mode 会把它当缺失类报错。
+-dontwarn com.google.errorprone.annotations.**
 # MiuiX 依赖 Compose，部分符号在无引用时会被误判
 -dontwarn top.yukonga.miuix.kmp.**
 
