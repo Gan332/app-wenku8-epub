@@ -11,11 +11,18 @@ import org.junit.Test
 /** 书架分组的纯逻辑（置顶 / 全部，空组不产出）。 */
 class BookshelfGroupsTest {
 
-    private fun entry(id: String, pinned: Boolean = false) = BookshelfEntry(
+    private fun entry(
+        id: String,
+        pinned: Boolean = false,
+        chapterCount: Int = 0,
+        lastChecked: Int = 0,
+    ) = BookshelfEntry(
         id = id,
         bookId = "book-$id",
         title = "书 $id",
         isPinned = pinned,
+        chapterCount = chapterCount,
+        lastCheckedChapterCount = lastChecked,
     )
 
     @Test
@@ -69,9 +76,25 @@ class BookshelfGroupsTest {
 
     @Test
     fun titlesCarryCounts() {
+        assertEquals("更新中 3 本", BookshelfGroup.Updated.title(3))
         assertEquals("置顶 2 本", BookshelfGroup.Pinned.title(2))
         assertEquals("全部 5 本", BookshelfGroup.All.title(5))
         assertEquals("置顶 0 本", BookshelfGroup.Pinned.title(0))
+    }
+
+    @Test
+    fun updatedBooksComeFirstAndAreNotDuplicated() {
+        val sections = groupBookshelf(
+            listOf(
+                entry("plain"),
+                entry("fresh", pinned = true, chapterCount = 100, lastChecked = 103),
+                entry("pinned", pinned = true),
+            ),
+        )
+        assertEquals(listOf(BookshelfGroup.Updated, BookshelfGroup.Pinned, BookshelfGroup.All), sections.map { it.group })
+        assertEquals(listOf("fresh"), sections[0].entries.map { it.id })
+        assertEquals(listOf("pinned"), sections[1].entries.map { it.id })
+        assertEquals(listOf("plain"), sections[2].entries.map { it.id })
     }
 }
 

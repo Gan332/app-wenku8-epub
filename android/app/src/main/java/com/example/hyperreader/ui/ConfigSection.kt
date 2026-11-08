@@ -30,6 +30,13 @@ data class ConfigUiState(
     val isError: Boolean = false,
 )
 
+/** 书架与阅读数据备份的状态（与 [ConfigUiState] 分开，互不干扰）。 */
+data class BackupUiState(
+    val busy: Boolean = false,
+    val message: String? = null,
+    val isError: Boolean = false,
+)
+
 /**
  * @param onExportRequest 点击「导出配置文件」，由外部启动
  *   [androidx.activity.result.contract.ActivityResultContracts.CreateDocument] 写入。
@@ -39,9 +46,12 @@ data class ConfigUiState(
 @Composable
 fun ConfigSection(
     state: ConfigUiState,
+    backupState: BackupUiState,
     onBack: () -> Unit,
     onExportRequest: () -> Unit,
     onImportRequest: () -> Unit,
+    onExportBackupRequest: () -> Unit,
+    onImportBackupRequest: () -> Unit,
 ) {
     SettingsScaffold("配置导入导出", onBack, listOf(
         {
@@ -83,13 +93,49 @@ fun ConfigSection(
                 )
             }
         },
+        { SectionTitle("备份与恢复（书架与阅读数据）") },
+        {
+            Text(
+                "书架、阅读断点、页进度、书签收藏与阅读统计。不含登录 Cookie、密码与 EPUB 本体。",
+                fontSize = UiDimens.captionSmall,
+                color = secondaryTextColor(),
+            )
+        },
+        {
+            TextButton(
+                text = "导出备份文件",
+                onClick = { if (!backupState.busy) onExportBackupRequest() },
+                modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
+            )
+        },
+        {
+            TextButton(
+                text = "从备份恢复",
+                onClick = { if (!backupState.busy) onImportBackupRequest() },
+                modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
+            )
+        },
+        {
+            if (backupState.busy) {
+                Text("备份处理中…", fontSize = UiDimens.caption, color = MiuixTheme.colorScheme.primary)
+            }
+        },
+        {
+            backupState.message?.let { message ->
+                Text(
+                    text = message,
+                    fontSize = UiDimens.caption,
+                    color = if (backupState.isError) MiuixTheme.colorScheme.error else MiuixTheme.colorScheme.primary,
+                )
+            }
+        },
         { SectionTitle("导出包含什么") },
         { ConfigBullet("主题：配色模式、动态色开关、强调色") },
         { ConfigBullet("阅读器：背景、文字色、字号、字重、行高、段距、左右边距、翻页方式、屏幕常亮、沉浸模式") },
         { SectionTitle("绝不包含") },
         { ConfigBullet("Wenku8 登录 Cookie、PHPSESSID、jieqiUserInfo 与任何 Token") },
         { ConfigBullet("账号与密码（应用从不保存密码）") },
-        { ConfigBullet("书架条目、阅读记录与阅读统计——属用户内容，需单独迁移") },
+        { ConfigBullet("书架条目、阅读记录与阅读统计——属用户内容，需用上方「备份与恢复」单独迁移") },
         { ConfigBullet("EPUB 与字体文件本体；自定义字体是设备本地授权，不随配置同步") },
         { SectionTitle("导入规则") },
         { ConfigBullet("配置版本不匹配时整份拒绝并提示，不会静默降级") },

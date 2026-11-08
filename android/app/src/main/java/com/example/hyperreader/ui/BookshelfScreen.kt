@@ -153,6 +153,13 @@ fun BookshelfScreen(
                         fontSize = UiDimens.captionSmall,
                         color = tertiaryTextColor(),
                     )
+                    if (state.bookshelf.any { it.isRemoteSource }) {
+                        TextButton(
+                            text = if (state.checkingUpdates) "检查中…" else "检查更新",
+                            onClick = viewModel::checkAllUpdates,
+                            modifier = Modifier.heightIn(min = UiDimens.touchMin),
+                        )
+                    }
                 }
             }
             // 书少时不占地方；书多了才需要筛选入口。
@@ -234,6 +241,7 @@ fun BookshelfScreen(
                                     entry = entry,
                                     resume = readingProgress[entry.bookId],
                                     now = now,
+                                    cachedChapters = state.cacheCounts[entry.bookId] ?: 0,
                                     // 交错入场：按分组内索引延迟，超过首屏上限后不再累加（AGENTS §4.4）
                                     modifier = Modifier
                                         // 显式给 spec：不传时 Compose 用默认 spring，
@@ -352,6 +360,7 @@ private fun BookshelfCard(
     entry: BookshelfEntry,
     resume: ReadingProgress?,
     now: Long,
+    cachedChapters: Int = 0,
     modifier: Modifier = Modifier,
     onMore: () -> Unit,
     onOpen: (BookshelfEntry) -> Unit,
@@ -407,6 +416,11 @@ private fun BookshelfCard(
                             Text("置顶", fontSize = UiDimens.badge)
                         }
                     }
+                    if (entry.hasUnreadChapters) {
+                        Badge(containerColor = MiuixTheme.colorScheme.error) {
+                            Text("+${entry.unreadChapters}", fontSize = UiDimens.badge)
+                        }
+                    }
                 }
                 // 元信息行：LNR 是「图标 + 文字」两组（更新日期 / 字数），本工程对应
                 // 来源与规模（章节数 / 字数）。图标底板尺寸与圆角照 LNR `TagChip`。
@@ -432,6 +446,16 @@ private fun BookshelfCard(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
+                    if (cachedChapters > 0) {
+                        Text("·", color = tertiaryTextColor(), fontSize = UiDimens.captionSmall)
+                        Text(
+                            "已缓存 $cachedChapters 章",
+                            fontSize = UiDimens.captionSmall,
+                            color = MiuixTheme.colorScheme.primary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
                 // 末行：LNR 放简介或最新章节；本工程放「上次读到哪儿」，这是差异里
                 // 唯一必须保留的本工程语义（AGENTS §4.8 页进度是续读唯一依据）。
@@ -565,6 +589,11 @@ private fun BookEntryMenu(
                 TextButton(
                     text = "同作者作品",
                     onClick = { act { viewModel.expandAuthor(entry.bookId) } },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
+                )
+                TextButton(
+                    text = "检查更新",
+                    onClick = { act { viewModel.checkUpdate(entry) } },
                     modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
                 )
                 val hasCache = remember(entry.bookId) { viewModel.hasOnlineCache(entry.bookId) }

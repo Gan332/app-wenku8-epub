@@ -86,14 +86,8 @@ class OnlineReaderActivity : ComponentActivity() {
             val app = application as Wenku8Application
             // 设置里选的是「下次打开阅读器」生效；这里只在打开时读一次，
             // 避免阅读中途切换数据源导致页轴与缓存错位。
-            val source = withContext(Dispatchers.IO) {
-                val mode = app.settingsRepository.onlineSource.first()
-                if (mode == com.example.hyperreader.settings.OnlineSource.LNR) {
-                    app.lnrOnlineReaderSource
-                } else {
-                    app.onlineReaderSource
-                }
-            }
+            // 离线模式开启时拿到的是只读缓存的包装，目录与正文都不发网络请求。
+            val source = withContext(Dispatchers.IO) { app.currentOnlineReadingSource() }
             val result = withContext(Dispatchers.IO) {
                 source.loadIndex(
                     hostBookId,

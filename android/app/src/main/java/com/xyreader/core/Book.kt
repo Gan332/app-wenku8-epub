@@ -52,6 +52,8 @@ data class BookmarkEntity(
     val createdAt: Long = 0,
     /** 加书签时所在页的正文摘录，供跨书列表显示内容而非只有页码。 */
     val snippet: String = "",
+    /** 用户手写的备注（可选）。空串表示没有备注。 */
+    val note: String = "",
     /** 本工程的字符串 bookId（书架条目 id / wenku8 书籍编号），跨书跳转用。 */
     val hostBookId: String = "",
     /** 书名快照。 */

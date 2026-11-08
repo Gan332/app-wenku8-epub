@@ -20,7 +20,27 @@ data class BookshelfEntry(
     val chapterCount: Int = 0,
     val wordCount: Long? = null,
     val isPinned: Boolean = false,
-)
+    /** 最近一次更新检查时源站返回的章节总数（0 = 尚未检查过）。 */
+    val lastCheckedChapterCount: Int = 0,
+    /** 最近一次检查时的最新章节标题（书架展示用）。 */
+    val latestChapter: String = "",
+    /** 最近一次检查的时间戳；用于跳过刚检查过的书。 */
+    val lastCheckedAt: Long = 0L,
+) {
+    /**
+     * 未读新章节数。
+     *
+     * 口径：`lastCheckedChapterCount`（源站当前章数）减去 `chapterCount`（用户上次打开时的章数）。
+     * 打开书时 [com.example.hyperreader.data.BookshelfRepository.recordRead] 会把基线抬高到
+     * 已检查章数，因此「新章」只在**检查到之后、打开之前**为正数，不需要额外的已读表。
+     */
+    val unreadChapters: Int get() = (lastCheckedChapterCount - chapterCount).coerceAtLeast(0)
+
+    val hasUnreadChapters: Boolean get() = unreadChapters > 0
+
+    /** 远程 Wenku8 书才能检查更新；本地 EPUB 没有可比的源站目录。 */
+    val isRemoteSource: Boolean get() = localUri == null && bookId.isNotBlank()
+}
 
 @Serializable
 data class ReadingStats(

@@ -159,6 +159,12 @@ class MainActivity : ComponentActivity() {
     private val importConfigLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) studioViewModel.importConfigFrom(uri)
     }
+    private val exportBackupLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        if (uri != null) studioViewModel.exportBackupTo(uri)
+    }
+    private val importBackupLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) studioViewModel.importBackupFrom(uri)
+    }
     private val studioViewModel: StudioViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: android.os.Bundle?) {
@@ -177,6 +183,8 @@ class MainActivity : ComponentActivity() {
                     onImportFont = { fontPicker.launch(arrayOf("font/ttf", "font/otf", "application/x-font-ttf", "application/octet-stream")) },
                     onExportConfig = { exportConfigLauncher.launch(com.example.hyperreader.ui.ConfigTransferFile.suggestedName()) },
                     onImportConfig = { importConfigLauncher.launch(com.example.hyperreader.ui.ConfigTransferFile.mimeTypes) },
+                    onExportBackup = { exportBackupLauncher.launch(com.example.hyperreader.settings.backupExportFileName(System.currentTimeMillis())) },
+                    onImportBackup = { importBackupLauncher.launch(com.example.hyperreader.ui.ConfigTransferFile.mimeTypes) },
                     onOpenChallenge = { url -> challengeLauncher.launch(com.example.hyperreader.auth.CfChallengeActivity.intent(this, url)) },
                 )
             }
@@ -214,6 +222,8 @@ private fun StudioApp(
     onImportFont: () -> Unit,
     onExportConfig: () -> Unit,
     onImportConfig: () -> Unit,
+    onExportBackup: () -> Unit,
+    onImportBackup: () -> Unit,
     /** 打开 Cloudflare 验证窗口（由 Activity 侧的 launcher 实现）；仅设置里手动触发。 */
     onOpenChallenge: (String) -> Unit,
 ) {
@@ -466,6 +476,7 @@ private fun StudioApp(
                             }
                         },
                         onRemoveBookmark = viewModel::removeBookmark,
+                        onEditNote = viewModel::setBookmarkNote,
                         onClearBook = viewModel::clearBookBookmarks,
                         onBack = viewModel::closeBookmarkCenter,
                     )
@@ -555,6 +566,8 @@ private fun StudioApp(
                     onImportFont = onImportFont,
                     onExportConfig = onExportConfig,
                     onImportConfig = onImportConfig,
+                    onExportBackup = onExportBackup,
+                    onImportBackup = onImportBackup,
                     onOpenChallenge = onOpenChallenge,
                 )
                             }

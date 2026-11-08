@@ -49,13 +49,57 @@ class BookshelfRepository(context: Context) {
         prefs[BOOKSHELF] = json.encodeToString(serializer, decode(prefs[BOOKSHELF]).filterNot { it.id == id })
     }
 
+    /** 整体替换书架（备份恢复用）。重复 id 只保留第一条。 */
+    suspend fun replaceAll(entries: List<BookshelfEntry>) = data.edit { prefs ->
+        prefs[BOOKSHELF] = json.encodeToString(serializer, entries.distinctBy { it.id })
+    }
+
     suspend fun setPinned(id: String, pinned: Boolean) = data.edit { prefs ->
         val next = decode(prefs[BOOKSHELF]).map { if (it.id == id) it.copy(isPinned = pinned) else it }
         prefs[BOOKSHELF] = json.encodeToString(serializer, next)
     }
 
     suspend fun recordRead(id: String, timestamp: Long = System.currentTimeMillis()) = data.edit { prefs ->
-        val next = decode(prefs[BOOKSHELF]).map { if (it.id == id) it.copy(lastReadAt = timestamp) else it }
+        val next = decode(prefs[BOOKSHELF]).map {
+            if (it.id == id) {
+                // 打开书即视为「已看过当前所有章节」：把基线抬到最近一次检查到的章数，
+                // 清掉「+N 新章」角标。不这么做的话角标会一直挂着直到下次检查。
+                it.copy(
+                    lastReadAt = timestamp,
+                    chapterCount = maxOf(it.chapterCount, it.lastCheckedChapterCount),
+                )
+            } else {
+                it
+            }
+        }
+        prefs[BOOKSHELF] = json.encodeToString(serializer, next)
+    }
+
+    /**
+     * 写入一次更新检查的结果。
+     *
+     * [adoptAsBaseline] 用于 `chapterCount` 未知（0）的老条目：首次检查时把它当作基线，
+     * 否则会把「全书都是新章」误报成几百章未读。
+     */
+    suspend fun recordUpdateCheck(
+        id: String,
+        serverChapterCount: Int,
+        latestChapter: String,
+        checkedAt: Long = System.currentTimeMillis(),
+        adoptAsBaseline: Boolean = false,
+    ) = data.edit { prefs ->
+        val next = decode(prefs[BOOKSHELF]).map { entry ->
+            if (entry.id != id) {
+                entry
+            } else {
+                entry.copy(
+                    lastCheckedChapterCount = serverChapterCount,
+                    latestChapter = latestChapter,
+                    lastCheckedAt = checkedAt,
+                    chapterCount = if (adoptAsBaseline) serverChapterCount else entry.chapterCount,
+                )
+            }
+        }
         prefs[BOOKSHELF] = json.encodeToString(serializer, next)
     }
 

@@ -106,11 +106,15 @@ fun SettingsScreen(
     onImportFont: () -> Unit,
     onExportConfig: () -> Unit,
     onImportConfig: () -> Unit,
+    /** 书架与阅读数据备份（与配置导入导出分开的 launcher）。 */
+    onExportBackup: () -> Unit,
+    onImportBackup: () -> Unit,
     /** 手动打开 Cloudflare 验证窗口（由Activity 侧 launcher 实现）。 */
     onOpenChallenge: (String) -> Unit,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val configState by viewModel.configUi.collectAsStateWithLifecycle()
+    val backupState by viewModel.backupUi.collectAsStateWithLifecycle()
 
     // 系统返回键不再在这里接：`StudioApp` 的根 `BackHandler` 统一处理
     // （`PageChrome.upTarget()` → CLOSE_SETTINGS）。两处都接会互相抢先，
@@ -131,9 +135,12 @@ fun SettingsScreen(
                 SettingsSection.CATALOG -> CatalogSection(state, viewModel, onImportEpub)
                 SettingsSection.CONFIG -> ConfigSection(
                     state = configState,
+                    backupState = backupState,
                     onBack = viewModel::backSettings,
                     onExportRequest = onExportConfig,
                     onImportRequest = onImportConfig,
+                    onExportBackupRequest = onExportBackup,
+                    onImportBackupRequest = onImportBackup,
                 )
                 SettingsSection.ABOUT -> AboutSection(viewModel)
                 SettingsSection.OVERVIEW -> Unit
@@ -913,6 +920,41 @@ private fun CatalogSection(state: StudioUiState, viewModel: StudioViewModel, onI
                 TextButton(
                     text = "清理在线阅读缓存",
                     onClick = viewModel::clearOnlineCache,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
+                )
+                SwitchPreference(
+                    title = "仅 WiFi 缓存全书",
+                    summary = "移动数据下不下载正文；已缓存的章节不受影响。",
+                    checked = state.cacheWifiOnly,
+                    onCheckedChange = viewModel::setCacheWifiOnly,
+                    insideMargin = PreferenceRowMargin,
+                )
+                SwitchPreference(
+                    title = "离线模式",
+                    summary = "阅读器只读已缓存的目录与正文，全程不发网络请求；未缓存的章节会提示先联网缓存。",
+                    checked = state.offlineMode,
+                    onCheckedChange = viewModel::setOfflineMode,
+                    insideMargin = PreferenceRowMargin,
+                )
+            }
+        },
+        {
+            StudioPanel("更新检查") {
+                SwitchPreference(
+                    title = "启动时自动检查",
+                    summary = "最多每 12 小时一次；只抓公开目录，不携带登录 Cookie。",
+                    checked = state.autoCheckUpdates,
+                    onCheckedChange = viewModel::setAutoCheckUpdates,
+                    insideMargin = PreferenceRowMargin,
+                )
+                Text(
+                    "检查到的未读新章会以「更新中」分组和 +N 角标显示在书架，打开书后自动清除。",
+                    fontSize = UiDimens.captionSmall,
+                    color = tertiaryTextColor(),
+                )
+                TextButton(
+                    text = if (state.checkingUpdates) "检查中…" else "立即检查全部更新",
+                    onClick = viewModel::checkAllUpdates,
                     modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
                 )
             }

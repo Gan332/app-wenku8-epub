@@ -14,7 +14,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -25,6 +28,7 @@ import com.xyreader.core.BookmarkEntity
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
+import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 /**
@@ -46,6 +50,7 @@ fun BookmarkCenterScreen(
     bookshelf: List<BookshelfEntry>,
     onOpenBookmark: (BookmarkGroup, BookmarkEntity) -> Unit,
     onRemoveBookmark: (Long) -> Unit,
+    onEditNote: (Long, String) -> Unit,
     onClearBook: (String) -> Unit,
     /** 已由顶栏返回图标与系统返回键接管（0.19.0-alpha05）；保留参数以维持调用契约。 */
     @Suppress("UNUSED_PARAMETER") onBack: () -> Unit,
@@ -81,6 +86,7 @@ fun BookmarkCenterScreen(
                             canOpen = !group.isLocal || localUriByBookId[group.hostBookId] != null,
                             onOpenBookmark = { bookmark -> onOpenBookmark(group, bookmark) },
                             onRemoveBookmark = onRemoveBookmark,
+                            onEditNote = onEditNote,
                             onClearBook = onClearBook,
                         )
                     }
@@ -99,6 +105,7 @@ private fun BookmarkGroupCard(
     canOpen: Boolean,
     onOpenBookmark: (BookmarkEntity) -> Unit,
     onRemoveBookmark: (Long) -> Unit,
+    onEditNote: (Long, String) -> Unit,
     onClearBook: (String) -> Unit,
 ) {
     Card(
@@ -150,47 +157,100 @@ private fun BookmarkGroupCard(
                     now = now,
                     onClick = { onOpenBookmark(bookmark) },
                     onRemove = { onRemoveBookmark(bookmark.id) },
+                    onEditNote = { note -> onEditNote(bookmark.id, note) },
                 )
             }
         }
     }
 }
 
-/** 单条书签：第 N 页 + 摘录（或「本页无正文」）+ 删除。 */
+/** 单条书签：第 N 页 + 摘录（或「本页无正文」）+ 备注 + 删除。 */
 @Composable
 private fun BookmarkRow(
     bookmark: BookmarkEntity,
     now: Long,
     onClick: () -> Unit,
     onRemove: () -> Unit,
+    onEditNote: (String) -> Unit,
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(vertical = UiDimens.spaceXS),
-        horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXXS)) {
-            Text(
-                "第 ${bookmark.pageIndex + 1} 页 · ${formatRelativeReadTime(now, bookmark.createdAt)}",
-                fontSize = UiDimens.caption,
-                color = MiuixTheme.colorScheme.primary,
-                fontWeight = FontWeight.SemiBold,
+    var editing by remember(bookmark.id) { mutableStateOf(false) }
+    var draft by remember(bookmark.id) { mutableStateOf(bookmark.note) }
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onClick)
+                .padding(vertical = UiDimens.spaceXS),
+            horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXXS)) {
+                Text(
+                    "第 ${bookmark.pageIndex + 1} 页 · ${formatRelativeReadTime(now, bookmark.createdAt)}",
+                    fontSize = UiDimens.caption,
+                    color = MiuixTheme.colorScheme.primary,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    text = bookmark.snippet.ifBlank { "（本页无正文）" },
+                    fontSize = UiDimens.captionSmall,
+                    color = secondaryTextColor(),
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (bookmark.note.isNotBlank() && !editing) {
+                    Text(
+                        text = "备注：${bookmark.note}",
+                        fontSize = UiDimens.captionSmall,
+                        color = MiuixTheme.colorScheme.primary,
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+            TextButton(
+                text = if (editing) "取消" else if (bookmark.note.isBlank()) "备注" else "改备注",
+                onClick = {
+                    draft = bookmark.note
+                    editing = !editing
+                },
+                modifier = Modifier.heightIn(min = UiDimens.touchMin),
             )
-            Text(
-                text = bookmark.snippet.ifBlank { "（本页无正文）" },
-                fontSize = UiDimens.captionSmall,
-                color = secondaryTextColor(),
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
+            TextButton(
+                text = "删除",
+                onClick = onRemove,
+                modifier = Modifier.heightIn(min = UiDimens.touchMin),
             )
         }
-        TextButton(
-            text = "删除",
-            onClick = onRemove,
-            modifier = Modifier.heightIn(min = UiDimens.touchMin),
-        )
+        if (editing) {
+            Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXS)) {
+                TextField(
+                    value = draft,
+                    onValueChange = { draft = it },
+                    label = "写一条备注（如：此处伏笔）",
+                    useLabelAsPlaceholder = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
+                    TextButton(
+                        text = "保存",
+                        onClick = {
+                            onEditNote(draft)
+                            editing = false
+                        },
+                        modifier = Modifier.heightIn(min = UiDimens.touchMin),
+                    )
+                    TextButton(
+                        text = "清空",
+                        onClick = {
+                            draft = ""
+                            onEditNote("")
+                            editing = false
+                        },
+                        modifier = Modifier.heightIn(min = UiDimens.touchMin),
+                    )
+                }
+            }
+        }
     }
 }

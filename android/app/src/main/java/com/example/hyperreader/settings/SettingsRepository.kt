@@ -14,6 +14,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import com.example.hyperreader.data.appDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.serializer
@@ -60,6 +61,18 @@ class SettingsRepository(private val context: Context) {
 
     /** 在线阅读数据源；默认内置解析，非法值同样回退内置。 */
     val onlineSource: Flow<OnlineSource> = data.safeData().map { OnlineSource.fromName(it[ONLINE_SOURCE]) }
+
+    /** 是否在启动时自动检查书架更新（默认开）。 */
+    val autoCheckUpdates: Flow<Boolean> = data.safeData().map { it[AUTO_CHECK_UPDATES] ?: true }
+
+    /** 上次「检查全部更新」的时间戳；自动检查用它做 12 小时节流。 */
+    val lastUpdateCheckAt: Flow<Long> = data.safeData().map { it[LAST_UPDATE_CHECK_AT] ?: 0L }
+
+    /** 「缓存全书」是否仅在非计费网络（WiFi/以太网）下进行，默认关。 */
+    val cacheOnWifiOnly: Flow<Boolean> = data.safeData().map { it[CACHE_WIFI_ONLY] ?: false }
+
+    /** 离线模式：阅读器只读本地缓存，不发任何网络请求。默认关。 */
+    val offlineMode: Flow<Boolean> = data.safeData().map { it[OFFLINE_MODE] ?: false }
 
     val readerSettings: Flow<ReaderSettings> = data.safeData().map { prefs ->
         val default = ReaderSettings()
@@ -128,6 +141,11 @@ class SettingsRepository(private val context: Context) {
     /** 切换首选直连入口；只影响之后发出的请求，不影响已落库的 URL。 */
     suspend fun setDirectEntry(entry: DirectEntry) = edit { it[DIRECT_ENTRY] = entry.name }
     suspend fun setOnlineSource(source: OnlineSource) = edit { it[ONLINE_SOURCE] = source.name }
+    suspend fun setAutoCheckUpdates(value: Boolean) = edit { it[AUTO_CHECK_UPDATES] = value }
+    suspend fun setLastUpdateCheckAt(value: Long) = edit { it[LAST_UPDATE_CHECK_AT] = value }
+    suspend fun setCacheOnWifiOnly(value: Boolean) = edit { it[CACHE_WIFI_ONLY] = value }
+
+    suspend fun setOfflineMode(value: Boolean) = edit { it[OFFLINE_MODE] = value }
     suspend fun setDynamicColor(enabled: Boolean) = edit { it[USE_DYNAMIC_COLOR] = enabled }
     suspend fun setAccentColor(color: Int) = edit { it[ACCENT_COLOR] = color }
 
@@ -155,6 +173,24 @@ class SettingsRepository(private val context: Context) {
     suspend fun saveProgress(progress: ReadingProgress) = edit { it[progressKey(progress.bookId)] = json.encodeToString(ReadingProgress.serializer(), progress) }
     suspend fun clearProgress(bookId: String) = edit { it.remove(progressKey(bookId)) }
 
+    /**
+     * 备份用：白名单内的原始 DataStore 字符串值。
+     *
+     * 只导出 `reader_progress_*` 与 `xy_reader_*`（判据见 [BackupTransfer.isBackupPreferenceKey]）。
+     * 登录 Cookie 不在这个 DataStore 里（见 `Wenku8SessionStore`），因此天然不会带出。
+     */
+    suspend fun backupPreferences(): Map<String, String> = data.safeData().first().asMap()
+        .mapNotNull { (key, value) -> (value as? String)?.let { key.name to it } }
+        .filterKeys(BackupTransfer::isBackupPreferenceKey)
+        .toMap()
+
+    /** 恢复备份：只写白名单内的键，其余静默忽略。 */
+    suspend fun restorePreferences(values: Map<String, String>) = edit { prefs ->
+        values.forEach { (key, value) ->
+            if (BackupTransfer.isBackupPreferenceKey(key)) prefs[stringPreferencesKey(key)] = value
+        }
+    }
+
     private suspend fun edit(block: (androidx.datastore.preferences.core.MutablePreferences) -> Unit) {
         data.edit { block(it) }
     }
@@ -176,6 +212,14 @@ class SettingsRepository(private val context: Context) {
         val DIRECT_ENTRY = stringPreferencesKey("direct_entry")
         /** 在线阅读数据源（`OnlineSource.name`）；缺省或非法值视为内置解析。 */
         val ONLINE_SOURCE = stringPreferencesKey("online_source")
+        /** 启动时自动检查书架更新，默认 true。 */
+        val AUTO_CHECK_UPDATES = booleanPreferencesKey("auto_check_updates")
+        /** 上次检查全部更新的时间戳，0 = 从未检查。 */
+        val LAST_UPDATE_CHECK_AT = longPreferencesKey("last_update_check_at")
+        /** 「缓存全书」仅非计费网络，默认 false。 */
+        val CACHE_WIFI_ONLY = booleanPreferencesKey("online_cache_wifi_only")
+
+        val OFFLINE_MODE = booleanPreferencesKey("offline_mode")
         val USE_DYNAMIC_COLOR = booleanPreferencesKey("use_dynamic_color")
         val ACCENT_COLOR = intPreferencesKey("accent_color")
         val READER_FONT_SIZE = floatPreferencesKey("reader_font_size")

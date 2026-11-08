@@ -9,6 +9,7 @@ import java.time.Instant
 import java.time.ZoneId
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.json.Json
 
@@ -46,6 +47,14 @@ class ReadingStatsRepository(context: Context) {
     }
 
     suspend fun clear() = data.edit { it.remove(STATS) }
+
+    /** 备份用：当前统计快照（含派生字段，恢复时再按当天重算）。 */
+    suspend fun snapshot(): ReadingStats = stats.first()
+
+    /** 恢复备份：整份覆盖统计。 */
+    suspend fun replace(stats: ReadingStats) = data.edit {
+        it[STATS] = json.encodeToString(ReadingStats.serializer(), stats)
+    }
 
     private fun decode(value: String?): ReadingStats = runCatching {
         if (value.isNullOrBlank()) ReadingStats() else json.decodeFromString(ReadingStats.serializer(), value)

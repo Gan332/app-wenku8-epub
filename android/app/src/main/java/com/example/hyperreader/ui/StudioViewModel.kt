@@ -5,6 +5,8 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.hyperreader.Wenku8Application
 import com.example.hyperreader.core.CatalogEntry
+import com.example.hyperreader.core.BookshelfUpdateChecker
+import com.example.hyperreader.core.UpdateCheckOutcome
 import com.example.hyperreader.core.CatalogSearchField
 import com.example.hyperreader.core.ExploreBooksRow
 import com.example.hyperreader.core.ExplorePage
@@ -37,6 +39,7 @@ import java.io.File
 import kotlinx.coroutines.flow.update
 import com.example.hyperreader.BuildConfig
 import com.example.hyperreader.settings.ConfigTransfer
+import com.example.hyperreader.settings.BackupTransfer
 import com.example.hyperreader.ui.ConfigTransferFile
 import com.example.hyperreader.ui.ConfigUiState
 import kotlinx.coroutines.launch
@@ -201,6 +204,16 @@ data class StudioUiState(
     val jobs: List<ExportJob> = emptyList(),
     /** 在线阅读「缓存全书」任务（书架顶部进度区，不占导出记录）。 */
     val cacheJobs: List<OnlineCacheJob> = emptyList(),
+    /** 每本书已缓存的章节数（书架卡片显示 n / 总章数）。 */
+    val cacheCounts: Map<String, Int> = emptyMap(),
+    /** 正在检查书架更新。 */
+    val checkingUpdates: Boolean = false,
+    /** 启动时自动检查书架更新（设置项）。 */
+    val autoCheckUpdates: Boolean = true,
+    /** 「缓存全书」仅 WiFi（设置项）。 */
+    val cacheWifiOnly: Boolean = false,
+    /** 离线模式：阅读器只读缓存，不发任何网络请求（设置项）。 */
+    val offlineMode: Boolean = false,
     /** 在线阅读正文 + 目录快照的磁盘占用（设置 → 书目缓存）。 */
     val onlineCacheBytes: Long = 0L,
     val searchQuery: String = "",
@@ -413,6 +426,17 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
                 if (jobs.values.any { !it.status.active }) refreshOnlineCacheSize()
             }
         }
+        refreshOnlineCacheSize()
+        // 更新检查相关设置（自动检查、仅 WiFi 缓存）
+        viewModelScope.launch {
+            settingsRepository.autoCheckUpdates.collect { value -> mutable.update { it.copy(autoCheckUpdates = value) } }
+        }
+        viewModelScope.launch {
+            settingsRepository.cacheOnWifiOnly.collect { value -> mutable.update { it.copy(cacheWifiOnly = value) } }
+            settingsRepository.offlineMode.collect { value -> mutable.update { it.copy(offlineMode = value) } }
+        }
+        // 冷启动自动检查更新：12 小时节流，仅在设置开启且书架有远程书时执行。
+        viewModelScope.launch { maybeAutoCheckUpdates() }
         mutable.update { it.copy(loggedIn = app.sessionStore.hasSession()) }
         // 冷启动已有会话时拉取官方标签（tags.php，登录墙内）；失败静默，本地索引标签兜底
         if (app.sessionStore.hasSession()) loadOfficialTags()
@@ -827,6 +851,10 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
 
     /** 书架菜单「缓存全书（离线）」：逐章下载，已缓存的章节自动跳过。 */
     fun startOnlineCache(entry: BookshelfEntry) {
+        if (mutable.value.offlineMode) {
+            viewModelScope.launch { mutable.update { it.copy(message = "离线模式下不会下载新章节，请先关闭离线模式。") } }
+            return
+        }
         app.onlineBookCacheManager.start(entry.bookId, entry.title, entry.author)
     }
 
@@ -839,9 +867,11 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch(Dispatchers.IO) {
             val cleared = runCatching { app.onlineBookCacheManager.deleteCache(bookId) }
             val bytes = runCatching { app.onlineBookCacheManager.diskUsageBytes() }.getOrDefault(0L)
+            val counts = runCatching { app.onlineBookCacheManager.cachedCounts() }.getOrDefault(emptyMap())
             mutable.update {
                 it.copy(
                     onlineCacheBytes = bytes,
+                    cacheCounts = counts,
                     message = if (cleared.isSuccess) "离线缓存已删除" else "删除失败，请稍后重试",
                 )
             }
@@ -853,7 +883,83 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     fun refreshOnlineCacheSize() {
         viewModelScope.launch(Dispatchers.IO) {
             val bytes = runCatching { app.onlineBookCacheManager.diskUsageBytes() }.getOrDefault(0L)
-            mutable.update { it.copy(onlineCacheBytes = bytes) }
+            val counts = runCatching { app.onlineBookCacheManager.cachedCounts() }.getOrDefault(emptyMap())
+            mutable.update { it.copy(onlineCacheBytes = bytes, cacheCounts = counts) }
+        }
+    }
+
+    // ---- 书架更新检查 ----
+
+    /** 手动检查全部远程书（书架页 / 设置页入口）。 */
+    fun checkAllUpdates() {
+        viewModelScope.launch {
+            if (mutable.value.offlineMode) {
+                mutable.update { it.copy(message = "离线模式下不会联网检查更新，请先关闭离线模式。") }
+                return@launch
+            }
+            val entries = bookshelfRepository.entries.first()
+            settingsRepository.setLastUpdateCheckAt(System.currentTimeMillis())
+            runUpdateCheck(entries, manual = true)
+        }
+    }
+
+    /** 单本书「检查更新」（书架菜单）。 */
+    fun checkUpdate(entry: BookshelfEntry) {
+        viewModelScope.launch {
+            if (mutable.value.checkingUpdates) return@launch
+            if (mutable.value.offlineMode) {
+                mutable.update { it.copy(message = "离线模式下不会联网检查更新，请先关闭离线模式。") }
+                return@launch
+            }
+            mutable.update { it.copy(checkingUpdates = true) }
+            val outcome = runCatching { app.bookshelfUpdateChecker.check(entry) }.getOrNull()
+            val text = when (outcome) {
+                is UpdateCheckOutcome.Checked ->
+                    if (outcome.newChapters > 0) {
+                        "《${entry.title}》有 ${outcome.newChapters} 章新内容"
+                    } else {
+                        "《${entry.title}》暂无更新"
+                    }
+                is UpdateCheckOutcome.Skipped -> "《${entry.title}》检查失败：${outcome.reason}"
+                null -> "检查失败，请稍后重试"
+            }
+            mutable.update { it.copy(checkingUpdates = false, message = text) }
+        }
+    }
+
+    private suspend fun maybeAutoCheckUpdates() {
+        if (!settingsRepository.autoCheckUpdates.first()) return
+        // 离线模式下不发任何请求：自动检查属于后台行为，不应破坏用户的零流量选择。
+        if (settingsRepository.offlineMode.first()) return
+        val entries = bookshelfRepository.entries.first()
+        if (entries.none { it.isRemoteSource }) return
+        val last = settingsRepository.lastUpdateCheckAt.first()
+        val now = System.currentTimeMillis()
+        if (last > 0L && now - last < BookshelfUpdateChecker.AUTO_CHECK_INTERVAL_MS) return
+        settingsRepository.setLastUpdateCheckAt(now)
+        runUpdateCheck(entries, manual = false, now = now)
+    }
+
+    private suspend fun runUpdateCheck(
+        entries: List<BookshelfEntry>,
+        manual: Boolean,
+        now: Long = System.currentTimeMillis(),
+    ) {
+        if (mutable.value.checkingUpdates) return
+        mutable.update { it.copy(checkingUpdates = true) }
+        val outcomes = runCatching { app.bookshelfUpdateChecker.checkAll(entries, now) }.getOrDefault(emptyList())
+        val updated = outcomes.filterIsInstance<UpdateCheckOutcome.Checked>().count { it.newChapters > 0 }
+        mutable.update {
+            it.copy(
+                checkingUpdates = false,
+                message = if (!manual) {
+                    it.message
+                } else when {
+                    outcomes.isEmpty() -> "没有可检查的远程书籍"
+                    updated > 0 -> "检查完成：$updated 本有新章节"
+                    else -> "检查完成：暂无更新"
+                },
+            )
         }
     }
 
@@ -865,10 +971,23 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
             mutable.update {
                 it.copy(
                     onlineCacheBytes = bytes,
+                    cacheCounts = emptyMap(),
                     message = if (cleared.isSuccess) "在线阅读缓存已清理" else "清理失败，请稍后重试",
                 )
             }
         }
+    }
+
+    fun setAutoCheckUpdates(value: Boolean) {
+        viewModelScope.launch { settingsRepository.setAutoCheckUpdates(value) }
+    }
+
+    fun setCacheWifiOnly(value: Boolean) {
+        viewModelScope.launch { settingsRepository.setCacheOnWifiOnly(value) }
+    }
+
+    fun setOfflineMode(value: Boolean) {
+        viewModelScope.launch { settingsRepository.setOfflineMode(value) }
     }
 
     /**
@@ -1024,6 +1143,10 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     fun closeBookmarkCenter() = mutable.update { it.copy(bookmarkCenterOpen = false) }
 
     fun removeBookmark(id: Long) { viewModelScope.launch { bookmarkCenterRepository.remove(id) } }
+
+    fun setBookmarkNote(id: Long, note: String) {
+        viewModelScope.launch { bookmarkCenterRepository.updateNote(id, note) }
+    }
 
     fun clearBookBookmarks(hostBookId: String) {
         viewModelScope.launch { bookmarkCenterRepository.removeAllForBook(hostBookId) }
@@ -1417,6 +1540,73 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
                 }
             },
             onFailure = { error -> configMutable.update { it.copy(busy = false, isError = true, message = "读取失败：${error.message ?: "未知错误"}") } },
+        )
+    }
+
+    // ---- 书架与阅读数据备份（与配置导入导出分开，见 settings/BackupTransfer.kt）----
+
+    private val backupMutable = MutableStateFlow(BackupUiState())
+    val backupUi: StateFlow<BackupUiState> = backupMutable.asStateFlow()
+
+    fun exportBackupTo(uri: android.net.Uri) = viewModelScope.launch {
+        backupMutable.update { it.copy(busy = true, message = null, isError = false) }
+        val document = BackupTransfer.documentOf(
+            bookshelf = bookshelfRepository.entries.first(),
+            preferences = settingsRepository.backupPreferences(),
+            stats = readingStatsRepository.snapshot(),
+            appVersion = BuildConfig.VERSION_NAME,
+            exportedAt = System.currentTimeMillis(),
+        )
+        ConfigTransferFile.write(app, uri, BackupTransfer.encode(document)).fold(
+            onSuccess = {
+                backupMutable.update {
+                    it.copy(
+                        busy = false,
+                        isError = false,
+                        message = "已导出 ${document.bookshelf.size} 本书与 ${document.preferences.size} 项阅读数据",
+                    )
+                }
+            },
+            onFailure = { error ->
+                backupMutable.update { it.copy(busy = false, isError = true, message = "导出失败：${error.message ?: "未知错误"}") }
+            },
+        )
+    }
+
+    fun importBackupFrom(uri: android.net.Uri) = viewModelScope.launch {
+        backupMutable.update { it.copy(busy = true, message = null, isError = false) }
+        // 备份可能比配置文件大得多（书签 + 阅读断点 + 统计），单独放宽上限。
+        ConfigTransferFile.read(app, uri, maxBytes = 8 * 1024 * 1024).fold(
+            onSuccess = { text ->
+                when (val decoded = BackupTransfer.decode(text)) {
+                    is BackupTransfer.DecodeResult.Rejected ->
+                        backupMutable.update { it.copy(busy = false, isError = true, message = decoded.reason) }
+                    is BackupTransfer.DecodeResult.Success -> {
+                        val document = decoded.document
+                        runCatching {
+                            bookshelfRepository.replaceAll(document.bookshelf)
+                            settingsRepository.restorePreferences(document.preferences)
+                            document.stats?.let { readingStatsRepository.replace(it) }
+                        }.fold(
+                            onSuccess = {
+                                backupMutable.update {
+                                    it.copy(
+                                        busy = false,
+                                        isError = false,
+                                        message = "已恢复 ${document.bookshelf.size} 本书与 ${document.preferences.size} 项阅读数据",
+                                    )
+                                }
+                            },
+                            onFailure = { error ->
+                                backupMutable.update { it.copy(busy = false, isError = true, message = "恢复失败：${error.message ?: "未知错误"}") }
+                            },
+                        )
+                    }
+                }
+            },
+            onFailure = { error ->
+                backupMutable.update { it.copy(busy = false, isError = true, message = "读取失败：${error.message ?: "未知错误"}") }
+            },
         )
     }
 

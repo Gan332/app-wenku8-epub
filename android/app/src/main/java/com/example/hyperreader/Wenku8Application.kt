@@ -1,6 +1,9 @@
 package com.example.hyperreader
 
 import android.app.Application
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
+import com.example.hyperreader.core.BookshelfUpdateChecker
 import com.example.hyperreader.core.CatalogSearchField
 import com.example.hyperreader.core.Wenku8BookSource
 import com.example.hyperreader.core.Wenku8Endpoint
@@ -106,6 +109,43 @@ class Wenku8Application : Application() {
         OnlineReaderSource(onlineChapterCache, Wenku8TextFetcher(jobManager.httpClient()), onlineIndexStore)
     }
 
+    /** 实际联网的在线阅读源（忽略离线模式）。缓存任务与更新检查必须用它。 */
+    suspend fun networkOnlineReadingSource(): com.example.hyperreader.reader.OnlineReadingSource =
+        if (settingsRepository.onlineSource.first() == com.example.hyperreader.settings.OnlineSource.LNR) {
+            lnrOnlineReaderSource
+        } else {
+            onlineReaderSource
+        }
+
+    /**
+     * 阅读器使用的在线阅读源。
+     *
+     * 离线模式开启时返回只读缓存的包装，**连目录都不会先打源站**，
+     * 保证用户主动选择的「零流量」真的成立。
+     */
+    suspend fun currentOnlineReadingSource(): com.example.hyperreader.reader.OnlineReadingSource =
+        if (settingsRepository.offlineMode.first()) {
+            com.example.hyperreader.reader.OfflineOnlineReadingSource(onlineChapterCache, onlineIndexStore)
+        } else {
+            networkOnlineReadingSource()
+        }
+
+    /** 书架更新检查：抓公开目录，受全局限流约束。 */
+    val bookshelfUpdateChecker: BookshelfUpdateChecker by lazy {
+        BookshelfUpdateChecker(bookshelfRepository, { networkOnlineReadingSource() })
+    }
+
+    /**
+     * 当前网络是否计费（移动数据 / 热点）。用于「仅 WiFi 缓存全书」。
+     * 无法判定时按计费处理：宁可少下载，也不要在用户流量上偷偷跑几百章。
+     */
+    fun isMeteredNetwork(): Boolean {
+        val manager = getSystemService(ConnectivityManager::class.java) ?: return true
+        val network = manager.activeNetwork ?: return true
+        val caps = manager.getNetworkCapabilities(network) ?: return true
+        return !caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
+    }
+
     /** LNR 书源版在线阅读；正文与目录缓存与内置源共用。 */
     val lnrOnlineReaderSource: LnrOnlineReadingSource by lazy {
         LnrOnlineReadingSource(
@@ -123,15 +163,16 @@ class Wenku8Application : Application() {
      */
     val onlineBookCacheManager: OnlineBookCacheManager by lazy {
         OnlineBookCacheManager(
-            sourceProvider = {
-                if (settingsRepository.onlineSource.first() == com.example.hyperreader.settings.OnlineSource.LNR) {
-                    lnrOnlineReaderSource
-                } else {
-                    onlineReaderSource
-                }
-            },
+            sourceProvider = { networkOnlineReadingSource() },
             cache = onlineChapterCache,
             indexStore = onlineIndexStore,
+            canDownload = {
+                if (!settingsRepository.cacheOnWifiOnly.first()) {
+                    true
+                } else {
+                    !isMeteredNetwork()
+                }
+            },
         )
     }
 }

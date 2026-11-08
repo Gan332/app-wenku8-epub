@@ -45,6 +45,16 @@ class BookmarkCenterRepository(context: Context) {
         )
     }
 
+    /** 修改某条书签的备注；空白备注等于清除。 */
+    suspend fun updateNote(bookmarkId: Long, note: String) = data.edit { prefs ->
+        prefs[KEY_BOOKMARKS] = onlineProgressJson.encodeToString(
+            serializer,
+            decode(prefs[KEY_BOOKMARKS]).map { bookmark ->
+                if (bookmark.id == bookmarkId) bookmark.copy(note = note.trim()) else bookmark
+            },
+        )
+    }
+
     /** 清空某一本书的全部书签。 */
     suspend fun removeAllForBook(hostBookId: String) = data.edit { prefs ->
         prefs[KEY_BOOKMARKS] = onlineProgressJson.encodeToString(

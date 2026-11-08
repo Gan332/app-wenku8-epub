@@ -52,6 +52,8 @@ class OnlineBookCacheManager(
     private val sourceProvider: suspend () -> OnlineReadingSource,
     private val cache: OnlineChapterCache,
     private val indexStore: OnlineIndexStore,
+    /** 网络策略：返回 false 时直接拒绝开始（例如「仅 WiFi」下处于移动网络）。 */
+    private val canDownload: suspend () -> Boolean = { true },
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
 ) {
     private val mutable = MutableStateFlow<Map<String, OnlineCacheJob>>(emptyMap())
@@ -108,6 +110,10 @@ class OnlineBookCacheManager(
 
     fun cachedChapterCount(bookId: String): Int = cache.chapterCount(normalize(bookId))
 
+    /** 每本书已缓存的章节数（书架卡片角标用）。 */
+    fun cachedCounts(): Map<String, Int> =
+        cache.cachedBookIds().associateWith { bookId -> cache.chapterCount(bookId) }
+
     fun hasAnyCache(bookId: String): Boolean {
         val id = normalize(bookId)
         return indexStore.has(id) || cache.chapterCount(id) > 0
@@ -123,6 +129,10 @@ class OnlineBookCacheManager(
         val displayTitle = title.ifBlank { "书籍 $id" }
         mutate(id) { it.copy(title = displayTitle, message = "正在获取目录…") }
         try {
+            if (!canDownload()) {
+                fail(id, "已开启「仅 WiFi 缓存」，当前网络为移动数据")
+                return
+            }
             val source = sourceProvider()
             val loaded = source.loadIndex(id, displayTitle, author)
             val index = when (loaded) {
