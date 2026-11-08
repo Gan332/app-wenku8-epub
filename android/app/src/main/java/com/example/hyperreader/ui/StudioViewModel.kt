@@ -20,6 +20,7 @@ import com.example.hyperreader.model.BookshelfSource
 import com.example.hyperreader.model.ExportJob
 import com.example.hyperreader.model.JobStatus
 import com.example.hyperreader.model.ReadingStats
+import com.example.hyperreader.reader.OnlineCacheJob
 import android.net.Uri
 import com.example.hyperreader.model.SearchBook
 import com.github.michaelbull.result.get
@@ -198,6 +199,10 @@ data class StudioUiState(
     /** 0.18.0：公开端点诊断矩阵（设置 → 网络 → 深度诊断）。 */
     val endpointProbes: List<EndpointProbe> = emptyList(),
     val jobs: List<ExportJob> = emptyList(),
+    /** 在线阅读「缓存全书」任务（书架顶部进度区，不占导出记录）。 */
+    val cacheJobs: List<OnlineCacheJob> = emptyList(),
+    /** 在线阅读正文 + 目录快照的磁盘占用（设置 → 书目缓存）。 */
+    val onlineCacheBytes: Long = 0L,
     val searchQuery: String = "",
     val searchField: SearchField = SearchField.TITLE,
     val searchResults: List<SearchBook> = emptyList(),
@@ -399,6 +404,13 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
                     val active = current.activeJobId?.let { id -> jobs.values.firstOrNull { it.id == id } }
                     current.copy(jobs = jobs.values.sortedByDescending { it.createdAt }, exportStep = if (active != null && current.exportStep == ExportStep.PROGRESS) ExportStep.PROGRESS else current.exportStep)
                 }
+            }
+        }
+        // 缓存全书任务：进度区跟着任务状态走；任务结束后顺手量一次磁盘占用。
+        viewModelScope.launch {
+            app.onlineBookCacheManager.jobs.collect { jobs ->
+                mutable.update { it.copy(cacheJobs = jobs.values.sortedBy { job -> job.title }) }
+                if (jobs.values.any { !it.status.active }) refreshOnlineCacheSize()
             }
         }
         mutable.update { it.copy(loggedIn = app.sessionStore.hasSession()) }
@@ -808,6 +820,52 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
                 it.copy(
                     coverCacheBytes = bytes,
                     message = if (cleared.isSuccess) "封面缓存已清理" else "清理失败，请稍后重试",
+                )
+            }
+        }
+    }
+
+    /** 书架菜单「缓存全书（离线）」：逐章下载，已缓存的章节自动跳过。 */
+    fun startOnlineCache(entry: BookshelfEntry) {
+        app.onlineBookCacheManager.start(entry.bookId, entry.title, entry.author)
+    }
+
+    fun cancelOnlineCache(bookId: String) = app.onlineBookCacheManager.cancel(bookId)
+
+    fun dismissOnlineCache(bookId: String) = app.onlineBookCacheManager.dismiss(bookId)
+
+    /** 删除单本书的离线缓存（正文 + 目录快照）。 */
+    fun clearOnlineBookCache(bookId: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val cleared = runCatching { app.onlineBookCacheManager.deleteCache(bookId) }
+            val bytes = runCatching { app.onlineBookCacheManager.diskUsageBytes() }.getOrDefault(0L)
+            mutable.update {
+                it.copy(
+                    onlineCacheBytes = bytes,
+                    message = if (cleared.isSuccess) "离线缓存已删除" else "删除失败，请稍后重试",
+                )
+            }
+        }
+    }
+
+    fun hasOnlineCache(bookId: String): Boolean = app.onlineBookCacheManager.hasAnyCache(bookId)
+
+    fun refreshOnlineCacheSize() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val bytes = runCatching { app.onlineBookCacheManager.diskUsageBytes() }.getOrDefault(0L)
+            mutable.update { it.copy(onlineCacheBytes = bytes) }
+        }
+    }
+
+    fun clearOnlineCache() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val cleared = runCatching { app.onlineBookCacheManager.clearAll() }
+            // 清完重新量一次，与封面缓存同样的理由。
+            val bytes = runCatching { app.onlineBookCacheManager.diskUsageBytes() }.getOrDefault(0L)
+            mutable.update {
+                it.copy(
+                    onlineCacheBytes = bytes,
+                    message = if (cleared.isSuccess) "在线阅读缓存已清理" else "清理失败，请稍后重试",
                 )
             }
         }

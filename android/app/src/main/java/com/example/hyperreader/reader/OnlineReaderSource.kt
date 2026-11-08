@@ -119,8 +119,11 @@ interface OnlineReadingSource {
 class OnlineReaderSource(
     private val cache: OnlineChapterCache,
     private val fetcher: OnlineTextFetcher,
+    /** 目录快照：网络失败时用它打开离线阅读（「缓存全书」写入）。 */
+    private val indexStore: OnlineIndexStore? = null,
 ) : OnlineReadingSource {
-    constructor(cacheRoot: File, http: Wenku8HttpClient) : this(OnlineChapterCache(cacheRoot), Wenku8TextFetcher(http))
+    constructor(cacheRoot: File, http: Wenku8HttpClient, indexStore: OnlineIndexStore? = null) :
+        this(OnlineChapterCache(cacheRoot), Wenku8TextFetcher(http), indexStore)
 
     private val chapterMutex = Mutex()
 
@@ -139,8 +142,22 @@ class OnlineReaderSource(
     ): OnlineReaderResult<OnlineIndex> = withContext(Dispatchers.IO) {
         val id = bookId.filter(Char::isDigit)
         if (id.isBlank()) return@withContext OnlineReaderResult.Failed("书籍编号无效。", "INVALID_BOOK_ID")
-        fetch(indexUrl(id), referer = null).flatMap { fetched ->
+        val online = fetch(indexUrl(id), referer = null).flatMap { fetched ->
             decodeIndex(fetched, id, title, author)
+        }
+        when (online) {
+            is OnlineReaderResult.Ready -> {
+                // 目录成功一次就落盘：之后断网也能进入阅读器（正文另由章节缓存提供）。
+                indexStore?.write(online.value.catalog)
+                online
+            }
+            is OnlineReaderResult.Failed -> indexStore?.read(id)?.let { cached ->
+                OnlineReaderResult.Ready(
+                    OnlineIndex(cached.toReaderBook(title, author), cached),
+                    fromCache = true,
+                )
+            } ?: online
+            is OnlineReaderResult.NeedsLogin -> online
         }
     }
 

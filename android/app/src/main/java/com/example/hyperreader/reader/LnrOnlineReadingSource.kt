@@ -37,6 +37,8 @@ import kotlinx.serialization.json.jsonPrimitive
 class LnrOnlineReadingSource(
     private val bookSource: Wenku8BookSource,
     private val cache: OnlineChapterCache? = null,
+    /** 目录快照：网络失败时用它打开离线阅读（「缓存全书」写入）。 */
+    private val indexStore: OnlineIndexStore? = null,
 ) : OnlineReadingSource {
 
     override suspend fun loadIndex(
@@ -49,6 +51,12 @@ class LnrOnlineReadingSource(
             return@withContext OnlineReaderResult.Failed("书籍编号无效。", "INVALID_BOOK_ID")
         }
         val volumes = bookSource.getBookVolumes(id).getOrElse { error ->
+            indexStore?.read(id)?.let { cached ->
+                return@withContext OnlineReaderResult.Ready(
+                    OnlineIndex(cached.toReaderBook(title, author), cached),
+                    fromCache = true,
+                )
+            }
             return@withContext error.toOnlineFailure()
         }
         val chapters = volumes.volumes.flatMap { volume ->
@@ -71,6 +79,7 @@ class LnrOnlineReadingSource(
             bookId = id,
             chapters = chapters,
         )
+        indexStore?.write(index)
         OnlineReaderResult.Ready(OnlineIndex(index.toReaderBook(title, author), index))
     }
 
@@ -79,6 +88,12 @@ class LnrOnlineReadingSource(
         chapter: Chapter,
         catalog: List<Chapter>,
     ): OnlineReaderResult<ReaderChapter> = withContext(Dispatchers.IO) {
+        if (cache?.isGone(bookId, chapter.id) == true) {
+            return@withContext OnlineReaderResult.Failed(
+                "章节已被源站删除或不可用：${chapter.title}",
+                OnlineReaderResult.CODE_CHAPTER_GONE,
+            )
+        }
         cache?.read(bookId, chapter.id)?.let { cached ->
             return@withContext OnlineReaderResult.Ready(
                 ReaderChapter(chapter.id, chapter.title, chapter.url, cached.blocks),
@@ -86,7 +101,12 @@ class LnrOnlineReadingSource(
             )
         }
         val content = bookSource.getChapterContent(chapter.id, bookId).getOrElse { error ->
-            return@withContext error.toOnlineFailure()
+            val failure = error.toOnlineFailure()
+            // 404/410 打失效标记：之后不再重复打扰源站（与内置源一致）。
+            if (failure is OnlineReaderResult.Failed && failure.code == OnlineReaderResult.CODE_CHAPTER_GONE) {
+                cache?.markGone(bookId, chapter.id)
+            }
+            return@withContext failure
         }
         val parsed = content.toParsedChapter(chapter)
         val reader = parsed.toReaderChapter()
@@ -156,7 +176,12 @@ internal fun ChapterContent.toParsedChapter(chapter: Chapter): ParsedChapter {
 /** 书源错误 → 阅读器既能提示也能识别的结果；登录墙与 Cloudflare 挑战继续按原语义上报。 */
 private fun WebRequestError.toOnlineFailure(): OnlineReaderResult<Nothing> {
     val code = (throwable as? Wenku8Exception)?.code
+    val gone = code == "UPSTREAM_HTTP_ERROR" && Regex("HTTP (404|410)").containsMatchIn(message)
     return when {
+        gone -> OnlineReaderResult.Failed(
+            message.ifBlank { "章节已被源站删除或不可用。" },
+            OnlineReaderResult.CODE_CHAPTER_GONE,
+        )
         code == "AUTH_REQUIRED" || title.contains("登录") || message.contains("登录") ->
             OnlineReaderResult.NeedsLogin()
         code == "UPSTREAM_CHALLENGE" ->

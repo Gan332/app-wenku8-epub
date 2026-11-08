@@ -6,6 +6,12 @@ import com.example.hyperreader.core.Wenku8BookSource
 import com.example.hyperreader.core.Wenku8Endpoint
 import com.example.hyperreader.core.Wenku8SessionStore
 import com.example.hyperreader.core.Wenku8SearchProvider
+import com.example.hyperreader.reader.LnrOnlineReadingSource
+import com.example.hyperreader.reader.OnlineBookCacheManager
+import com.example.hyperreader.reader.OnlineChapterCache
+import com.example.hyperreader.reader.OnlineIndexStore
+import com.example.hyperreader.reader.OnlineReaderSource
+import com.example.hyperreader.reader.Wenku8TextFetcher
 import com.example.hyperreader.service.ExportJobManager
 import com.example.hyperreader.data.BookshelfRepository
 import com.example.hyperreader.data.ReadingStatsRepository
@@ -18,6 +24,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 class Wenku8Application : Application() {
@@ -84,13 +91,47 @@ class Wenku8Application : Application() {
      */
     val exploreDetailRepository: com.example.hyperreader.core.ExploreDetailRepository by lazy { com.example.hyperreader.core.ExploreDetailRepository(this) }
     val coverRepository: com.example.hyperreader.ui.cover.CoverRepository by lazy { com.example.hyperreader.ui.cover.CoverRepository(this) }
-    val onlineReaderSource: com.example.hyperreader.reader.OnlineReaderSource by lazy { com.example.hyperreader.reader.OnlineReaderSource(File(filesDir, "online-cache"), jobManager.httpClient()) }
 
-    /** LNR 书源版在线阅读；与内置源分缓存目录，避免两种装配结果互相覆盖。 */
-    val lnrOnlineReaderSource: com.example.hyperreader.reader.LnrOnlineReadingSource by lazy {
-        com.example.hyperreader.reader.LnrOnlineReadingSource(
+    /**
+     * 在线阅读正文缓存：内置解析与 LNR 书源**共用**一份。
+     * 两条链路都基于同一份 `parseChapter` 结果装配 `ReaderBlock`，块结构一致，
+     * 共用后「缓存全书」下载的内容不因切换数据源而失效（离线阅读才有意义）。
+     */
+    val onlineChapterCache: OnlineChapterCache by lazy { OnlineChapterCache(File(filesDir, "online-cache")) }
+
+    /** 目录快照：断网时仍能打开阅读器并展示全书目录。 */
+    val onlineIndexStore: OnlineIndexStore by lazy { OnlineIndexStore(File(filesDir, "online-index")) }
+
+    val onlineReaderSource: OnlineReaderSource by lazy {
+        OnlineReaderSource(onlineChapterCache, Wenku8TextFetcher(jobManager.httpClient()), onlineIndexStore)
+    }
+
+    /** LNR 书源版在线阅读；正文与目录缓存与内置源共用。 */
+    val lnrOnlineReaderSource: LnrOnlineReadingSource by lazy {
+        LnrOnlineReadingSource(
             bookSource = bookSource,
-            cache = com.example.hyperreader.reader.OnlineChapterCache(File(filesDir, "online-cache-lnr")),
+            cache = onlineChapterCache,
+            indexStore = onlineIndexStore,
+        )
+    }
+
+    /**
+     * 「缓存全书」任务：按当前设置的在线阅读数据源逐章下载。
+     *
+     * 数据源在任务开始时解析一次；阅读器打开时也按同一设置取源，
+     * 因此缓存下来的正文在下次打开时直接命中。
+     */
+    val onlineBookCacheManager: OnlineBookCacheManager by lazy {
+        OnlineBookCacheManager(
+            sourceProvider = {
+                if (settingsRepository.onlineSource.first() == com.example.hyperreader.settings.OnlineSource.LNR) {
+                    lnrOnlineReaderSource
+                } else {
+                    onlineReaderSource
+                }
+            },
+            cache = onlineChapterCache,
+            indexStore = onlineIndexStore,
         )
     }
 }

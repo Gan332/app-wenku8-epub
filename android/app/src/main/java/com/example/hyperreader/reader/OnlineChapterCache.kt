@@ -38,6 +38,7 @@ class OnlineChapterCache(
 ) {
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
     private val goneSuffix = ".gone"
+    private val pinnedSuffix = ".pinned"
 
     fun bookDirectory(bookId: String): File = File(rootDirectory, segment(bookId))
 
@@ -50,6 +51,43 @@ class OnlineChapterCache(
     fun has(bookId: String, chapterId: String): Boolean = fileFor(bookId, chapterId).isFile
 
     fun chapterCount(bookId: String): Int = chapterFiles(bookId).size
+
+    /**
+     * 把整本书标记为「离线固定」：超出 [maxChaptersPerBook] 时也不淘汰它的章节。
+     *
+     * 普通在线阅读只需要最近几十章（LRU 足够），而「缓存全书」的用户明确要求
+     * 离线读完，淘汰会直接让功能失效。标记文件放在书目录内，[clear] 一并删除。
+     */
+    fun pin(bookId: String): Boolean {
+        val directory = bookDirectory(bookId)
+        if (!directory.isDirectory && !directory.mkdirs()) return false
+        return runCatching {
+            File(directory, pinnedSuffix).writeText("", Charsets.UTF_8)
+            true
+        }.getOrDefault(false)
+    }
+
+    fun unpin(bookId: String) {
+        runCatching { File(bookDirectory(bookId), pinnedSuffix).delete() }
+    }
+
+    fun isPinned(bookId: String): Boolean =
+        File(bookDirectory(bookId), pinnedSuffix).isFile
+
+    /** 有缓存章节的书本编号（数字顺序，便于界面稳定展示）。 */
+    fun cachedBookIds(): List<String> =
+        rootDirectory.listFiles()
+            ?.filter { it.isDirectory }
+            ?.map { it.name }
+            ?.filter { chapterFiles(it).isNotEmpty() }
+            ?.sorted()
+            .orEmpty()
+
+    fun bookBytes(bookId: String): Long =
+        bookDirectory(bookId).walkTopDown().filter { it.isFile }.sumOf { it.length() }
+
+    fun totalBytes(): Long =
+        rootDirectory.walkTopDown().filter { it.isFile }.sumOf { it.length() }
 
     /**
      * 读缓存并顺带刷新 LRU 时间戳。
@@ -116,8 +154,9 @@ class OnlineChapterCache(
         runCatching { File(bookDirectory(bookId), "${segment(chapterId)}$goneSuffix").delete() }
     }
 
-    /** 淘汰超出上限的章节，返回被删掉的文件名（测试断言用）。 */
+    /** 淘汰超出上限的章节，返回被删掉的文件名（测试断言用）。固定书不淘汰。 */
     fun evict(bookId: String): List<String> {
+        if (isPinned(bookId)) return emptyList()
         val files = chapterFiles(bookId)
         if (files.size <= maxChaptersPerBook) return emptyList()
         val dropped = files.drop(maxChaptersPerBook)

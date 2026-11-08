@@ -851,7 +851,10 @@ private fun ReaderSection(state: StudioUiState, viewModel: StudioViewModel, onIm
 
 @Composable
 private fun CatalogSection(state: StudioUiState, viewModel: StudioViewModel, onImportEpub: () -> Unit) {
-    LaunchedEffect(state.settingsSection) { viewModel.refreshCoverCacheSize() }
+    LaunchedEffect(state.settingsSection) {
+        viewModel.refreshCoverCacheSize()
+        viewModel.refreshOnlineCacheSize()
+    }
     val updated = state.catalogUpdatedAt.takeIf { it > 0 }
         ?.let { "上次更新 ${java.time.Instant.ofEpochMilli(it).atZone(java.time.ZoneId.systemDefault()).toLocalDate()}" }
         ?: "尚未更新"
@@ -891,6 +894,25 @@ private fun CatalogSection(state: StudioUiState, viewModel: StudioViewModel, onI
                 TextButton(
                     text = "清理封面缓存",
                     onClick = viewModel::clearCoverCache,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
+                )
+            }
+        },
+        {
+            StudioPanel("在线阅读") {
+                Text(
+                    "占用 ${formatCacheSize(state.onlineCacheBytes)}",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = UiDimens.section,
+                )
+                Text(
+                    "书架菜单「缓存全书」下载的正文与目录快照；断网时可继续阅读已缓存章节，缓存的书不会被自动淘汰。",
+                    fontSize = UiDimens.captionSmall,
+                    color = tertiaryTextColor(),
+                )
+                TextButton(
+                    text = "清理在线阅读缓存",
+                    onClick = viewModel::clearOnlineCache,
                     modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
                 )
             }

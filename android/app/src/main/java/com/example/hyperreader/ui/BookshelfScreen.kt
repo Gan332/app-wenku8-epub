@@ -186,6 +186,13 @@ fun BookshelfScreen(
                 onCancel = { jobId -> viewModel.cancel(jobId) },
             )
         }
+        item(key = "online-cache-section") {
+            ActiveOnlineCacheSection(
+                jobs = state.cacheJobs,
+                onCancel = viewModel::cancelOnlineCache,
+                onDismiss = viewModel::dismissOnlineCache,
+            )
+        }
         // 三态：读 DataStore 中 → 读到了且为空 → 有书。
         // 少了中间那一态，冷启动会先闪一屏「书架还是空的」再被真实列表替换。
         if (!state.bookshelfLoaded) {
@@ -560,6 +567,19 @@ private fun BookEntryMenu(
                     onClick = { act { viewModel.expandAuthor(entry.bookId) } },
                     modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
                 )
+                val hasCache = remember(entry.bookId) { viewModel.hasOnlineCache(entry.bookId) }
+                TextButton(
+                    text = if (hasCache) "继续缓存（离线）" else "缓存全书（离线）",
+                    onClick = { act { viewModel.startOnlineCache(entry) } },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
+                )
+                if (hasCache) {
+                    TextButton(
+                        text = "删除离线缓存",
+                        onClick = { act { viewModel.clearOnlineBookCache(entry.bookId) } },
+                        modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
+                    )
+                }
             }
             TextButton(
                 text = if (entry.isPinned) "取消置顶" else "置顶",
