@@ -96,5 +96,23 @@ class BookshelfGroupsTest {
         assertEquals(listOf("pinned"), sections[1].entries.map { it.id })
         assertEquals(listOf("plain"), sections[2].entries.map { it.id })
     }
+
+    @Test
+    fun quickFilterSeparatesUpdatedRemoteAndLocalBooks() {
+        val updated = entry("updated", chapterCount = 10, lastChecked = 12)
+        val remote = entry("remote")
+        val local = BookshelfEntry(
+            id = "local",
+            bookId = "",
+            title = "本地书",
+            localUri = "content://local/book.epub",
+        )
+        assertTrue(updated.matchesQuickFilter(ShelfQuickFilter.UPDATED))
+        assertTrue(!remote.matchesQuickFilter(ShelfQuickFilter.UPDATED))
+        assertTrue(remote.matchesQuickFilter(ShelfQuickFilter.REMOTE))
+        assertTrue(!local.matchesQuickFilter(ShelfQuickFilter.REMOTE))
+        assertTrue(local.matchesQuickFilter(ShelfQuickFilter.LOCAL))
+        assertTrue(updated.matchesQuickFilter(ShelfQuickFilter.ALL))
+    }
 }
 

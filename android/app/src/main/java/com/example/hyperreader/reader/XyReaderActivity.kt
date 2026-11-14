@@ -5,6 +5,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.os.SystemClock
+import android.view.KeyEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.getValue
@@ -18,6 +19,7 @@ import com.example.hyperreader.ui.AppMiuixTheme
 import com.xyreader.core.BookEntity
 import com.xyreader.core.BookFormat
 import com.xyreader.core.ReaderGraph
+import com.xyreader.core.ReaderVolumeKeys
 import com.xyreader.reader.ReaderScreen
 import com.xyreader.ui.ReaderConfigScreen
 import kotlinx.coroutines.CancellationException
@@ -107,6 +109,11 @@ class XyReaderActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
+        if (ReaderVolumeKeys.dispatch(keyCode)) return true
+        return super.onKeyDown(keyCode, event)
     }
 
     override fun onStart() {

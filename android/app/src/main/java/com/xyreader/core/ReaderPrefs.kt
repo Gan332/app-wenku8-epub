@@ -105,6 +105,8 @@ data class ReaderPrefs(
     val brightness: Float? = null,
     /** 点击翻页：开启时左右分区点击翻页；关闭时点击只呼出/隐藏工具栏 */
     val tapTurnPage: Boolean = true,
+    /** 音量键翻页：音量上=上一页，音量下=下一页；默认关闭，避免影响系统音量。 */
+    val volumeKeyTurn: Boolean = false,
     /** 双击放大（页内 1x ↔ 2.5x） */
     val doubleTapZoom: Boolean = true,
     /** 阅读时屏幕常亮 */

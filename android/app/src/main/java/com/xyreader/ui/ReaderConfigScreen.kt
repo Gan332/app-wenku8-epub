@@ -191,6 +191,12 @@ private fun PagingGroupPage(prefs: ReaderPrefs, onUpdate: ((ReaderPrefs) -> Read
             checked = prefs.doubleTapZoom,
             onChange = { value -> onUpdate { it.copy(doubleTapZoom = value) } },
         )
+        SwitchCard(
+            title = "音量键翻页",
+            hint = "开启后音量上=上一页、音量下=下一页；关闭时音量键照常调音量",
+            checked = prefs.volumeKeyTurn,
+            onChange = { value -> onUpdate { it.copy(volumeKeyTurn = value) } },
+        )
         PrefCard(
             title = "漫画方向",
             options = MangaDirection.entries,

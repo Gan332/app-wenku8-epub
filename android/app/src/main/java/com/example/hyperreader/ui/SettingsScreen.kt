@@ -504,6 +504,17 @@ private fun NetworkSection(state: StudioUiState, viewModel: StudioViewModel, onO
                     onClick = { shownBase = Wenku8Endpoint.activeDirectBase() },
                     modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
                 )
+                TextButton(
+                    text = if (state.endpointProbing) "测速中…" else "自动测速并选择最快入口",
+                    onClick = viewModel::autoSelectDirectEntry,
+                    enabled = !state.endpointProbing,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
+                )
+                Text(
+                    "测速会对 .net / .cc 各请求一次匿名书籍详情页（走全局限流），选响应更快的入口写回设置。",
+                    fontSize = UiDimens.captionSmall,
+                    color = secondaryTextColor(),
+                )
             }
         },
         {

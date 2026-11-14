@@ -2,6 +2,21 @@ package com.example.hyperreader.ui
 
 import com.example.hyperreader.model.BookshelfEntry
 
+/** 书架快捷筛选：与文字筛选叠加。 */
+enum class ShelfQuickFilter(val label: String) {
+    ALL("全部"),
+    UPDATED("有更新"),
+    REMOTE("Wenku8"),
+    LOCAL("本地"),
+}
+
+fun BookshelfEntry.matchesQuickFilter(filter: ShelfQuickFilter): Boolean = when (filter) {
+    ShelfQuickFilter.ALL -> true
+    ShelfQuickFilter.UPDATED -> hasUnreadChapters
+    ShelfQuickFilter.REMOTE -> isRemoteSource
+    ShelfQuickFilter.LOCAL -> !isRemoteSource
+}
+
 /**
  * 书架分组（参考 LNR `BookshelfHomeContent.bookshelfContent` 的 stickyHeader 分组）。
  *

@@ -87,6 +87,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -133,6 +134,7 @@ import com.xyreader.core.NovelFontWeight
 import com.xyreader.core.PageMode
 import com.xyreader.core.ReadBackground
 import com.xyreader.core.ReaderPrefs
+import com.xyreader.core.ReaderVolumeKeys
 import com.xyreader.core.ScreenOrientation
 import com.xyreader.ui.formatDate
 import com.xyreader.ui.CapsuleTab
@@ -470,6 +472,24 @@ fun ReaderScreen(
                 var showDirectory by remember { mutableStateOf(false) }
                 // 弹层 tab 记忆：关闭再打开仍停留在上次的 tab
                 var directoryTab by remember { mutableIntStateOf(0) }
+                // 音量键翻页：Activity 只把按键转发到这里；目录打开或设置关闭时不消费，音量键交回系统。
+                // handler 通过 rememberUpdatedState 读取最新页轴，避免每次 pageCount 变化都重建 DisposableEffect。
+                val volumeTurn = rememberUpdatedState<(Int) -> Unit> { delta ->
+                    if (!showDirectory) {
+                        scope.launch {
+                            val current = if (upDown) verticalListState.firstVisibleItemIndex else pagerState.currentPage
+                            val target = (current + delta).coerceIn(0, (state.pageCount - 1).coerceAtLeast(0))
+                            if (target != current) {
+                                if (upDown) verticalListState.animateScrollToItem(target)
+                                else pagerState.animateScrollToPage(target)
+                            }
+                        }
+                    }
+                }
+                DisposableEffect(prefs.volumeKeyTurn, showDirectory) {
+                    ReaderVolumeKeys.setHandler(prefs.volumeKeyTurn && !showDirectory) { delta -> volumeTurn.value(delta) }
+                    onDispose { ReaderVolumeKeys.clear() }
+                }
                 // 目录/书签跳页：立即收起弹层，同时滚动到目标页（越界收敛防脏数据）
                 val jumpTo: (Int) -> Unit = { target ->
                     showDirectory = false

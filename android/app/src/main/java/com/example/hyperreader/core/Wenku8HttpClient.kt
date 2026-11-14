@@ -55,6 +55,26 @@ class Wenku8HttpClient(private val cacheDirectory: File, private val sessionCook
         TextResource(decodeHtml(result.bytes, result.contentType), result.finalUrl, result.contentType)
     }
 
+    /**
+     * 用**指定**直连入口抓一次文本，供设置页测速选择最快镜像。
+     *
+     * 与 [fetchText] 不同，这里不经过 [Wenku8Endpoint.rewire] 的入口轮换，
+     * 因此可以独立比较 `.net` / `.cc`；仍走同一套 URL 白名单、内网拦截、限流与响应体限制。
+     */
+    suspend fun fetchTextFromHost(base: String, path: String, jobId: String): TextResource = withContext(Dispatchers.IO) {
+        val parsed = validateUrl(base.trimEnd('/') + path)
+        val result = executeOnce(
+            rawUrl = parsed.toString(),
+            jobId = jobId,
+            maxBytes = 16 * 1024 * 1024,
+            referer = null,
+            mode = HttpRateLimiter.Mode.INTERACTIVE,
+            image = false,
+            http1 = Wenku8NetProtocols.prefersHttp1(parsed.host),
+        )
+        TextResource(decodeHtml(result.bytes, result.contentType), result.finalUrl, result.contentType)
+    }
+
     suspend fun downloadImage(url: String, referer: String, jobId: String, name: String): DownloadedResource = withContext(Dispatchers.IO) {
         val result = execute(url, jobId, 30 * 1024 * 1024, referer, image = true)
         val type = detectImage(result.bytes, result.contentType) ?: throw Wenku8Exception("不支持的图片格式。", "UNSUPPORTED_IMAGE")

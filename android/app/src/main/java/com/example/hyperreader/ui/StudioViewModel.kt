@@ -209,6 +209,12 @@ data class StudioUiState(
     val cacheCounts: Map<String, Int> = emptyMap(),
     /** 正在检查书架更新。 */
     val checkingUpdates: Boolean = false,
+    /** 书架批量导出：准备阶段（逐本解析目录并加入队列）。 */
+    val batchExportBusy: Boolean = false,
+    val batchExportDone: Int = 0,
+    val batchExportTotal: Int = 0,
+    /** 正在测速直连入口。 */
+    val endpointProbing: Boolean = false,
     /** 启动时自动检查书架更新（设置项）。 */
     val autoCheckUpdates: Boolean = true,
     /** 「缓存全书」仅 WiFi（设置项）。 */
@@ -1192,6 +1198,60 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         resolveForExport()
     }
 
+    /**
+     * 书架批量导出：逐本解析目录后加入现有导出队列。
+     *
+     * 只处理远程 Wenku8 书；每本都用当前全局导出引擎、全章节与封面。解析失败只计数，
+     * 不中断其余书籍——批量任务的成功率比单本失败原因更重要，失败数在结束时汇总提示。
+     */
+    fun startBatchExport(entries: List<BookshelfEntry>) {
+        if (state.value.batchExportBusy) return
+        val remote = entries
+            .filter { it.isRemoteSource && it.sourceUrl.isNotBlank() }
+            .distinctBy { it.id }
+        if (remote.isEmpty()) {
+            mutable.update { it.copy(message = "所选书籍里没有可导出的 Wenku8 书。") }
+            return
+        }
+        viewModelScope.launch {
+            mutable.update {
+                it.copy(
+                    batchExportBusy = true,
+                    batchExportDone = 0,
+                    batchExportTotal = remote.size,
+                    message = null,
+                )
+            }
+            var queued = 0
+            var failed = 0
+            for (entry in remote) {
+                try {
+                    val (book, index) = manager.parseSource(entry.sourceUrl)
+                    if (index.chapters.isEmpty()) error("目录为空")
+                    manager.create(book, index.chapters, includeCover = true)
+                    queued += 1
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Throwable) {
+                    failed += 1
+                }
+                mutable.update { it.copy(batchExportDone = it.batchExportDone + 1) }
+            }
+            mutable.update {
+                it.copy(
+                    batchExportBusy = false,
+                    message = buildString {
+                        append("已加入 ")
+                        append(queued)
+                        append(" 个导出任务")
+                        if (failed > 0) append("，").append(failed).append(" 本解析失败")
+                        append("。可在书架顶部查看进度。")
+                    },
+                )
+            }
+        }
+    }
+
     /** 关闭向导，回到发起前的 tab（向导只是全屏覆盖层，底栏始终可见）。 */
     fun closeExport() = mutable.update { ExportWizard.close(it) }
 
@@ -1264,6 +1324,49 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
                 .onFailure { error ->
                     mutable.update { it.copy(message = "公开端点不可用：${error.message ?: "请求失败"}") }
                 }
+        }
+    }
+
+    /**
+     * 依次测速两个直连镜像，切到响应更快的那个。
+     *
+     * 只探测匿名 `articleinfo.php`，每个镜像一次，仍走全局限流；测速失败不会改变当前入口。
+     * 中继开启时也照常测直连（测速结果只写 `direct_entry`，不影响中继状态）。
+     */
+    fun autoSelectDirectEntry() {
+        if (state.value.endpointProbing) return
+        viewModelScope.launch {
+            mutable.update { it.copy(endpointProbing = true, message = "正在测速直连入口…") }
+            val results = mutableListOf<Pair<com.example.hyperreader.settings.DirectEntry, Long?>>()
+            for (base in com.example.hyperreader.core.Wenku8Endpoint.DIRECT_HOSTS) {
+                val entry = com.example.hyperreader.settings.DirectEntry.entries.firstOrNull { it.base == base } ?: continue
+                val started = System.currentTimeMillis()
+                val ok = catching {
+                    manager.httpClient().fetchTextFromHost(
+                        base = base,
+                        path = "/modules/article/articleinfo.php?id=2365",
+                        jobId = "direct-entry-probe",
+                    )
+                }.isSuccess
+                results += entry to (if (ok) System.currentTimeMillis() - started else null)
+            }
+            val best = results.filter { it.second != null }.minByOrNull { it.second ?: Long.MAX_VALUE }
+            if (best != null) {
+                catching { settingsRepository.setDirectEntry(best.first) }
+                mutable.update {
+                    it.copy(
+                        endpointProbing = false,
+                        message = "已切换到 ${best.first.label}（${best.second} ms）",
+                    )
+                }
+            } else {
+                mutable.update {
+                    it.copy(
+                        endpointProbing = false,
+                        message = "两个直连入口都不可用，请检查网络或配置第三方中继。",
+                    )
+                }
+            }
         }
     }
 

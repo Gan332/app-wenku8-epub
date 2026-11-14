@@ -2,6 +2,7 @@ package com.example.hyperreader.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -16,7 +17,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.runtime.getValue
@@ -34,6 +37,7 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontWeight
 import com.example.hyperreader.model.BookshelfEntry
@@ -47,6 +51,7 @@ import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Badge
 import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.Checkbox
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.Text
@@ -84,6 +89,12 @@ fun BookshelfScreen(
     var sortSheet by remember { mutableStateOf(false) }
     // 书架内筛选：纯 UI 关注点，不进 ViewModel，也不持久化（换 tab 后由 rememberSaveable 保留）
     var filter by rememberSaveable { mutableStateOf("") }
+    // 快捷筛选：与文字筛选叠加；有更新/远程/本地四档。
+    var quickFilterName by rememberSaveable { mutableStateOf(ShelfQuickFilter.ALL.name) }
+    val quickFilter = ShelfQuickFilter.entries.firstOrNull { it.name == quickFilterName } ?: ShelfQuickFilter.ALL
+    // 批量导出选择（只选择远程书）；Sheet 关闭后保留选择，方便再次打开。
+    var batchSheet by remember { mutableStateOf(false) }
+    var batchSelection by remember { mutableStateOf(emptySet<String>()) }
     // 阅读断点（第 x 章 · 第 y 段）：reader_progress_ 前缀键的全量视图
     val readingProgress by viewModel.readingProgress.collectAsStateWithLifecycle(initialValue = emptyMap())
     // 数据变化时刷新「N 分钟前」的基准时刻，避免长开应用后相对时间停在启动瞬间
@@ -93,14 +104,17 @@ fun BookshelfScreen(
     // 分组按书架内容记忆，放在 LazyColumn **之外**：`LazyListScope` 的 DSL 块不是
     // @Composable 上下文，在里面调 `remember` 会直接编译失败。
     // 筛选只影响列表呈现：置顶、分组与排序仍由完整书架决定。
-    val visibleEntries = remember(state.bookshelf, filter) {
+    val visibleEntries = remember(state.bookshelf, filter, quickFilter) {
         val query = filter.trim()
-        if (query.isEmpty()) state.bookshelf
-        else state.bookshelf.filter {
-            it.title.contains(query, ignoreCase = true) || it.author.contains(query, ignoreCase = true)
+        state.bookshelf.filter { entry ->
+            if (!entry.matchesQuickFilter(quickFilter)) return@filter false
+            query.isEmpty() || entry.title.contains(query, ignoreCase = true) || entry.author.contains(query, ignoreCase = true)
         }
     }
     val sections = remember(visibleEntries) { groupBookshelf(visibleEntries) }
+    val remoteBooks = remember(state.bookshelf) {
+        state.bookshelf.filter { it.isRemoteSource && it.sourceUrl.isNotBlank() }
+    }
     // 折叠状态是纯 UI 关注点，不进 ViewModel（AGENTS §4.6.1）。
     var collapsed by remember { mutableStateOf(emptySet<BookshelfGroup>()) }
     // 单滚动容器：页头（标题 / 说明 / 导入 / 导出 / 分割线）与书籍列表放在同一个
@@ -142,7 +156,7 @@ fun BookshelfScreen(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        if (filter.isBlank()) "${state.bookshelf.size} 本书"
+                        if (filter.isBlank() && quickFilter == ShelfQuickFilter.ALL) "${state.bookshelf.size} 本书"
                         else "${visibleEntries.size} / ${state.bookshelf.size} 本",
                         fontSize = UiDimens.title,
                         fontWeight = FontWeight.Bold,
@@ -165,25 +179,48 @@ fun BookshelfScreen(
             // 书少时不占地方；书多了才需要筛选入口。
             if (state.bookshelf.size >= FILTER_MIN_BOOKS) {
                 item(key = "bookshelf-filter") {
-                    TextField(
-                        value = filter,
-                        onValueChange = { filter = it },
-                        label = "筛选书名或作者",
-                        useLabelAsPlaceholder = true,
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        trailingIcon = if (filter.isBlank()) null else {
-                            {
-                                IconButton(
-                                    onClick = { filter = "" },
-                                    modifier = Modifier.size(UiDimens.touchMin),
-                                ) {
-                                    Icon(MiuixIcons.Close, contentDescription = "清空筛选")
-                                }
+                    Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXS)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceXS),
+                        ) {
+                            ShelfQuickFilter.entries.forEach { option ->
+                                TextButton(
+                                    text = if (option == quickFilter) "✓ ${option.label}" else option.label,
+                                    onClick = { quickFilterName = option.name },
+                                    modifier = Modifier.heightIn(min = UiDimens.touchMin),
+                                )
                             }
-                        },
-                    )
+                        }
+                        TextField(
+                            value = filter,
+                            onValueChange = { filter = it },
+                            label = "筛选书名或作者",
+                            useLabelAsPlaceholder = true,
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            trailingIcon = if (filter.isBlank()) null else {
+                                {
+                                    IconButton(
+                                        onClick = { filter = "" },
+                                        modifier = Modifier.size(UiDimens.touchMin),
+                                    ) {
+                                        Icon(MiuixIcons.Close, contentDescription = "清空筛选")
+                                    }
+                                }
+                            },
+                        )
+                    }
                 }
+            }
+        }
+        if (remoteBooks.isNotEmpty()) {
+            item(key = "batch-export-entry") {
+                TextButton(
+                    text = "批量导出 EPUB（${remoteBooks.size} 本可选）",
+                    onClick = { batchSheet = true },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
+                )
             }
         }
         item(key = "export-section") {
@@ -297,6 +334,96 @@ fun BookshelfScreen(
                     fontSize = UiDimens.captionSmall,
                     color = MiuixTheme.colorScheme.primary,
                 )
+            }
+        }
+    }
+    // 批量导出：与排序 Sheet 同一套轻量 Sheet 范式。
+    if (batchSheet) {
+        val selected = remoteBooks.filter { it.id in batchSelection }
+        OverlayBottomSheet(
+            show = true,
+            title = "批量导出 EPUB",
+            onDismissRequest = { if (!state.batchExportBusy) batchSheet = false },
+        ) {
+            Column(
+                modifier = Modifier.padding(vertical = UiDimens.spaceL),
+                verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS),
+            ) {
+                Text(
+                    "选择要导出的 Wenku8 书籍，按当前全局导出引擎逐本加入队列；已缓存的正文会直接命中导出缓存。",
+                    fontSize = UiDimens.captionSmall,
+                    color = secondaryTextColor(),
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceXS)) {
+                    TextButton(
+                        text = "全选",
+                        enabled = !state.batchExportBusy,
+                        onClick = { batchSelection = remoteBooks.map { it.id }.toSet() },
+                        modifier = Modifier.heightIn(min = UiDimens.touchMin),
+                    )
+                    TextButton(
+                        text = "清空",
+                        enabled = !state.batchExportBusy && batchSelection.isNotEmpty(),
+                        onClick = { batchSelection = emptySet() },
+                        modifier = Modifier.heightIn(min = UiDimens.touchMin),
+                    )
+                }
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = UiDimens.spaceXL * 14)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXS),
+                ) {
+                    remoteBooks.forEach { entry ->
+                        val checked = entry.id in batchSelection
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            insideMargin = PaddingValues(horizontal = UiDimens.spaceS, vertical = UiDimens.spaceXXS),
+                            onClick = {
+                                if (!state.batchExportBusy) {
+                                    batchSelection = if (checked) batchSelection - entry.id else batchSelection + entry.id
+                                }
+                            },
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Checkbox(
+                                    state = if (checked) ToggleableState.On else ToggleableState.Off,
+                                    onClick = {
+                                        if (!state.batchExportBusy) {
+                                            batchSelection = if (checked) batchSelection - entry.id else batchSelection + entry.id
+                                        }
+                                    },
+                                )
+                                Column(Modifier.weight(1f).padding(vertical = UiDimens.spaceXS)) {
+                                    Text(entry.title, fontSize = UiDimens.bodyStrong, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    Text(entry.author, fontSize = UiDimens.captionSmall, color = secondaryTextColor(), maxLines = 1)
+                                }
+                            }
+                        }
+                    }
+                }
+                if (state.batchExportBusy) {
+                    Text(
+                        "正在准备 ${state.batchExportDone}/${state.batchExportTotal}…",
+                        fontSize = UiDimens.caption,
+                        color = MiuixTheme.colorScheme.primary,
+                    )
+                } else {
+                    Button(
+                        onClick = {
+                            viewModel.startBatchExport(selected)
+                            batchSheet = false
+                        },
+                        enabled = selected.isNotEmpty(),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(if (selected.isEmpty()) "请选择书籍" else "导出 ${selected.size} 本")
+                    }
+                }
             }
         }
     }
