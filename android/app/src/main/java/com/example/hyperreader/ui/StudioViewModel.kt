@@ -217,6 +217,8 @@ data class StudioUiState(
     val endpointProbing: Boolean = false,
     /** 启动时自动检查书架更新（设置项）。 */
     val autoCheckUpdates: Boolean = true,
+    /** 每日阅读目标（分钟）；0 = 不设目标。 */
+    val readingGoalMinutes: Int = 30,
     /** 「缓存全书」仅 WiFi（设置项）。 */
     val cacheWifiOnly: Boolean = false,
     /** 离线模式：阅读器只读缓存，不发任何网络请求（设置项）。 */
@@ -495,6 +497,11 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch {
             settingsRepository.bookshelfSort.collect { sort ->
                 mutable.update { state -> state.copy(bookshelfSort = sort, bookshelf = sortBookshelf(state.bookshelf, sort)) }
+            }
+        }
+        viewModelScope.launch {
+            settingsRepository.readingGoalMinutes.collect { minutes ->
+                mutable.update { it.copy(readingGoalMinutes = minutes) }
             }
         }
         viewModelScope.launch {
@@ -1182,6 +1189,50 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
 
     fun removeFromShelf(id: String) { viewModelScope.launch { bookshelfRepository.remove(id) } }
 
+    /** 批量置顶 / 取消置顶；单本失败只计数，不中断其余条目。 */
+    fun setPinnedBatch(entries: List<BookshelfEntry>, pinned: Boolean) {
+        if (entries.isEmpty()) return
+        viewModelScope.launch {
+            var failed = 0
+            entries.forEach { entry ->
+                catching { bookshelfRepository.setPinned(entry.id, pinned) }.onFailure { failed += 1 }
+            }
+            mutable.update {
+                it.copy(
+                    message = buildString {
+                        append(if (pinned) "已置顶 " else "已取消置顶 ")
+                        append(entries.size - failed)
+                        append(" 本")
+                        if (failed > 0) append("，").append(failed).append(" 本失败")
+                        append("。")
+                    },
+                )
+            }
+        }
+    }
+
+    /** 批量移出书架；单本失败只计数。 */
+    fun removeBatch(entries: List<BookshelfEntry>) {
+        if (entries.isEmpty()) return
+        viewModelScope.launch {
+            var failed = 0
+            entries.forEach { entry ->
+                catching { bookshelfRepository.remove(entry.id) }.onFailure { failed += 1 }
+            }
+            mutable.update {
+                it.copy(
+                    message = buildString {
+                        append("已从书架移除 ")
+                        append(entries.size - failed)
+                        append(" 本")
+                        if (failed > 0) append("，").append(failed).append(" 本失败")
+                        append("。")
+                    },
+                )
+            }
+        }
+    }
+
     fun setPinned(id: String, pinned: Boolean) { viewModelScope.launch { bookshelfRepository.setPinned(id, pinned) } }
     fun markShelfRead(id: String) { viewModelScope.launch { bookshelfRepository.recordRead(id) } }
 
@@ -1271,6 +1322,11 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         loadExploreDetail(entry.bookId, seed)
     }
     fun clearReadingStats() { viewModelScope.launch { readingStatsRepository.clear() } }
+
+    /** 设置每日阅读目标（分钟）；0 = 关闭。 */
+    fun setReadingGoalMinutes(minutes: Int) {
+        viewModelScope.launch { settingsRepository.setReadingGoalMinutes(minutes) }
+    }
 
     fun setSearch(value: String) = mutable.update { it.copy(search = value) }
     fun setCover(value: Boolean) = mutable.update { it.copy(includeCover = value) }

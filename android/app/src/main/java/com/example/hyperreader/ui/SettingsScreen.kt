@@ -131,7 +131,12 @@ fun SettingsScreen(
                 SettingsSection.APPEARANCE -> AppearanceSection(viewModel)
                 SettingsSection.READER -> ReaderSection(state, viewModel, onImportFont)
                 SettingsSection.NETWORK -> NetworkSection(state = state, viewModel = viewModel, onOpenChallenge = onOpenChallenge)
-                SettingsSection.STATISTICS -> ReadingStatsScreen(state.readingStats, viewModel::clearReadingStats)
+                SettingsSection.STATISTICS -> ReadingStatsScreen(
+                    stats = state.readingStats,
+                    goalMinutes = state.readingGoalMinutes,
+                    onGoalChange = viewModel::setReadingGoalMinutes,
+                    onClear = viewModel::clearReadingStats,
+                )
                 SettingsSection.CATALOG -> CatalogSection(state, viewModel, onImportEpub)
                 SettingsSection.CONFIG -> ConfigSection(
                     state = configState,

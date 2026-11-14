@@ -6,6 +6,7 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -37,7 +38,12 @@ import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 @Composable
-fun ReadingStatsScreen(stats: ReadingStats, onClear: () -> Unit) {
+fun ReadingStatsScreen(
+    stats: ReadingStats,
+    goalMinutes: Int,
+    onGoalChange: (Int) -> Unit,
+    onClear: () -> Unit,
+) {
     var selectedDate by remember { mutableStateOf<LocalDate?>(null) }
     var confirmClear by remember { mutableStateOf(false) }
     // 整页可滚：原先 Column 不可滚、内层 LazyColumn 又吃光剩余高度，
@@ -53,6 +59,11 @@ fun ReadingStatsScreen(stats: ReadingStats, onClear: () -> Unit) {
             kicker = "READING RHYTHM",
             title = "把阅读变成一条可见的轨迹",
             description = "这里记录累计时长、连续天数与每本书的投入。数据只保存在本机。",
+        )
+        ReadingGoalCard(
+            todaySeconds = stats.todaySeconds,
+            goalMinutes = goalMinutes,
+            onGoalChange = onGoalChange,
         )
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceXS)) {
             StatCard("总时长", formatDuration(stats.totalSeconds), Modifier.weight(1f))
@@ -142,6 +153,73 @@ fun ReadingStatsScreen(stats: ReadingStats, onClear: () -> Unit) {
             }
         }
     }
+}
+
+@Composable
+private fun ReadingGoalCard(
+    todaySeconds: Long,
+    goalMinutes: Int,
+    onGoalChange: (Int) -> Unit,
+) {
+    val goalSeconds = goalMinutes * 60L
+    val progress = readingGoalProgress(todaySeconds, goalMinutes)
+    Card(
+        Modifier.fillMaxWidth(),
+        cornerRadius = UiDimens.panelCorner,
+        insideMargin = PaddingValues(UiDimens.spaceM),
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXS)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("今日目标", fontWeight = FontWeight.Bold, fontSize = UiDimens.bodyStrong)
+                Text(
+                    if (goalMinutes <= 0) "未设置" else "$goalMinutes 分钟",
+                    color = secondaryTextColor(),
+                    fontSize = UiDimens.captionSmall,
+                )
+            }
+            if (goalMinutes <= 0) {
+                Text("设置一个每日目标，热力图之外也能看到今天的进度。", fontSize = UiDimens.captionSmall, color = secondaryTextColor())
+            } else {
+                LinearProgressIndicator(
+                    progress = progress,
+                    modifier = Modifier.fillMaxWidth().height(UiDimens.progressThickness),
+                )
+                Text(
+                    if (todaySeconds >= goalSeconds) "已达成今日目标"
+                    else "还差 ${formatDuration(goalSeconds - todaySeconds)}",
+                    fontSize = UiDimens.captionSmall,
+                    color = if (todaySeconds >= goalSeconds) MiuixTheme.colorScheme.primary else secondaryTextColor(),
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceXS),
+            ) {
+                listOf(0, 15, 30, 45, 60, 90, 120).forEach { option ->
+                    TextButton(
+                        text = if (option == 0) {
+                            if (goalMinutes == 0) "✓ 关闭" else "关闭"
+                        } else {
+                            if (goalMinutes == option) "✓ $option 分" else "$option 分"
+                        },
+                        onClick = { onGoalChange(option) },
+                        modifier = Modifier.heightIn(min = UiDimens.touchMin),
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 今日目标完成度（0..1）。目标 <= 0 视为未设置，恒为 0；超额完成封顶 1。
+ * 纯函数便于单测。
+ */
+internal fun readingGoalProgress(todaySeconds: Long, goalMinutes: Int): Float {
+    if (goalMinutes <= 0) return 0f
+    val goalSeconds = goalMinutes * 60L
+    if (goalSeconds <= 0L) return 0f
+    return (todaySeconds.coerceAtLeast(0L).toFloat() / goalSeconds.toFloat()).coerceIn(0f, 1f)
 }
 
 @Composable

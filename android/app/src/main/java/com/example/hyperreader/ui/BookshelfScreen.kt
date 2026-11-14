@@ -61,6 +61,7 @@ import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.More
 import top.yukonga.miuix.kmp.icon.extended.Close
 import top.yukonga.miuix.kmp.overlay.OverlayBottomSheet
+import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 @Composable
@@ -92,9 +93,10 @@ fun BookshelfScreen(
     // 快捷筛选：与文字筛选叠加；有更新/远程/本地四档。
     var quickFilterName by rememberSaveable { mutableStateOf(ShelfQuickFilter.ALL.name) }
     val quickFilter = ShelfQuickFilter.entries.firstOrNull { it.name == quickFilterName } ?: ShelfQuickFilter.ALL
-    // 批量导出选择（只选择远程书）；Sheet 关闭后保留选择，方便再次打开。
+    // 批量操作选择（置顶 / 导出 / 删除）；Sheet 关闭后保留选择，方便再次打开。
     var batchSheet by remember { mutableStateOf(false) }
     var batchSelection by remember { mutableStateOf(emptySet<String>()) }
+    var confirmBatchDelete by remember { mutableStateOf(false) }
     // 阅读断点（第 x 章 · 第 y 段）：reader_progress_ 前缀键的全量视图
     val readingProgress by viewModel.readingProgress.collectAsStateWithLifecycle(initialValue = emptyMap())
     // 数据变化时刷新「N 分钟前」的基准时刻，避免长开应用后相对时间停在启动瞬间
@@ -112,8 +114,11 @@ fun BookshelfScreen(
         }
     }
     val sections = remember(visibleEntries) { groupBookshelf(visibleEntries) }
-    val remoteBooks = remember(state.bookshelf) {
-        state.bookshelf.filter { it.isRemoteSource && it.sourceUrl.isNotBlank() }
+    val selectedBatchBooks = remember(state.bookshelf, batchSelection) {
+        state.bookshelf.filter { it.id in batchSelection }
+    }
+    val selectedRemoteBooks = remember(selectedBatchBooks) {
+        selectedBatchBooks.filter { it.isRemoteSource && it.sourceUrl.isNotBlank() }
     }
     // 折叠状态是纯 UI 关注点，不进 ViewModel（AGENTS §4.6.1）。
     var collapsed by remember { mutableStateOf(emptySet<BookshelfGroup>()) }
@@ -214,10 +219,10 @@ fun BookshelfScreen(
                 }
             }
         }
-        if (remoteBooks.isNotEmpty()) {
+        if (state.bookshelf.isNotEmpty()) {
             item(key = "batch-export-entry") {
                 TextButton(
-                    text = "批量导出 EPUB（${remoteBooks.size} 本可选）",
+                    text = "批量操作（${state.bookshelf.size} 本可选）",
                     onClick = { batchSheet = true },
                     modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
                 )
@@ -337,12 +342,11 @@ fun BookshelfScreen(
             }
         }
     }
-    // 批量导出：与排序 Sheet 同一套轻量 Sheet 范式。
+    // 批量操作：与排序 Sheet 同一套轻量 Sheet 范式。
     if (batchSheet) {
-        val selected = remoteBooks.filter { it.id in batchSelection }
         OverlayBottomSheet(
             show = true,
-            title = "批量导出 EPUB",
+            title = "批量操作",
             onDismissRequest = { if (!state.batchExportBusy) batchSheet = false },
         ) {
             Column(
@@ -350,7 +354,7 @@ fun BookshelfScreen(
                 verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS),
             ) {
                 Text(
-                    "选择要导出的 Wenku8 书籍，按当前全局导出引擎逐本加入队列；已缓存的正文会直接命中导出缓存。",
+                    "可批量置顶、导出或移出书架。导出只处理 Wenku8 书，按当前全局引擎逐本加入队列。",
                     fontSize = UiDimens.captionSmall,
                     color = secondaryTextColor(),
                 )
@@ -358,7 +362,7 @@ fun BookshelfScreen(
                     TextButton(
                         text = "全选",
                         enabled = !state.batchExportBusy,
-                        onClick = { batchSelection = remoteBooks.map { it.id }.toSet() },
+                        onClick = { batchSelection = state.bookshelf.map { it.id }.toSet() },
                         modifier = Modifier.heightIn(min = UiDimens.touchMin),
                     )
                     TextButton(
@@ -375,7 +379,7 @@ fun BookshelfScreen(
                         .verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXS),
                 ) {
-                    remoteBooks.forEach { entry ->
+                    state.bookshelf.forEach { entry ->
                         val checked = entry.id in batchSelection
                         Card(
                             modifier = Modifier.fillMaxWidth(),
@@ -400,7 +404,12 @@ fun BookshelfScreen(
                                 )
                                 Column(Modifier.weight(1f).padding(vertical = UiDimens.spaceXS)) {
                                     Text(entry.title, fontSize = UiDimens.bodyStrong, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                    Text(entry.author, fontSize = UiDimens.captionSmall, color = secondaryTextColor(), maxLines = 1)
+                                    Text(
+                                        if (entry.isRemoteSource) entry.author else "本地 EPUB",
+                                        fontSize = UiDimens.captionSmall,
+                                        color = secondaryTextColor(),
+                                        maxLines = 1,
+                                    )
                                 }
                             }
                         }
@@ -415,15 +424,72 @@ fun BookshelfScreen(
                 } else {
                     Button(
                         onClick = {
-                            viewModel.startBatchExport(selected)
+                            viewModel.startBatchExport(selectedRemoteBooks)
                             batchSheet = false
                         },
-                        enabled = selected.isNotEmpty(),
+                        enabled = selectedRemoteBooks.isNotEmpty(),
                         modifier = Modifier.fillMaxWidth(),
                     ) {
-                        Text(if (selected.isEmpty()) "请选择书籍" else "导出 ${selected.size} 本")
+                        Text(
+                            if (selectedRemoteBooks.isEmpty()) "所选里没有可导出的 Wenku8 书"
+                            else "导出 ${selectedRemoteBooks.size} 本 EPUB",
+                        )
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceXS),
+                    ) {
+                        TextButton(
+                            text = "置顶",
+                            enabled = selectedBatchBooks.isNotEmpty(),
+                            onClick = {
+                                viewModel.setPinnedBatch(selectedBatchBooks, true)
+                                batchSheet = false
+                            },
+                            modifier = Modifier.weight(1f).heightIn(min = UiDimens.touchMin),
+                        )
+                        TextButton(
+                            text = "取消置顶",
+                            enabled = selectedBatchBooks.isNotEmpty(),
+                            onClick = {
+                                viewModel.setPinnedBatch(selectedBatchBooks, false)
+                                batchSheet = false
+                            },
+                            modifier = Modifier.weight(1f).heightIn(min = UiDimens.touchMin),
+                        )
+                        TextButton(
+                            text = "删除",
+                            enabled = selectedBatchBooks.isNotEmpty(),
+                            onClick = { confirmBatchDelete = true },
+                            colors = ButtonDefaults.textButtonColors(textColor = MiuixTheme.colorScheme.error),
+                            modifier = Modifier.weight(1f).heightIn(min = UiDimens.touchMin),
+                        )
                     }
                 }
+            }
+        }
+    }
+    if (confirmBatchDelete) {
+        OverlayDialog(
+            show = true,
+            title = "移出书架",
+            summary = "将把选中的 ${selectedBatchBooks.size} 本书从书架移除，不会删除本地 EPUB 文件或已导出的 EPUB。",
+            onDismissRequest = { confirmBatchDelete = false },
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
+                Button(
+                    onClick = {
+                        confirmBatchDelete = false
+                        viewModel.removeBatch(selectedBatchBooks)
+                        batchSheet = false
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("确认移除") }
+                TextButton(
+                    text = "取消",
+                    onClick = { confirmBatchDelete = false },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
+                )
             }
         }
     }

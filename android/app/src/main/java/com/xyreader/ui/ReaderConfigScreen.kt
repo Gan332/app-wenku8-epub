@@ -261,6 +261,12 @@ private fun DisplayGroupPage(prefs: ReaderPrefs, onUpdate: ((ReaderPrefs) -> Rea
             checked = prefs.keepScreenOn,
             onChange = { value -> onUpdate { it.copy(keepScreenOn = value) } },
         )
+        SwitchCard(
+            title = "顶部时间与电量",
+            hint = "工具栏隐藏时在顶部显示当前时间与电量，不打断沉浸阅读",
+            checked = prefs.showStatusOverlay,
+            onChange = { value -> onUpdate { it.copy(showStatusOverlay = value) } },
+        )
     }
 }
 

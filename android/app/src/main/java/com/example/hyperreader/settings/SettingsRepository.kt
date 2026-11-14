@@ -67,6 +67,9 @@ class SettingsRepository(private val context: Context) {
     /** 是否在启动时自动检查书架更新（默认开）。 */
     val autoCheckUpdates: Flow<Boolean> = data.safeData().map { it[AUTO_CHECK_UPDATES] ?: true }
 
+    /** 每日阅读目标（分钟）；0 = 不设目标，默认 30。 */
+    val readingGoalMinutes: Flow<Int> = data.safeData().map { (it[READING_GOAL_MINUTES] ?: DEFAULT_READING_GOAL).coerceIn(0, 600) }
+
     /** 上次「检查全部更新」的时间戳；自动检查用它做 12 小时节流。 */
     val lastUpdateCheckAt: Flow<Long> = data.safeData().map { it[LAST_UPDATE_CHECK_AT] ?: 0L }
 
@@ -145,6 +148,7 @@ class SettingsRepository(private val context: Context) {
     suspend fun setOnlineSource(source: OnlineSource) = edit { it[ONLINE_SOURCE] = source.name }
     suspend fun setRefreshRate(rate: RefreshRate) = edit { it[REFRESH_RATE] = rate.name }
     suspend fun setAutoCheckUpdates(value: Boolean) = edit { it[AUTO_CHECK_UPDATES] = value }
+    suspend fun setReadingGoalMinutes(value: Int) = edit { it[READING_GOAL_MINUTES] = value.coerceIn(0, 600) }
     suspend fun setLastUpdateCheckAt(value: Long) = edit { it[LAST_UPDATE_CHECK_AT] = value }
     suspend fun setCacheOnWifiOnly(value: Boolean) = edit { it[CACHE_WIFI_ONLY] = value }
 
@@ -219,6 +223,8 @@ class SettingsRepository(private val context: Context) {
         val REFRESH_RATE = stringPreferencesKey("refresh_rate")
         /** 启动时自动检查书架更新，默认 true。 */
         val AUTO_CHECK_UPDATES = booleanPreferencesKey("auto_check_updates")
+        /** 每日阅读目标（分钟），0 = 关闭；默认 [DEFAULT_READING_GOAL]。 */
+        val READING_GOAL_MINUTES = intPreferencesKey("reading_goal_minutes")
         /** 上次检查全部更新的时间戳，0 = 从未检查。 */
         val LAST_UPDATE_CHECK_AT = longPreferencesKey("last_update_check_at")
         /** 「缓存全书」仅非计费网络，默认 false。 */
@@ -248,6 +254,9 @@ class SettingsRepository(private val context: Context) {
 private fun DataStore<Preferences>.safeData(): Flow<Preferences> = data.catch { emit(emptyPreferences()) }
 
 private const val PROGRESS_PREFIX = "reader_progress_"
+
+/** 未设置时的每日阅读目标（分钟）。 */
+const val DEFAULT_READING_GOAL = 30
 
 private val PROGRESS_JSON = Json { ignoreUnknownKeys = true }
 

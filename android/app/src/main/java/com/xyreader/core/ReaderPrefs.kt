@@ -107,6 +107,8 @@ data class ReaderPrefs(
     val tapTurnPage: Boolean = true,
     /** 音量键翻页：音量上=上一页，音量下=下一页；默认关闭，避免影响系统音量。 */
     val volumeKeyTurn: Boolean = false,
+    /** 顶部悬浮时间/电量（工具栏隐藏时显示）；默认关闭。 */
+    val showStatusOverlay: Boolean = false,
     /** 双击放大（页内 1x ↔ 2.5x） */
     val doubleTapZoom: Boolean = true,
     /** 阅读时屏幕常亮 */

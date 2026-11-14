@@ -1,10 +1,14 @@
 package com.xyreader.reader
 
+import android.content.BroadcastReceiver
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.ContextWrapper
+import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.ActivityInfo
+import android.os.BatteryManager
 import android.view.WindowManager
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -97,6 +101,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -116,6 +121,7 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.hyperreader.R
@@ -159,6 +165,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.distinctUntilChanged
 import com.xyreader.core.ReaderMotion
+import java.time.LocalTime
+import java.time.format.DateTimeFormatter
 
 /** 工具栏浮层统一样式：半透明深底 + 20dp 圆角 */
 private val BarBackground = Color(0xCC101318)
@@ -169,6 +177,9 @@ private const val PAGE_ZOOM = 2.5f
 
 /** 上下滚动模式视口外预渲染页数（前、后各若干页） */
 private const val VERTICAL_PREFETCH_PAGES = 2
+
+/** 顶部悬浮状态的时间格式（本地时区）。 */
+private val STATUS_TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm")
 
 /** 沿 ContextWrapper 链找宿主 Activity；拿不到时返回 null（调用方判空降级） */
 private tailrec fun Context.findActivity(): ComponentActivity? = when (this) {
@@ -880,6 +891,17 @@ private fun ReaderPagerArea(
                     )
                 }
             }
+        }
+
+        // —— 顶部悬浮时间/电量：工具栏隐藏时显示，给沉浸阅读保留一个轻量状态提示 ——
+        if (prefs.showStatusOverlay && !toolbarVisible && !locked) {
+            ReaderStatusOverlay(
+                color = if (bgColor.luminance() > 0.55f) Color(0x99000000) else Color(0xB3FFFFFF),
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top).asPaddingValues())
+                    .padding(top = ReaderDimens.spaceXS),
+            )
         }
 
         // —— 顶部工具栏：返回 / 目录 / 书名 / 书签 / 收藏 ——
@@ -1919,6 +1941,52 @@ private fun SheetFontGroup(prefs: ReaderPrefs, onUpdate: ((ReaderPrefs) -> Reade
         text = "仅文字小说使用这些排版设置",
         style = MiuixTheme.textStyles.footnote1,
         color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+    )
+}
+
+/**
+ * 顶部悬浮时间/电量。
+ *
+ * 只在工具栏隐藏时显示；电量来自系统 sticky 广播，时间每 30 秒刷新一次。
+ * 颜色由调用方按阅读背景亮度决定，保证在纯白/纯黑背景上都可读。
+ */
+@Composable
+private fun ReaderStatusOverlay(color: Color, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    var time by remember { mutableStateOf(LocalTime.now().format(STATUS_TIME_FORMAT)) }
+    var batteryPercent by remember { mutableIntStateOf(-1) }
+
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(30_000)
+            time = LocalTime.now().format(STATUS_TIME_FORMAT)
+        }
+    }
+
+    DisposableEffect(context) {
+        fun applyBattery(intent: Intent?) {
+            val level = intent?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
+            val scale = intent?.getIntExtra(BatteryManager.EXTRA_SCALE, 100) ?: 100
+            batteryPercent = if (level >= 0 && scale > 0) (level * 100 / scale) else -1
+        }
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(receiverContext: Context?, intent: Intent?) {
+                applyBattery(intent)
+            }
+        }
+        val filter = IntentFilter(Intent.ACTION_BATTERY_CHANGED)
+        val sticky = runCatching {
+            ContextCompat.registerReceiver(context, receiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
+        }.getOrNull()
+        applyBattery(sticky)
+        onDispose { runCatching { context.unregisterReceiver(receiver) } }
+    }
+
+    Text(
+        text = if (batteryPercent >= 0) "$time · $batteryPercent%" else time,
+        modifier = modifier,
+        style = MiuixTheme.textStyles.footnote2,
+        color = color,
     )
 }
 
