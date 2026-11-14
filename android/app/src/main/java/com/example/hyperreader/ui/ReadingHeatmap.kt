@@ -112,13 +112,14 @@ fun quickSelectMinutes(sortedNonZeroMinutes: List<Int>, fraction: Double): Int {
  * 只有非零日期参与分位：大量「没读的日子」会把阈值压到 0，整张图退化成全空档。
  */
 fun heatThresholds(dailySeconds: Map<String, Long>): HeatThresholds {
-    // 先剔除 0 秒，再把不足 1 分钟的记录按 1 分钟计：这样 1–59 秒的记录仍会出现在
-    // 热力图上（One 档），而不是因为整除后变成 0 被当作「无记录」。
-    val nonZero = dailySeconds.values
-        .filter { it > 0 }
-        .map { (it / 60).toInt().coerceAtLeast(1) }
-        .sorted()
-    if (nonZero.isEmpty()) return HeatThresholds(0, 0, 0)
+    // 先换算成分钟再剔除 0：30 秒与 10 分钟混在一起时，30 秒不能变成 0 分钟参与分位，
+    // 把 low 阈值拖到 0。但若**全部**记录都不足 1 分钟，nonZero 会为空——
+    // 此时不能当作「没有记录」，否则读过 30 秒的日子在热力图上仍是空白。
+    val nonZero = dailySeconds.values.map { (it / 60).toInt() }.filter { it > 0 }.sorted()
+    if (nonZero.isEmpty()) {
+        return if (dailySeconds.values.any { it > 0 }) HeatThresholds(1, 1, 1)
+        else HeatThresholds(0, 0, 0)
+    }
     return HeatThresholds(
         low = quickSelectMinutes(nonZero, 0.25),
         mid = quickSelectMinutes(nonZero, 0.50),
