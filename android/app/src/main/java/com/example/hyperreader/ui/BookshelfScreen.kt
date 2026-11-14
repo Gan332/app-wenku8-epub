@@ -42,6 +42,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontWeight
 import com.example.hyperreader.model.BookshelfEntry
 import com.example.hyperreader.model.BookshelfSource
+import com.example.hyperreader.model.buildShelfTagIndex
+import com.example.hyperreader.model.matchesShelfQuery
+import com.example.hyperreader.model.matchesShelfTag
+import com.example.hyperreader.model.normalizeShelfTag
 import com.example.hyperreader.reader.onlineReaderIntent
 import com.example.hyperreader.settings.BookshelfSort
 import com.example.hyperreader.settings.ReadingProgress
@@ -93,9 +97,14 @@ fun BookshelfScreen(
     // 快捷筛选：与文字筛选叠加；有更新/远程/本地四档。
     var quickFilterName by rememberSaveable { mutableStateOf(ShelfQuickFilter.ALL.name) }
     val quickFilter = ShelfQuickFilter.entries.firstOrNull { it.name == quickFilterName } ?: ShelfQuickFilter.ALL
+    // 自定义标签筛选；空串表示不筛选（用空串而不是 null，避免 rememberSaveable 的可空陷阱）。
+    var tagFilterName by rememberSaveable { mutableStateOf("") }
+    // 标签编辑 Sheet 的目标书 id（null = 关闭）。
+    var tagEditorEntryId by remember { mutableStateOf<String?>(null) }
     // 批量操作选择（置顶 / 导出 / 删除）；Sheet 关闭后保留选择，方便再次打开。
     var batchSheet by remember { mutableStateOf(false) }
     var batchSelection by remember { mutableStateOf(emptySet<String>()) }
+    var batchTagInput by remember { mutableStateOf("") }
     var confirmBatchDelete by remember { mutableStateOf(false) }
     // 阅读断点（第 x 章 · 第 y 段）：reader_progress_ 前缀键的全量视图
     val readingProgress by viewModel.readingProgress.collectAsStateWithLifecycle(initialValue = emptyMap())
@@ -103,14 +112,21 @@ fun BookshelfScreen(
     val now = remember(state.bookshelf, readingProgress) { System.currentTimeMillis() }
     // 菜单目标从列表状态反查：sheet 挂在页面层，条目被滚出视口或书架变化时不会悬空。
     val menuEntry = state.bookshelf.firstOrNull { it.id == menuEntryId }
+    val tagEditorEntry = state.bookshelf.firstOrNull { it.id == tagEditorEntryId }
+    // 标签索引按书架内容重算；筛选只影响列表呈现，不影响索引。
+    val tagIndex = remember(state.bookshelf) { buildShelfTagIndex(state.bookshelf) }
+    val activeTag = remember(tagIndex, tagFilterName) {
+        tagIndex.firstOrNull { it.name == tagFilterName }?.name
+    }
     // 分组按书架内容记忆，放在 LazyColumn **之外**：`LazyListScope` 的 DSL 块不是
     // @Composable 上下文，在里面调 `remember` 会直接编译失败。
     // 筛选只影响列表呈现：置顶、分组与排序仍由完整书架决定。
-    val visibleEntries = remember(state.bookshelf, filter, quickFilter) {
+    val visibleEntries = remember(state.bookshelf, filter, quickFilter, activeTag) {
         val query = filter.trim()
         state.bookshelf.filter { entry ->
-            if (!entry.matchesQuickFilter(quickFilter)) return@filter false
-            query.isEmpty() || entry.title.contains(query, ignoreCase = true) || entry.author.contains(query, ignoreCase = true)
+            entry.matchesQuickFilter(quickFilter) &&
+                entry.matchesShelfTag(activeTag) &&
+                entry.matchesShelfQuery(query)
         }
     }
     val sections = remember(visibleEntries) { groupBookshelf(visibleEntries) }
@@ -161,7 +177,7 @@ fun BookshelfScreen(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        if (filter.isBlank() && quickFilter == ShelfQuickFilter.ALL) "${state.bookshelf.size} 本书"
+                        if (filter.isBlank() && quickFilter == ShelfQuickFilter.ALL && activeTag == null) "${state.bookshelf.size} 本书"
                         else "${visibleEntries.size} / ${state.bookshelf.size} 本",
                         fontSize = UiDimens.title,
                         fontWeight = FontWeight.Bold,
@@ -200,7 +216,7 @@ fun BookshelfScreen(
                         TextField(
                             value = filter,
                             onValueChange = { filter = it },
-                            label = "筛选书名或作者",
+                            label = "筛选书名、作者或标签",
                             useLabelAsPlaceholder = true,
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true,
@@ -215,6 +231,38 @@ fun BookshelfScreen(
                                 }
                             },
                         )
+                    }
+                }
+            }
+            if (tagIndex.isNotEmpty()) {
+                item(key = "bookshelf-tags") {
+                    Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXS)) {
+                        Text(
+                            "标签",
+                            fontSize = UiDimens.captionSmall,
+                            color = tertiaryTextColor(),
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceXS),
+                        ) {
+                            TextButton(
+                                text = if (activeTag == null) "✓ 全部" else "全部",
+                                onClick = { tagFilterName = "" },
+                                modifier = Modifier.heightIn(min = UiDimens.touchMin),
+                            )
+                            tagIndex.forEach { tag ->
+                                TextButton(
+                                    text = if (activeTag == tag.name) {
+                                        "✓ #${tag.name} ${tag.count}"
+                                    } else {
+                                        "#${tag.name} ${tag.count}"
+                                    },
+                                    onClick = { tagFilterName = tag.name },
+                                    modifier = Modifier.heightIn(min = UiDimens.touchMin),
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -354,7 +402,7 @@ fun BookshelfScreen(
                 verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS),
             ) {
                 Text(
-                    "可批量置顶、导出或移出书架。导出只处理 Wenku8 书，按当前全局引擎逐本加入队列。",
+                    "可批量置顶、加标签、导出或移出书架。导出只处理 Wenku8 书，按当前全局引擎逐本加入队列。",
                     fontSize = UiDimens.captionSmall,
                     color = secondaryTextColor(),
                 )
@@ -414,6 +462,30 @@ fun BookshelfScreen(
                             }
                         }
                     }
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    TextField(
+                        value = batchTagInput,
+                        onValueChange = { batchTagInput = it },
+                        label = "批量加标签",
+                        useLabelAsPlaceholder = true,
+                        modifier = Modifier.weight(1f),
+                        singleLine = true,
+                    )
+                    TextButton(
+                        text = "加标签",
+                        enabled = selectedBatchBooks.isNotEmpty() && normalizeShelfTag(batchTagInput) != null,
+                        onClick = {
+                            viewModel.addShelfTagBatch(selectedBatchBooks, batchTagInput)
+                            batchTagInput = ""
+                            batchSheet = false
+                        },
+                        modifier = Modifier.heightIn(min = UiDimens.touchMin),
+                    )
                 }
                 if (state.batchExportBusy) {
                     Text(
@@ -503,7 +575,17 @@ fun BookshelfScreen(
             onOpenLocal = { onOpenLocal(it); menuEntryId = null },
             onOpenRemote = { onOpenRemote(it); menuEntryId = null },
             onOpenDetail = { onOpenDetail(it); menuEntryId = null },
+            onManageTags = { target -> menuEntryId = null; tagEditorEntryId = target.id },
             onDismiss = { menuEntryId = null },
+        )
+    }
+    tagEditorEntry?.let { entry ->
+        ShelfTagEditorSheet(
+            entry = entry,
+            allTags = tagIndex.map { it.name },
+            onAddTag = { viewModel.addShelfTag(entry.id, it) },
+            onRemoveTag = { viewModel.removeShelfTag(entry.id, it) },
+            onDismiss = { tagEditorEntryId = null },
         )
     }
 }
@@ -650,6 +732,21 @@ private fun BookshelfCard(
                         )
                     }
                 }
+                if (entry.tags.isNotEmpty()) {
+                    Text(
+                        buildString {
+                            entry.tags.take(3).forEachIndexed { index, tag ->
+                                if (index > 0) append("  ")
+                                append('#').append(tag)
+                            }
+                            if (entry.tags.size > 3) append("  +").append(entry.tags.size - 3)
+                        },
+                        fontSize = UiDimens.captionSmall,
+                        color = MiuixTheme.colorScheme.primary.copy(alpha = 0.9f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
                 // 末行：LNR 放简介或最新章节；本工程放「上次读到哪儿」，这是差异里
                 // 唯一必须保留的本工程语义（AGENTS §4.8 页进度是续读唯一依据）。
                 if (entry.lastReadAt > 0L) {
@@ -721,6 +818,7 @@ private fun BookEntryMenu(
     onOpenLocal: (BookshelfEntry) -> Unit,
     onOpenRemote: (BookshelfEntry) -> Unit,
     onOpenDetail: (BookshelfEntry) -> Unit,
+    onManageTags: (BookshelfEntry) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -804,6 +902,11 @@ private fun BookEntryMenu(
                 }
             }
             TextButton(
+                text = "管理标签",
+                onClick = { act { onManageTags(entry) } },
+                modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
+            )
+            TextButton(
                 text = if (entry.isPinned) "取消置顶" else "置顶",
                 onClick = { act { viewModel.setPinned(entry.id, !entry.isPinned) } },
                 modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
@@ -813,6 +916,93 @@ private fun BookEntryMenu(
                 onClick = { act { viewModel.removeFromShelf(entry.id) } },
                 modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
                 colors = ButtonDefaults.textButtonColors(textColor = MiuixTheme.colorScheme.error),
+            )
+        }
+    }
+}
+
+/**
+ * 标签编辑 Sheet：已有标签点一下切换，输入框可新建标签。
+ *
+ * 标签直接写进 DataStore，不做「保存」按钮——开关本身就是保存动作，
+ * 与阅读器设置里的即时生效一致。
+ */
+@Composable
+private fun ShelfTagEditorSheet(
+    entry: BookshelfEntry,
+    allTags: List<String>,
+    onAddTag: (String) -> Unit,
+    onRemoveTag: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var input by rememberSaveable { mutableStateOf("") }
+    // 当前书的标签排在前面，其余标签按索引顺序跟在后面。
+    val orderedTags = remember(entry.tags, allTags) {
+        (entry.tags + allTags).distinctBy { it.lowercase() }
+    }
+    OverlayBottomSheet(show = true, title = "标签 · ${entry.title}", onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier.padding(vertical = UiDimens.spaceL),
+            verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS),
+        ) {
+            Text(
+                "标签只保存在本机，可用来筛选书架，也可以在批量操作里给多本书加同一个标签。",
+                fontSize = UiDimens.captionSmall,
+                color = secondaryTextColor(),
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                TextField(
+                    value = input,
+                    onValueChange = { input = it },
+                    label = "新标签",
+                    useLabelAsPlaceholder = true,
+                    modifier = Modifier.weight(1f),
+                    singleLine = true,
+                )
+                TextButton(
+                    text = "添加",
+                    enabled = normalizeShelfTag(input) != null,
+                    onClick = {
+                        onAddTag(input)
+                        input = ""
+                    },
+                    modifier = Modifier.heightIn(min = UiDimens.touchMin),
+                )
+            }
+            if (orderedTags.isEmpty()) {
+                Text(
+                    "还没有标签。输入一个标签名开始。",
+                    fontSize = UiDimens.captionSmall,
+                    color = tertiaryTextColor(),
+                )
+            } else {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = UiDimens.spaceXL * 12)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXXS),
+                ) {
+                    orderedTags.forEach { tag ->
+                        val assigned = entry.tags.any { it.equals(tag, ignoreCase = true) }
+                        TextButton(
+                            text = if (assigned) "✓ #$tag" else "#$tag",
+                            onClick = {
+                                if (assigned) onRemoveTag(tag) else onAddTag(tag)
+                            },
+                            modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
+                        )
+                    }
+                }
+            }
+            TextButton(
+                text = "完成",
+                onClick = onDismiss,
+                modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
             )
         }
     }

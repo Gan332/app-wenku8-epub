@@ -19,6 +19,7 @@ import com.example.hyperreader.model.Book
 import com.example.hyperreader.model.BookIndex
 import com.example.hyperreader.model.BookshelfEntry
 import com.example.hyperreader.model.BookshelfSource
+import com.example.hyperreader.model.normalizeShelfTag
 import com.example.hyperreader.model.ExportJob
 import com.example.hyperreader.model.JobStatus
 import com.example.hyperreader.model.ReadingStats
@@ -1234,6 +1235,46 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun setPinned(id: String, pinned: Boolean) { viewModelScope.launch { bookshelfRepository.setPinned(id, pinned) } }
+
+    /** 覆盖一本书的标签列表（标签编辑页的开关与删除都走这里）。 */
+    fun setShelfTags(id: String, tags: List<String>) {
+        viewModelScope.launch { bookshelfRepository.setTags(id, tags) }
+    }
+
+    /** 给一本书加标签；输入规范化在仓库层统一处理。 */
+    fun addShelfTag(id: String, tag: String) {
+        viewModelScope.launch { bookshelfRepository.addTag(id, tag) }
+    }
+
+    /** 从一本书移除标签。 */
+    fun removeShelfTag(id: String, tag: String) {
+        viewModelScope.launch { bookshelfRepository.removeTag(id, tag) }
+    }
+
+    /** 批量给选中的书加同一个标签；单本失败只计数。 */
+    fun addShelfTagBatch(entries: List<BookshelfEntry>, tag: String) {
+        val normalized = normalizeShelfTag(tag)
+        if (normalized == null || entries.isEmpty()) return
+        viewModelScope.launch {
+            var failed = 0
+            entries.forEach { entry ->
+                catching { bookshelfRepository.addTag(entry.id, normalized) }.onFailure { failed += 1 }
+            }
+            mutable.update {
+                it.copy(
+                    message = buildString {
+                        append("已给 ")
+                        append(entries.size - failed)
+                        append(" 本书加上标签 #")
+                        append(normalized)
+                        if (failed > 0) append("，").append(failed).append(" 本失败")
+                        append("。")
+                    },
+                )
+            }
+        }
+    }
+
     fun markShelfRead(id: String) { viewModelScope.launch { bookshelfRepository.recordRead(id) } }
 
     /** 切换书架排序；只改展示顺序，下次启动仍生效（DataStore）。 */

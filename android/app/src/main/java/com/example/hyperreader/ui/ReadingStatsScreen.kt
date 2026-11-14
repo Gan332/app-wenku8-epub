@@ -24,6 +24,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import com.example.hyperreader.data.goalStreakEndingAt
@@ -137,6 +138,53 @@ fun ReadingStatsScreen(
                             Text("已达成当日目标", fontSize = UiDimens.captionSmall, color = MiuixTheme.colorScheme.primary)
                         }
                     }
+                }
+            }
+        }
+        StudioPanel("最近阅读") {
+            if (stats.recentSessions.isEmpty()) {
+                Text(
+                    "结束一次阅读后，这里会留下最近读过的书与时长。",
+                    fontSize = UiDimens.captionSmall,
+                    color = secondaryTextColor(),
+                )
+            } else {
+                val now = remember(stats.recentSessions) { System.currentTimeMillis() }
+                stats.recentSessions.asReversed().take(8).forEach { session ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXXS),
+                        ) {
+                            Text(
+                                session.title.ifBlank { "未命名书籍" },
+                                fontSize = UiDimens.bodyStrong,
+                                fontWeight = FontWeight.Medium,
+                                maxLines = 1,
+                            )
+                            Text(
+                                formatRelativeReadTime(now, session.endedAt),
+                                fontSize = UiDimens.captionSmall,
+                                color = secondaryTextColor(),
+                            )
+                        }
+                        Text(
+                            formatDuration(session.seconds),
+                            fontSize = UiDimens.caption,
+                            color = MiuixTheme.colorScheme.primary,
+                        )
+                    }
+                }
+                if (stats.recentSessions.size > 8) {
+                    Text(
+                        "只显示最近 8 条，完整记录仍在每日统计里。",
+                        fontSize = UiDimens.captionSmall,
+                        color = tertiaryTextColor(),
+                    )
                 }
             }
         }

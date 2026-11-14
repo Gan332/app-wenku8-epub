@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.stringPreferencesKey
+import com.example.hyperreader.model.ReadingSession
 import com.example.hyperreader.model.ReadingStats
 import java.time.Instant
 import java.time.ZoneId
@@ -32,6 +33,10 @@ class ReadingStatsRepository(context: Context) {
             val daily = current.dailySeconds.toMutableMap().apply { this[day] = (this[day] ?: 0L) + seconds }
             val book = current.bookSeconds.toMutableMap().apply { this[bookId] = (this[bookId] ?: 0L) + seconds }
             val titles = current.bookTitles.toMutableMap().apply { if (bookTitle.isNotBlank()) this[bookId] = bookTitle }
+            val sessions = appendReadingSession(
+                current.recentSessions,
+                ReadingSession(bookId = bookId, title = bookTitle, seconds = seconds, endedAt = now),
+            )
             // todaySeconds / currentStreak 是派生值，**不在这里预存**：
             // 存下来就会停在写入那一刻，直到下次阅读才刷新（见 withCurrentDay 的说明）。
             val updated = current.copy(
@@ -41,6 +46,7 @@ class ReadingStatsRepository(context: Context) {
                 dailySeconds = daily,
                 bookSeconds = book,
                 bookTitles = titles,
+                recentSessions = sessions,
             )
             prefs[STATS] = json.encodeToString(ReadingStats.serializer(), updated)
         }

@@ -26,6 +26,8 @@ data class BookshelfEntry(
     val latestChapter: String = "",
     /** 最近一次检查的时间戳；用于跳过刚检查过的书。 */
     val lastCheckedAt: Long = 0L,
+    /** 用户自定义标签；由 `normalizeShelfTags` 去重、限长后写入。 */
+    val tags: List<String> = emptyList(),
 ) {
     /**
      * 未读新章节数。
@@ -53,4 +55,14 @@ data class ReadingStats(
     val dailySeconds: Map<String, Long> = emptyMap(),
     val bookSeconds: Map<String, Long> = emptyMap(),
     val bookTitles: Map<String, String> = emptyMap(),
+    /** 最近结束的阅读会话，仅供统计页展示；上限见 `MAX_RECENT_READING_SESSIONS`。 */
+    val recentSessions: List<ReadingSession> = emptyList(),
+)
+
+@Serializable
+data class ReadingSession(
+    val bookId: String,
+    val title: String = "",
+    val seconds: Long,
+    val endedAt: Long,
 )

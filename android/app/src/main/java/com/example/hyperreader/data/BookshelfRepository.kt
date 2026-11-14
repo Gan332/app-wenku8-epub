@@ -5,6 +5,8 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import com.example.hyperreader.model.BookshelfEntry
+import com.example.hyperreader.model.normalizeShelfTags
+import com.example.hyperreader.model.withShelfTag
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
@@ -38,6 +40,8 @@ class BookshelfRepository(context: Context) {
                 isPinned = old.isPinned,
                 lastReadAt = maxOf(old.lastReadAt, entry.lastReadAt),
                 addedAt = minOf(old.addedAt, entry.addedAt),
+                // 从探索页再次加入时保留用户已经打好的标签，不被空标签覆盖
+                tags = normalizeShelfTags(old.tags + entry.tags),
             )
         } else {
             current += entry
@@ -51,11 +55,38 @@ class BookshelfRepository(context: Context) {
 
     /** 整体替换书架（备份恢复用）。重复 id 只保留第一条。 */
     suspend fun replaceAll(entries: List<BookshelfEntry>) = data.edit { prefs ->
-        prefs[BOOKSHELF] = json.encodeToString(serializer, entries.distinctBy { it.id })
+        prefs[BOOKSHELF] = json.encodeToString(
+            serializer,
+            entries.distinctBy { it.id }.map { it.copy(tags = normalizeShelfTags(it.tags)) },
+        )
     }
 
     suspend fun setPinned(id: String, pinned: Boolean) = data.edit { prefs ->
         val next = decode(prefs[BOOKSHELF]).map { if (it.id == id) it.copy(isPinned = pinned) else it }
+        prefs[BOOKSHELF] = json.encodeToString(serializer, next)
+    }
+
+    /** 覆盖一本书的标签列表（标签页的开关与删除都走这里）。 */
+    suspend fun setTags(id: String, tags: List<String>) = data.edit { prefs ->
+        val next = decode(prefs[BOOKSHELF]).map {
+            if (it.id == id) it.copy(tags = normalizeShelfTags(tags)) else it
+        }
+        prefs[BOOKSHELF] = json.encodeToString(serializer, next)
+    }
+
+    /** 给一本书加标签；已存在时按规范化后的写法保留第一个。 */
+    suspend fun addTag(id: String, tag: String) = data.edit { prefs ->
+        val next = decode(prefs[BOOKSHELF]).map {
+            if (it.id == id) it.withShelfTag(tag, enabled = true) else it
+        }
+        prefs[BOOKSHELF] = json.encodeToString(serializer, next)
+    }
+
+    /** 从一本书移除标签（大小写不敏感）。 */
+    suspend fun removeTag(id: String, tag: String) = data.edit { prefs ->
+        val next = decode(prefs[BOOKSHELF]).map {
+            if (it.id == id) it.withShelfTag(tag, enabled = false) else it
+        }
         prefs[BOOKSHELF] = json.encodeToString(serializer, next)
     }
 

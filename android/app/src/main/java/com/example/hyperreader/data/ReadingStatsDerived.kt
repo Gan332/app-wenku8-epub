@@ -1,7 +1,11 @@
 package com.example.hyperreader.data
 
 import com.example.hyperreader.model.ReadingStats
+import com.example.hyperreader.model.ReadingSession
 import java.time.LocalDate
+
+/** 阅读统计页最多保留的最近阅读会话数；超出后丢弃最旧的记录。 */
+const val MAX_RECENT_READING_SESSIONS = 200
 
 /**
  * 阅读统计的派生字段重算（纯函数，可单测）。
@@ -86,4 +90,19 @@ internal fun goalStreakEndingAt(
         cursor = cursor.minusDays(1)
     }
     return count
+}
+
+/**
+ * 追加一条阅读会话并保留最近 [limit] 条。
+ *
+ * 纯函数：统计页只展示尾部，存储层不应无限增长——每读一章都写一次，
+ * 一年下来会变成几千条 JSON。
+ */
+internal fun appendReadingSession(
+    sessions: List<ReadingSession>,
+    session: ReadingSession,
+    limit: Int = MAX_RECENT_READING_SESSIONS,
+): List<ReadingSession> {
+    if (limit <= 0) return emptyList()
+    return (sessions + session).takeLast(limit)
 }

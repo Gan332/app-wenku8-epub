@@ -204,6 +204,11 @@ OkHttp 现在显式发 `gzip, deflate`，公开页不再需要先做验证。
 - `preferencesDataStore(name = "wenku8_settings")` 全项目只有一个实例，位于 `data/AppDataStore.kt`
 - 阅读统计只在阅读器前台 `onStart` 到 `onStop` 之间累计，单次最长 30 分钟
 - 书架条目按 `id`/`bookId` 去重
+- 书架标签存在 `BookshelfEntry.tags`，规范化统一走 `model/ShelfTags.kt`
+  （去 `#`、合并空白、大小写不敏感去重、单本最多 8 个且每个 16 字）；
+  标签筛选只影响列表呈现，不改变排序、分组与置顶
+- 阅读统计的 `recentSessions` 只保留最近 200 条（`MAX_RECENT_READING_SESSIONS`），
+  仅用于统计页「最近阅读」；旧版 JSON 缺字段时按默认值解码，不要写迁移代码
 
 ### 4.4 Compose 约定
 
@@ -521,6 +526,14 @@ npm start         # 或 npm run dev（--watch），http://127.0.0.1:3210
 - 推送到 `main`（含 PR）：Rust 测试（`cargo test`）+ Kotlin 单元测试 + debug APK + 有签名 Secrets 时的 release APK + 上传 Artifact
 - 推送 `v*` 标签：额外附加 APK 到 Release
 
+其它门禁工作流按路径分工，避免改文档或网页也跑 Android 构建：
+
+- `web-verify.yml`：`src/`、`public/`、`test/`、`relay/`、`scripts/**/*.js`、`server.js`
+  或 npm 清单变动时执行 `npm ci && npm run verify`
+- `actionlint.yml`：workflow 文件变动时校验 YAML
+- `dependency-review.yml`：PR 中拦截高危漏洞依赖
+- `dependabot-auto-merge.yml`：Dependabot 自动合并，见 §5.6
+
 ### 5.3 提交后必须跟踪 CI
 
 推送后用 `gh` 跟踪，失败时读取失败日志并修复：
@@ -549,6 +562,8 @@ npm start         # 或 npm run dev（--watch），http://127.0.0.1:3210
 - 搜索结果与登录页识别
 - 探索 URL 和阅读统计序列化
 - EPUB mimetype、OPF 与阅读器回读
+- 书架标签规范化、筛选与批量添加（`ShelfTagsTest`）
+- 阅读会话保留上限、旧 JSON 兼容与序列化往返（`ReadingSessionTest`）
 
 新增解析逻辑时，必须同时新增测试夹具。
 
@@ -591,8 +606,12 @@ Gradle；`build.gradle.kts` 读的是**文件路径**，不是 base64。
   minor + patch 按生态分组以减少 PR/CI 次数；major 不分组，单独开 PR。
 - `.github/workflows/dependabot-auto-merge.yml` 是自动合并 bot：
   `pull_request_target` 下只调用 `gh` 与 `dependabot/fetch-metadata`（**不 checkout、
-  不执行 PR 里的代码**），先等该 PR head 的 `android-apk.yml` 整条运行成功，
-  再 `gh pr merge --squash`；major 只打 `major-update` 标签，不自动合并。
+  不执行 PR 里的代码**）。它先等该 PR head SHA 的 `dependency-review.yml` 通过，
+  再按生态等待对应 CI：npm → `web-verify.yml`、github_actions → `actionlint.yml`、
+  gradle/cargo → `android-apk.yml`；全部成功后 `gh pr merge --squash`。
+  major 只打 `major-update` 标签，不自动合并；`do-not-merge` 标签可跳过。
+- `android-apk.yml` 用 `paths-ignore` 跳过纯文档/网页改动，npm 依赖 PR 不再触发
+  APK 构建；`web-verify.yml` 也只是 `npm run verify`，两者不要合并成一个大工作流。
 - **不要给 `main` 加要求 PR 的 branch protection**：仓库推送走 Git Database API
   直接更新 ref，保护规则会把推送挡掉。自动合并的安全性由 bot 等待 CI 成功保证，
   不依赖 required checks。
