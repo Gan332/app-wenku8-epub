@@ -2,7 +2,9 @@ package com.example.hyperreader
 
 import com.example.hyperreader.model.BookshelfEntry
 import com.example.hyperreader.ui.BookshelfGroup
+import com.example.hyperreader.ui.ShelfQuickFilter
 import com.example.hyperreader.ui.groupBookshelf
+import com.example.hyperreader.ui.matchesQuickFilter
 import com.example.hyperreader.ui.title
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
