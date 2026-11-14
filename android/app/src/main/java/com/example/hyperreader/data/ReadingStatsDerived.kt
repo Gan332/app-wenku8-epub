@@ -46,3 +46,44 @@ internal fun streakEndingAt(days: Set<String>, today: LocalDate): Int {
     }
     return count
 }
+
+/**
+ * 最近 [days] 天（含今天）的阅读秒数。
+ *
+ * 用于统计页「近 7 天 / 近 30 天」汇总；只按日期键累加，不改动存储。
+ */
+internal fun readingSecondsInLastDays(
+    dailySeconds: Map<String, Long>,
+    today: LocalDate,
+    days: Int,
+): Long {
+    if (days <= 0) return 0L
+    return (0 until days).sumOf { offset ->
+        dailySeconds[today.minusDays(offset.toLong()).toString()] ?: 0L
+    }
+}
+
+/**
+ * 连续达成每日目标的天数。
+ *
+ * 口径与 [streakEndingAt] 一致：今天还没达标不算断，从昨天往前数；
+ * 今天和昨天都没达标就是 0。`goalMinutes <= 0`（未设置目标）恒为 0。
+ */
+internal fun goalStreakEndingAt(
+    dailySeconds: Map<String, Long>,
+    goalMinutes: Int,
+    today: LocalDate,
+): Int {
+    if (goalMinutes <= 0) return 0
+    val goalSeconds = goalMinutes * 60L
+    fun met(date: LocalDate): Boolean =
+        (dailySeconds[date.toString()] ?: 0L) >= goalSeconds
+
+    var cursor = if (met(today)) today else today.minusDays(1)
+    var count = 0
+    while (met(cursor)) {
+        count++
+        cursor = cursor.minusDays(1)
+    }
+    return count
+}

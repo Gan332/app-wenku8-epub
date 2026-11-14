@@ -3,6 +3,7 @@ package com.example.hyperreader
 import com.example.hyperreader.ui.HeatLevel
 import com.example.hyperreader.ui.HeatThresholds
 import com.example.hyperreader.ui.buildHeatGrid
+import com.example.hyperreader.ui.heatGridStart
 import com.example.hyperreader.ui.heatLevelFor
 import com.example.hyperreader.ui.heatThresholds
 import com.example.hyperreader.ui.MAX_HEAT_WEEKS
@@ -61,6 +62,36 @@ class ReadingHeatmapTest {
         assertEquals(1L, heatWeekRange(daily, today))
     }
 
+    @Test
+    fun weekRangeAlignsToMondayColumns() {
+        // 2026-10-05 是周一：只有当天记录时不应额外多出一列。
+        val today = LocalDate.of(2026, 10, 5)
+        val daily = mapOf("2026-10-05" to 600L)
+        assertEquals(1L, heatWeekRange(daily, today))
+        assertEquals(today, heatGridStart(today, 1L))
+    }
+
+    @Test
+    fun weekRangeCoversPreviousWeekWhenEarliestIsSunday() {
+        // 周一当天、最早记录在昨天（周日）→ 必须覆盖上一整周 + 本周。
+        val today = LocalDate.of(2026, 10, 5)
+        val daily = mapOf("2026-10-04" to 600L)
+        assertEquals(2L, heatWeekRange(daily, today))
+        val start = heatGridStart(today, 2L)
+        assertEquals(LocalDate.of(2026, 9, 28), start)
+        val grid = buildHeatGrid(start, today, daily)
+        assertEquals(2, grid.weeks.size)
+        assertTrue(grid.weeks.any { week -> week.any { it?.date == LocalDate.of(2026, 10, 4) } })
+    }
+
+    @Test
+    fun gridColumnsMatchResolvedWeeks() {
+        val today = LocalDate.of(2026, 10, 5)
+        val start = heatGridStart(today, 13L)
+        val grid = buildHeatGrid(start, today, emptyMap())
+        assertEquals(13, grid.weeks.size)
+    }
+
     // —— 分位数 ——
 
     @Test
@@ -105,6 +136,14 @@ class ReadingHeatmapTest {
         val t = heatThresholds(emptyMap())
         assertTrue("无记录时应为空阈值", t.isEmpty)
         assertEquals(0, t.top)
+    }
+
+    @Test
+    fun subMinuteRecordsStillGetAVisibleThreshold() {
+        // 1–59 秒不能被整除成 0 后当作「无记录」丢掉。
+        val t = heatThresholds(mapOf("2026-10-01" to 30L))
+        assertEquals(HeatThresholds(1, 1, 1), t)
+        assertEquals(HeatLevel.One, heatLevelFor(30L, t))
     }
 
     @Test

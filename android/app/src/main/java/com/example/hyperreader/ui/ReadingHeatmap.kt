@@ -30,7 +30,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
@@ -46,8 +45,9 @@ import java.time.Month
 import java.time.YearMonth
 import java.time.format.TextStyle as JavaTextStyle
 import java.time.temporal.ChronoUnit
+import java.time.temporal.TemporalAdjusters
 import java.util.Locale
-import kotlin.math.roundToInt
+import kotlinx.coroutines.delay
 
 /**
  * 阅读热力图（参考 LNR `HeatMapCalendar` + `Levels.kt`）。
@@ -112,9 +112,12 @@ fun quickSelectMinutes(sortedNonZeroMinutes: List<Int>, fraction: Double): Int {
  * 只有非零日期参与分位：大量「没读的日子」会把阈值压到 0，整张图退化成全空档。
  */
 fun heatThresholds(dailySeconds: Map<String, Long>): HeatThresholds {
-    // 先换算成分钟再剔除 0：先按秒过滤会让 1–59 秒的记录通过「非零」检查，却在整除后
-    // 变成 0 分钟并参与分位，把 low 阈值拖到 0，图例就会显示「0 分钟」。
-    val nonZero = dailySeconds.values.map { (it / 60).toInt() }.filter { it > 0 }.sorted()
+    // 先剔除 0 秒，再把不足 1 分钟的记录按 1 分钟计：这样 1–59 秒的记录仍会出现在
+    // 热力图上（One 档），而不是因为整除后变成 0 被当作「无记录」。
+    val nonZero = dailySeconds.values
+        .filter { it > 0 }
+        .map { (it / 60).toInt().coerceAtLeast(1) }
+        .sorted()
     if (nonZero.isEmpty()) return HeatThresholds(0, 0, 0)
     return HeatThresholds(
         low = quickSelectMinutes(nonZero, 0.25),
@@ -236,6 +239,9 @@ const val MAX_HEAT_WEEKS = 52L
  *
  * 只看非零记录：0 秒的日子（打开过但没读）会把起点拉到很远，白白多出几十列空档。
  * 结果夹在 `1..[maxWeeks]`——没有任何记录时返回 1（网格仍是完整一周，只是全空）。
+ *
+ * 周数按**周一列**计算：先在日历上对齐到起点/今天所在周的周一，再算间隔。
+ * 否则跨周边界时（尤其是周一当天）会少算一列，导致网格比画布宽、最右列被裁掉。
  */
 fun heatWeekRange(
     dailySeconds: Map<String, Long>,
@@ -246,16 +252,50 @@ fun heatWeekRange(
         .filter { it.value > 0 }
         .mapNotNull { runCatching { LocalDate.parse(it.key) }.getOrNull() }
         .minOrNull() ?: return 1L
-    // 从「最早那天所在周的周一」算起，与 buildHeatGrid 的周对齐保持一致。
-    val weeksApart = ChronoUnit.WEEKS.between(earliest, today)
+    val thisMonday = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+    val earliestMonday = earliest.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+    val weeksApart = ChronoUnit.WEEKS.between(earliestMonday, thisMonday)
     return (weeksApart + 1).coerceIn(1L, maxWeeks.coerceAtLeast(1L))
+}
+
+/**
+ * 指定周数时，网格第一列（周一）的日期。
+ *
+ * 与 [heatWeekRange] 共用「周一对齐」口径；`weeks = 1` 表示只画本周（周一到今天）。
+ */
+fun heatGridStart(today: LocalDate, weeks: Long): LocalDate {
+    val safeWeeks = weeks.coerceAtLeast(1L)
+    return today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+        .minusWeeks(safeWeeks - 1)
 }
 
 /** 网格区整体高度：月份标签行 + 7 行格子。 */
 private val GridHeight: Dp = MonthLabelHeight + CellSize * 7f + CellGap * 6f
 
 /** 网格内容宽度：[weeks] 列按固定格子宽排布。 */
-private fun gridContentWidth(weeks: Int): Dp = CellSize * weeks + CellGap * (weeks - 1)
+private fun gridContentWidth(weeks: Int): Dp {
+    val columns = weeks.coerceAtLeast(1)
+    return CellSize * columns + CellGap * (columns - 1)
+}
+
+/**
+ * 记住「今天」，跨过午夜后自动刷新。
+ *
+ * 设置页可能长时间停留；热力图与近 7/30 天汇总都依赖这个日期，
+ * 不能在进入页面时把 `LocalDate.now()` 冻住。
+ */
+@Composable
+internal fun rememberToday(): LocalDate {
+    var today by remember { mutableStateOf(LocalDate.now()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(60_000)
+            val now = LocalDate.now()
+            if (now != today) today = now
+        }
+    }
+    return today
+}
 
 /**
  * 阅读热力图。
@@ -272,29 +312,32 @@ fun ReadingHeatmap(
     weeks: Long = 0L,
     onSelectDate: ((LocalDate) -> Unit)? = null,
 ) {
-    val today = remember { LocalDate.now() }
+    val today = rememberToday()
     val resolvedWeeks = remember(dailySeconds, today, weeks) {
         if (weeks > 0) weeks else heatWeekRange(dailySeconds, today)
     }
-    val startDate = remember(today, resolvedWeeks) { today.minusWeeks(resolvedWeeks).plusDays(1) }
+    val startDate = remember(today, resolvedWeeks) { heatGridStart(today, resolvedWeeks) }
     val grid = remember(startDate, today, dailySeconds) { buildHeatGrid(startDate, today, dailySeconds) }
-    val thresholds = remember(dailySeconds) { heatThresholds(dailySeconds) }
+    // 色阶只看当前展示区间：更早的高强度记录不应该把最近一年的颜色压暗。
+    val visibleDailySeconds = remember(startDate, today, dailySeconds) {
+        dailySeconds.filterKeys { key ->
+            val date = runCatching { LocalDate.parse(key) }.getOrNull()
+            date != null && !date.isBefore(startDate) && !date.isAfter(today)
+        }
+    }
+    val thresholds = remember(visibleDailySeconds) { heatThresholds(visibleDailySeconds) }
     val colors = heatColorsFor()
     val measurer = rememberTextMeasurer()
     // 轴标签颜色在组合期取一次：DrawScope 内不是 @Composable，读不到 MiuixTheme。
     val labelColor = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.55f)
     var selected by remember { mutableStateOf<LocalDate?>(null) }
     val scrollState = rememberScrollState()
-    // 密度只能在组合期读：LocalDensity.current 是 @Composable，不能在 LaunchedEffect 协程里取。
-    val density = LocalDensity.current
 
     // 网格一进来就定位到最新一列：统计是回看「最近」的习惯，默认停在半年前没有意义。
-    // scrollTo 的单位是 px，故先按 LocalDensity 把「格子+间距」的 dp 换成 px 再定位。
-    // 取与 maxValue 的较大值：内容比视口窄时初值会被钳在 0，直接滚到末列起点会停住。
-    LaunchedEffect(grid) {
-        val pitchPx: Float = with(density) { (CellSize + CellGap).toPx() }
-        val lastColumnStart: Int = (pitchPx * (grid.weeks.size - 1)).roundToInt()
-        scrollState.scrollTo(maxOf(lastColumnStart, scrollState.maxValue))
+    // 以 `maxValue` 为 key：首帧横向滚动尚未测量时 maxValue=0，等布局完成后 effect 会重跑，
+    // 否则 scrollTo 会被钳在 0，用户实际看到的是最旧的一周（热力图「不动」的根因）。
+    LaunchedEffect(grid.weeks.size, scrollState.maxValue) {
+        scrollState.scrollTo(scrollState.maxValue)
     }
 
     // 入场淡入；系统「移除动画」时 duration 为 0，直接显示（AGENTS §4.4）。
@@ -308,7 +351,7 @@ fun ReadingHeatmap(
     )
 
     Column(modifier.fillMaxWidth()) {
-        // 列数固定（约半年），格子宽度不压缩——压缩到窄屏上会小到点不中。
+        // 列数由范围决定（自动/13/26/52 周），格子宽度不压缩——压缩到窄屏上会小到点不中。
         // 因此左侧周内标签固定不动，网格横向滚动（同 GitHub 贡献图的做法）。
         Row(Modifier.fillMaxWidth().height(GridHeight)) {
             Canvas(Modifier.size(SideLabelWidth, GridHeight)) {
@@ -329,7 +372,7 @@ fun ReadingHeatmap(
             // 绘制与点击共用一个 Canvas：命中测试的尺寸换算与绘制用的是同一组 dp，保证所见即所点。
             Canvas(
                 Modifier
-                    .width(gridContentWidth(resolvedWeeks.toInt()))
+                    .width(gridContentWidth(grid.weeks.size))
                     .height(GridHeight)
                     .horizontalScroll(scrollState)
                     .pointerInput(grid) {

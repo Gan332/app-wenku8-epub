@@ -1,5 +1,7 @@
 package com.example.hyperreader
 
+import com.example.hyperreader.data.goalStreakEndingAt
+import com.example.hyperreader.data.readingSecondsInLastDays
 import com.example.hyperreader.data.streakEndingAt
 import com.example.hyperreader.data.withCurrentDay
 import com.example.hyperreader.model.ReadingStats
@@ -164,5 +166,55 @@ class ReadingStatsDerivedTest {
         assertEquals(2, streakEndingAt(setOf("2026-03-01", "2026-02-28"), today))
         // 今天没读、昨天也没读 → 0
         assertEquals(0, streakEndingAt(setOf("2026-02-28"), today))
+    }
+
+    // ---- 近 7/30 天汇总 ----
+
+    @Test
+    fun recentReadingSecondsIncludesTodayAndExcludesOlderDays() {
+        val today = LocalDate.of(2026, 3, 2)
+        val daily = mapOf(
+            "2026-03-02" to 60L,
+            "2026-03-01" to 30L,
+            "2026-02-24" to 10L, // 近 7 天窗口内（2/24..3/2）
+            "2026-02-23" to 99L, // 窗口外
+        )
+        // 近 7 天 = 2/24..3/2，包含 2/24 的 10 秒
+        assertEquals(100L, readingSecondsInLastDays(daily, today, 7))
+        // 近 30 天包含全部
+        assertEquals(199L, readingSecondsInLastDays(daily, today, 30))
+        assertEquals(0L, readingSecondsInLastDays(daily, today, 0))
+    }
+
+    // ---- 每日目标连续达成 ----
+
+    @Test
+    fun goalStreakCountsDaysMeetingTheGoal() {
+        val today = LocalDate.of(2026, 3, 2)
+        val daily = mapOf(
+            "2026-03-02" to 1800L, // 30 分
+            "2026-03-01" to 1800L,
+            "2026-02-28" to 600L, // 未达标，断在这里
+        )
+        assertEquals(2, goalStreakEndingAt(daily, 30, today))
+    }
+
+    @Test
+    fun goalStreakKeepsYesterdayStreakWhileTodayInProgress() {
+        val today = LocalDate.of(2026, 3, 2)
+        val daily = mapOf(
+            "2026-03-02" to 60L,
+            "2026-03-01" to 1800L,
+            "2026-02-28" to 1800L,
+        )
+        assertEquals(2, goalStreakEndingAt(daily, 30, today))
+    }
+
+    @Test
+    fun goalStreakIsZeroWhenGoalDisabledOrBothDaysMissed() {
+        val today = LocalDate.of(2026, 3, 2)
+        val daily = mapOf("2026-03-01" to 1800L)
+        assertEquals(0, goalStreakEndingAt(daily, 0, today))
+        assertEquals(0, goalStreakEndingAt(mapOf("2026-02-28" to 1800L), 30, today))
     }
 }
