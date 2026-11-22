@@ -127,6 +127,7 @@ class ExploreFeedTest {
 
         val secondBatch = ExploreFeed.missingIds(publicPage, ids, catalog, cache.snapshot(), limit = 20)
         assertEquals("第二轮必须从第 21 本继续，而不是重新补前 20 本", (21..25).map { it.toString() }, secondBatch)
+        secondBatch.forEach { id -> cache.put(book(id, "远程 $id")) }
 
         val merged = ExploreFeed.mergeCards(ids, catalog, cache.snapshot())
         assertEquals(ids, merged.map { it.id })
