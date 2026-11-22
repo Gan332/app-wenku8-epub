@@ -19,7 +19,9 @@ import com.example.hyperreader.service.ExportJobManager
 import com.example.hyperreader.data.BookshelfRepository
 import com.example.hyperreader.data.ReadingStatsRepository
 import com.example.hyperreader.core.ExploreRepository
+import com.example.hyperreader.core.ExplorePublicSource
 import com.example.hyperreader.core.Wenku8DataSource
+import com.example.hyperreader.core.Wenku8HttpClient
 import com.example.hyperreader.settings.SettingsRepository
 import com.example.hyperreader.ui.toSearchBook
 import java.io.File
@@ -66,7 +68,17 @@ class Wenku8Application : Application() {
         com.example.hyperreader.reader.BookmarkCenterRepository(this)
     }
     val readingStatsRepository: ReadingStatsRepository by lazy { ReadingStatsRepository(this) }
-    val exploreRepository: ExploreRepository by lazy { ExploreRepository(Wenku8DataSource(jobManager.httpClient(), sessionStore)) }
+    /**
+     * 探索页的公开榜使用独立的**无会话**客户端：只带 `cf_clearance`，不沿用会话 Cookie。
+     * 登录墙内的 `toplist.php` 仍走 [Wenku8DataSource] 与用户自己的会话。
+     */
+    val exploreRepository: ExploreRepository by lazy {
+        val publicClient = Wenku8HttpClient(File(cacheDir, "wenku8-explore"), sessionStore.clearanceCookieJar())
+        ExploreRepository(
+            dataSource = Wenku8DataSource(jobManager.httpClient(), sessionStore),
+            publicSource = ExplorePublicSource(publicClient),
+        )
+    }
 
     /**
      * wenku8 书源（LNR 书源体系的本工程落地）。

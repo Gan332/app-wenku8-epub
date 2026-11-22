@@ -36,6 +36,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.hyperreader.core.Wenku8Endpoint
 import com.example.hyperreader.BuildConfig
+import com.example.hyperreader.MessageCard
 import com.example.hyperreader.settings.AppThemeMode
 import com.example.hyperreader.settings.AppThemeSettings
 import com.example.hyperreader.settings.DirectEntry
@@ -918,6 +919,7 @@ private fun CatalogSection(state: StudioUiState, viewModel: StudioViewModel, onI
         {
             TextButton(text = "清空本地书目", onClick = viewModel::clearCatalog, modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin))
         },
+        { state.catalogMessage?.let { message -> MessageCard(message) } },
         { SectionTitle("缓存") },
         {
             StudioPanel("封面与插图") {
