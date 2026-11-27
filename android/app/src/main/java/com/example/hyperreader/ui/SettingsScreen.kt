@@ -44,6 +44,7 @@ import com.example.hyperreader.settings.DirectEntry
 import com.example.hyperreader.settings.OnlineSource
 import com.example.hyperreader.settings.ReaderBackground
 import com.example.hyperreader.settings.ReaderPageTurnMode
+import com.example.hyperreader.settings.ThemePresets
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.ColorPicker
@@ -668,6 +669,18 @@ private fun RelaySettings(viewModel: StudioViewModel) {
 private fun AppearanceSection(viewModel: StudioViewModel) {
     val theme by viewModel.appTheme.collectAsStateWithLifecycle(initialValue = AppThemeSettings())
     SettingsScaffold("主题与外观", viewModel::backSettings, listOf(
+        { SectionTitle("快捷主题") },
+        {
+            PreferencePanel {
+                RadioButtonPreference(
+                    title = "HyperOS 经典蓝白",
+                    summary = "浅色底 + HyperOS 蓝强调色，不跟随系统动态色",
+                    selected = theme == ThemePresets.HYPEROS_BLUE_WHITE,
+                    onClick = { viewModel.applyThemePreset(ThemePresets.HYPEROS_BLUE_WHITE) },
+                    insideMargin = PreferenceRowMargin,
+                )
+            }
+        },
         { SectionTitle("配色模式") },
         {
             PreferencePanel {
@@ -695,7 +708,7 @@ private fun AppearanceSection(viewModel: StudioViewModel) {
         { SectionTitle("强调色") },
         {
             Row(horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceM)) {
-                listOf(0xFFA34B2F.toInt(), 0xFF2D6A4F.toInt(), 0xFF2563EB.toInt(), 0xFF7C3AED.toInt(), 0xFF111827.toInt()).forEach { color ->
+                listOf(0xFFA34B2F.toInt(), 0xFF2D6A4F.toInt(), ThemePresets.HYPEROS_BLUE, 0xFF7C3AED.toInt(), 0xFF111827.toInt()).forEach { color ->
                     ColorSwatch(
                         color = color,
                         selected = theme.accentColor == color,

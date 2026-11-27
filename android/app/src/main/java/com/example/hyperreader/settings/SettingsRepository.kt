@@ -129,6 +129,13 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setThemeMode(mode: AppThemeMode) = edit { it[THEME_MODE] = mode.name }
 
+    /** 一次性应用主题预设：模式、动态色与强调色同一笔写入，避免三次写入之间的中间态闪烁。 */
+    suspend fun applyTheme(preset: AppThemeSettings) = edit {
+        it[THEME_MODE] = preset.mode.name
+        it[USE_DYNAMIC_COLOR] = preset.useDynamicColor
+        it[ACCENT_COLOR] = preset.accentColor
+    }
+
     /** 切换 EPUB 导出引擎；只影响之后创建的导出任务。 */
     suspend fun setExportEngine(engine: EpubEngine) = edit { it[EXPORT_ENGINE] = engine.name }
 

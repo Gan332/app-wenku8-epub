@@ -559,7 +559,6 @@ private fun StudioApp(
                     state = state,
                     viewModel = viewModel,
                     listState = tabListState(StudioTab.EXPLORE),
-                    onLogin = onLogin,
                     onGoToCatalog = {
                         viewModel.setTab(StudioTab.SETTINGS)
                         viewModel.openSettingsSection(SettingsSection.CATALOG)

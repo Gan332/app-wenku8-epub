@@ -1700,6 +1700,11 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     fun searchBooks() {
         val current = state.value
         if (current.searchQuery.isBlank()) return
+        // 未登录不再被登录墙挡住：直接用书源的本地书目索引搜索。
+        if (!app.sessionStore.hasSession()) {
+            searchLocalCatalog(current)
+            return
+        }
         val requestId = ++searchRequestId
         mutable.update {
             it.copy(
@@ -1720,23 +1725,71 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
                 }
                 .onFailure { error ->
                     if (SearchPager.isCurrent(requestId, searchRequestId)) {
-                        mutable.update { state ->
-                            state.copy(
-                                searchBusy = false,
-                                searchLoadingMore = false,
-                                searchMessage = error.message ?: "搜索失败。",
-                                loggedIn = app.sessionStore.hasSession(),
-                            )
+                        if ((error as? Wenku8Exception)?.code == "AUTH_REQUIRED") {
+                            // 会话过期：退回本地书目，保证搜索仍然可用。
+                            refreshSession()
+                            searchLocalCatalog(current)
+                        } else {
+                            mutable.update { state ->
+                                state.copy(
+                                    searchBusy = false,
+                                    searchLoadingMore = false,
+                                    searchMessage = error.message ?: "搜索失败。",
+                                    loggedIn = app.sessionStore.hasSession(),
+                                )
+                            }
                         }
-                        if ((error as? Wenku8Exception)?.code == "AUTH_REQUIRED") refreshSession()
                     }
                 }
+        }
+    }
+
+    /**
+     * 免登录搜索：查询本地书目索引（由书源公开页抓取），不触碰登录墙内的 `search.php`。
+     * 本地结果一次返回，不再分页。
+     */
+    private fun searchLocalCatalog(current: StudioUiState) {
+        val query = current.searchQuery.trim()
+        if (query.isEmpty()) return
+        val requestId = ++searchRequestId
+        val field = if (current.searchField == SearchField.AUTHOR) CatalogSearchField.AUTHOR else CatalogSearchField.TITLE
+        mutable.update {
+            it.copy(
+                searchBusy = true,
+                searchLoadingMore = false,
+                searchHasNextPage = false,
+                searchPage = 0,
+                searchMessage = null,
+            )
+        }
+        viewModelScope.launch {
+            val results = withContext(Dispatchers.Default) { catalogRepository.search(query, field) }
+            if (!SearchPager.isCurrent(requestId, searchRequestId)) return@launch
+            val books = results.map { it.toSearchBook() }
+            mutable.update {
+                it.copy(
+                    searchBusy = false,
+                    searchResults = books,
+                    searchPage = 1,
+                    searchHasNextPage = false,
+                    searchLoadingMore = false,
+                    searchMessage = if (books.isEmpty() && it.catalogSize == 0) {
+                        "本地书目为空，请到「设置 → 书目缓存」更新后再搜索。"
+                    } else {
+                        null
+                    },
+                    loggedIn = app.sessionStore.hasSession(),
+                )
+            }
+            if (books.isNotEmpty()) settingsRepository.recordSearch(query)
         }
     }
 
     fun loadMoreSearchResults() {
         val current = state.value
         if (current.searchQuery.isBlank() || current.searchBusy || current.searchLoadingMore || !current.searchHasNextPage) return
+        // 本地搜索一次返回全部结果，没有“下一页”；未登录时不需要再打站内搜索。
+        if (!app.sessionStore.hasSession()) return
         val requestId = ++searchRequestId
         val nextPage = current.searchPage + 1
         mutable.update { it.copy(searchLoadingMore = true, searchMessage = null) }
@@ -1749,14 +1802,18 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
                 }
                 .onFailure { error ->
                     if (SearchPager.isCurrent(requestId, searchRequestId)) {
-                        mutable.update { state ->
-                            state.copy(
-                                searchLoadingMore = false,
-                                searchMessage = error.message ?: "加载更多失败。",
-                                loggedIn = app.sessionStore.hasSession(),
-                            )
+                        if ((error as? Wenku8Exception)?.code == "AUTH_REQUIRED") {
+                            refreshSession()
+                            searchLocalCatalog(state.value)
+                        } else {
+                            mutable.update { state ->
+                                state.copy(
+                                    searchLoadingMore = false,
+                                    searchMessage = error.message ?: "加载更多失败。",
+                                    loggedIn = app.sessionStore.hasSession(),
+                                )
+                            }
                         }
-                        if ((error as? Wenku8Exception)?.code == "AUTH_REQUIRED") refreshSession()
                     }
                 }
         }
@@ -1850,6 +1907,9 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     fun setThemeMode(mode: com.example.hyperreader.settings.AppThemeMode) { viewModelScope.launch { settingsRepository.setThemeMode(mode) } }
     fun setDynamicColor(enabled: Boolean) { viewModelScope.launch { settingsRepository.setDynamicColor(enabled) } }
     fun setAccentColor(color: Int) { viewModelScope.launch { settingsRepository.setAccentColor(color) } }
+    fun applyThemePreset(preset: com.example.hyperreader.settings.AppThemeSettings) {
+        viewModelScope.launch { settingsRepository.applyTheme(preset) }
+    }
 
     // 阅读器设置：与阅读器共用同一 DataStore，改动实时生效
     fun setReaderFontSize(value: Float) { viewModelScope.launch { settingsRepository.setReaderFontSize(value) } }

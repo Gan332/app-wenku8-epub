@@ -50,6 +50,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.example.hyperreader.MessageCard
+import com.example.hyperreader.core.ExploreFeed
 import com.example.hyperreader.core.ExplorePage
 import com.example.hyperreader.model.SearchBook
 import com.example.hyperreader.ui.cover.CoverImage
@@ -74,14 +75,13 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
  * 视觉结构：主视觉搜索入口 → 本地索引状态 → 榜单标签 → 带序号的封面轨道。
  * 封面尺寸与间距按 UiDimens 的探索令牌，不复制 LNR 的 Material 卡片参数。
  *
- * 数据来源与合规边界不变：年度/月度榜单走匿名公开页，排行榜与官方标签走用户本人会话
- * （AGENTS §4.2 / §4.5.2）。
+ * 数据来源与合规边界不变：年度/月度榜单走匿名公开页；登录墙内的排行榜只对已登录用户展示，
+ * 匿名用户看不到「点了就要求登录」的 tab（AGENTS §4.2 / §4.5.2）。
  */
 @Composable
 fun ExploreScreen(
     state: StudioUiState,
     viewModel: StudioViewModel,
-    onLogin: () -> Unit,
     onGoToCatalog: () -> Unit,
     onOpenSearch: () -> Unit,
     /**
@@ -92,6 +92,10 @@ fun ExploreScreen(
 ) {
     // 进入探索页即自动抓取公开榜（AGENTS §4.5）；只触发一次，切回 tab 不重复请求。
     LaunchedEffect(Unit) { viewModel.ensureExploreLoaded() }
+    // 未登录时隐藏登录墙榜单，只展示书源的公开榜。
+    val visiblePages = remember(viewModel.explorePages, state.loggedIn) {
+        ExploreFeed.visiblePages(viewModel.explorePages, state.loggedIn)
+    }
     // 换页不重置滚动位置：榜单切换器就在页顶，强制回顶会把用户刚点的标签滚出视野；
     // 榜单变短时 LazyColumn 会自行夹紧滚动位置。
     // 下拉刷新：对应 LNR ExplorePage 的 PullToRefreshBox。MiuiX 0.9.4 自带 PullToRefresh，
@@ -118,16 +122,12 @@ fun ExploreScreen(
                     CatalogSectionCard(state = state, onGoToCatalog = onGoToCatalog)
                 }
 
-                if (!state.loggedIn) {
-                    item(key = "login-hint") { LoginHintCard(onLogin = onLogin) }
-                }
-
                 // 榜单切换用 TabRow（对应 LNR 的 PrimaryTabRow）。
                 // 形状差异：LNR 的 Material TabRow 用「下划线指示器」，MiuiX TabRow 用
                 // 「选中项胶囊高亮」且没有指示器插槽，本工程界面统一 MiuiX，故不复刻下划线；
                 // 行高取触摸下限 48dp（MiuiX 默认 42dp，LNR 的 Tab 是 48dp）。
                 item(key = "page-switcher") {
-                    val pages = viewModel.explorePages
+                    val pages = visiblePages
                     val selectedPageId = state.activeExplorePage?.id
                         ?: pages.firstOrNull { state.loggedIn || !it.requiresAuth }?.id
                     val selectedIndex = pages.indexOfFirst { it.id == selectedPageId }.coerceAtLeast(0)
@@ -165,7 +165,9 @@ fun ExploreScreen(
                 }
 
                 itemsIndexed(state.exploreRows, key = { index, row -> row.expandedPageId ?: "row-$index" }) { _, row ->
-                    val page = row.expandedPageId?.let { id -> viewModel.explorePages.firstOrNull { it.id == id } }
+                    val page = row.expandedPageId?.let { id ->
+                        visiblePages.firstOrNull { it.id == id }
+                    }
                         ?: state.activeExplorePage
                     ExploreRowSection(
                         title = row.title,
@@ -275,27 +277,6 @@ private fun ExploreTitleRow(onOpenSearch: () -> Unit) {
             Spacer(Modifier.size(UiDimens.spaceXS))
             Text("搜索")
         }
-    }
-}
-
-/** 未登录提示：榜单与官方标签需要会话，站内搜索同理（AGENTS §4.2）。 */
-@Composable
-private fun LoginHintCard(onLogin: () -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            "登录后可查看排行榜、站内搜索与官方标签",
-            modifier = Modifier.weight(1f),
-            fontSize = UiDimens.caption,
-            color = secondaryTextColor(),
-        )
-        TextButton(
-            text = "登录",
-            onClick = onLogin,
-            modifier = Modifier.heightIn(min = UiDimens.touchMin),
-        )
     }
 }
 

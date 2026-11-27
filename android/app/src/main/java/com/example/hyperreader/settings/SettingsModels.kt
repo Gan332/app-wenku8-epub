@@ -15,6 +15,22 @@ data class AppThemeSettings(
     val accentColor: Int = 0xFFA34B2F.toInt(),
 )
 
+/** 内置主题预设（设置 → 主题与外观）。 */
+object ThemePresets {
+    /** HyperOS 官方蓝强调色。 */
+    val HYPEROS_BLUE = 0xFF3482FF.toInt()
+
+    /**
+     * HyperOS 经典蓝白：浅色底 + 固定 HyperOS 蓝，不跟随系统动态色。
+     * 白底蓝点，贴近 HyperOS 默认观感。
+     */
+    val HYPEROS_BLUE_WHITE = AppThemeSettings(
+        mode = AppThemeMode.LIGHT,
+        useDynamicColor = false,
+        accentColor = HYPEROS_BLUE,
+    )
+}
+
 @Serializable
 data class ReaderSettings(
     val fontSizeSp: Float = 18f,

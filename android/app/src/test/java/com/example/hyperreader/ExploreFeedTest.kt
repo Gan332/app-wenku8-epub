@@ -67,6 +67,17 @@ class ExploreFeedTest {
     }
 
     @Test
+    fun anonymousUsersOnlySeePublicFeeds() {
+        val pages = ExploreFeed.pages(YearMonth.of(2026, 11))
+        val anonymous = ExploreFeed.visiblePages(pages, loggedIn = false)
+        val signedIn = ExploreFeed.visiblePages(pages, loggedIn = true)
+
+        assertTrue("未登录不应看到登录墙榜单", anonymous.none { it.requiresAuth })
+        assertEquals(8, anonymous.size)
+        assertEquals(12, signedIn.size)
+    }
+
+    @Test
     fun defaultPageIsLoadableForBothSessionStates() {
         val pages = ExploreFeed.pages(YearMonth.of(2026, 11))
         val anonymous = StudioViewModel.defaultExplorePage(pages, loggedIn = false)

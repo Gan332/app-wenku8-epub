@@ -59,6 +59,16 @@ object ExploreFeed {
     fun canLoad(page: ExplorePage, loggedIn: Boolean): Boolean = !page.requiresAuth || loggedIn
 
     /**
+     * 当前登录态下可展示的榜单。
+     *
+     * 未登录时**直接隐藏**登录墙榜单（`toplist.php`），只保留书源的公开榜
+     * （年度精选 / 月度新书）。这样匿名用户不会看到点了就提示登录的 tab，
+     * 探索页在无会话时依然完整可用。
+     */
+    fun visiblePages(pages: List<ExplorePage>, loggedIn: Boolean): List<ExplorePage> =
+        if (loggedIn) pages else pages.filter { !it.requiresAuth }
+
+    /**
      * 本页应该逐本补全的 ID：仅匿名公开榜且本地/榜单卡片都没有的条目。
      *
      * 登录墙榜单首屏已带完整卡片，不再逐本补；同一 ID 只补一次。
