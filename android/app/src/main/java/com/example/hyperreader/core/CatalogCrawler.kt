@@ -22,7 +22,11 @@ import kotlinx.serialization.json.Json
  * 这些由站点自行控制登录，应用不去规避。使用独立的无 Cookie 客户端，
  * 即使本地存在登录态也不携带任何 Cookie。
  */
-class CatalogCrawler(context: Context) {
+class CatalogCrawler(
+    context: Context,
+    /** 全链路书源；装配后公开页取数都从书源出，避免再建客户端。 */
+    private val sourceProvider: () -> Wenku8BookSource? = { null },
+) {
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
     private val mapSerializer = MapSerializer(String.serializer(), CatalogEntry.serializer())
     private val directory = File(context.filesDir, "catalog").apply { mkdirs() }
@@ -33,10 +37,12 @@ class CatalogCrawler(context: Context) {
      * 公开页客户端：**不携带会话 Cookie**，但携带 Cloudflare 的 `cf_clearance`
      * （人机验证通过凭证，不是账号凭据）——否则用户验证完了公开页仍然 403。
      */
-    private val http = Wenku8HttpClient(
-        File(context.cacheDir, "wenku8-catalog"),
-        (context.applicationContext as com.example.hyperreader.Wenku8Application).sessionStore.clearanceCookieJar(),
-    )
+    private val http by lazy {
+        Wenku8HttpClient(
+            File(context.cacheDir, "wenku8-catalog"),
+            (context.applicationContext as com.example.hyperreader.Wenku8Application).sessionStore.clearanceCookieJar(),
+        )
+    }
     private val jobId = "catalog"
 
     fun loadEntries(): MutableMap<String, CatalogEntry> {
@@ -177,7 +183,8 @@ class CatalogCrawler(context: Context) {
 
     /** 公开页抓取：失败可跳过，但协程取消必须继续传播。 */
     private suspend fun fetchOrNull(url: String, jobId: String): Wenku8HttpClient.TextResource? = try {
-        http.fetchText(url, jobId, Wenku8Urls.BASE)
+        sourceProvider()?.fetchPublicPage(url, jobId)
+            ?: http.fetchText(url, jobId, Wenku8Urls.BASE)
     } catch (cancelled: CancellationException) {
         throw cancelled
     } catch (_: Throwable) {

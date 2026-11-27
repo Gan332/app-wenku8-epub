@@ -2,9 +2,13 @@ package com.example.hyperreader.core
 
 import android.net.Uri
 import androidx.core.net.toUri
+import com.example.hyperreader.model.Book
+import com.example.hyperreader.model.BookIndex
 import com.example.hyperreader.model.Chapter
 import com.example.hyperreader.model.ContentBlock
+import com.example.hyperreader.model.ParsedChapter
 import com.example.hyperreader.model.SearchBook
+import com.example.hyperreader.model.SearchField
 import com.github.michaelbull.result.Err
 import com.github.michaelbull.result.get
 import com.github.michaelbull.result.Ok
@@ -36,6 +40,7 @@ import io.nightfish.lightnovelreader.api.web.search.SearchType
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
+import java.util.UUID
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -68,6 +73,8 @@ import kotlinx.coroutines.withContext
  */
 class Wenku8BookSource(
     private val http: Wenku8HttpClient,
+    /** 匿名公开页客户端：只带 `cf_clearance`，绝不携带会话 Cookie。 */
+    private val publicHttp: Wenku8HttpClient,
     private val session: SessionGate,
     /**
      * 本地书目索引查询（字段, 关键词）→ 命中书目。由宿主注入 `CatalogIndex`，
@@ -75,6 +82,17 @@ class Wenku8BookSource(
      */
     private val catalogSearch: suspend (String, String) -> List<SearchBook> = { _, _ -> emptyList() },
 ) : WebBookDataSource {
+
+    private val sessionSource = Wenku8DataSource(http, session)
+    private val publicSource = ExplorePublicSource(publicHttp)
+    private val detailSource = ExploreDetailRepository(publicHttp)
+    private val siteSearch = Wenku8SearchProvider(http, session)
+
+    /** 探索详情实现；宿主不再单独持有客户端。 */
+    val detailRepository: ExploreDetailRepository get() = detailSource
+
+    /** 站内搜索实现；语义与 [Wenku8SearchProvider] 完全一致。 */
+    val searchSiteProvider: Wenku8SearchProvider get() = siteSearch
 
     override val id: Identifier = Identifier(NAMESPACE, "Wenku8")
 
@@ -225,6 +243,91 @@ class Wenku8BookSource(
             )
         }
     }
+
+    // ---- 全链路数据入口 ----
+    //
+    // 探索、搜索、详情、导出、书目缓存都从书源取数：会话链路用 [http]，
+    // 匿名公开链路用 [publicHttp]。两者都经过同一个全局限流器，区别只在 Cookie。
+
+    /** 登录墙内榜单（toplist / tags）：走用户自己的会话。 */
+    suspend fun explore(page: ExplorePage): List<SearchBook> = sessionSource.explore(page)
+
+    /** 匿名公开榜单：只返回书籍 ID，卡片由本地索引与逐本补全提供。 */
+    suspend fun explorePublic(page: ExplorePage): List<String> = publicSource.load(page)
+
+    /** 匿名公开书籍卡片：`articleinfo.php`，只带 cf_clearance。 */
+    suspend fun loadPublicBook(bookId: String): SearchBook = publicSource.loadBook(bookId)
+
+    /** 官方标签列表（登录墙内）。 */
+    suspend fun officialTags(): List<String> = sessionSource.officialTags()
+
+    /** 单个官方标签下的书（登录墙内）。 */
+    suspend fun tagBooks(tag: String): List<SearchBook> = sessionSource.tagBooks(tag)
+
+    /** 站内搜索（`search.php`，登录墙内）。 */
+    suspend fun searchSite(
+        keyword: String,
+        field: SearchField,
+        page: Int = 1,
+    ): Wenku8Parser.SearchPageData = siteSearch.search(keyword, field, page)
+
+    /** 探索详情（公开 API，交互档）。 */
+    suspend fun loadDetail(
+        bookId: String,
+        fallback: ExploreBookSeed? = null,
+    ): ExploreBookDetail = detailSource.load(bookId, fallback)
+
+    suspend fun invalidateDetail(bookId: String) = detailSource.invalidate(bookId)
+
+    /** 导出链路：书籍详情（批量档）。 */
+    suspend fun parseBook(input: String): Book {
+        val requested = Wenku8Url.normalizeSource(input)
+        val ids = Wenku8Url.sourceIds(requested)
+        val url = if (ids.kind == SourceKind.index) {
+            "${Wenku8Urls.BASE}/book/${ids.bookId}.htm"
+        } else {
+            requested.toString()
+        }
+        val page = http.fetchText(url, "parse-${UUID.randomUUID()}")
+        return Wenku8Url.validateBook(
+            Wenku8Parser.parseBook(
+                page.html,
+                page.finalUrl,
+                if (ids.kind == SourceKind.index) requested.toString() else null,
+            ),
+        )
+    }
+
+    /** 导出链路：目录（批量档）。 */
+    suspend fun parseIndex(input: String): BookIndex {
+        var url = Wenku8Url.normalizeSource(input)
+        var ids = Wenku8Url.sourceIds(url)
+        if (ids.kind != SourceKind.index) {
+            val book = parseBook(input)
+            url = Wenku8Url.assertAllowed(
+                book.directoryUrl ?: throw Wenku8Exception("书籍页没有目录链接。", "INDEX_URL_REQUIRED"),
+            )
+            ids = Wenku8Url.sourceIds(url)
+        }
+        val page = http.fetchText(url.toString(), "parse-${UUID.randomUUID()}")
+        return Wenku8Parser.parseIndex(page.html, page.finalUrl, ids.bookId)
+    }
+
+    /** 导出链路：章节原文（批量档，jobId 用于取消）。 */
+    suspend fun fetchChapterPage(chapter: Chapter, jobId: String): Wenku8HttpClient.TextResource =
+        http.fetchText(chapter.url, jobId)
+
+    /** 导出链路：章节 HTML → 保留行内强调的 [ParsedChapter]。 */
+    fun parseChapterForExport(html: String, chapter: Chapter, finalUrl: String): ParsedChapter =
+        Wenku8Parser.parseChapter(html, chapter, finalUrl, preserveInlineFormat = true)
+
+    /** 书目缓存 / 作者扩展：匿名公开页（批量档）。 */
+    suspend fun fetchPublicPage(url: String, jobId: String): Wenku8HttpClient.TextResource =
+        publicSource.fetchText(url, jobId)
+
+    /** 书目缓存 / 作者扩展：匿名公开页（交互档）。 */
+    suspend fun fetchPublicPageInteractive(url: String, jobId: String): Wenku8HttpClient.TextResource =
+        publicSource.fetchTextInteractive(url, jobId)
 
     override val searchProvider: SearchProvider = Wenku8CatalogSearchProvider(catalogSearch)
 

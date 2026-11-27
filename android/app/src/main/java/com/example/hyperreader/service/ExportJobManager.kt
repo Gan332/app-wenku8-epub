@@ -3,6 +3,7 @@ package com.example.hyperreader.service
 import android.content.Context
 import android.net.Uri
 import com.example.hyperreader.core.SourceKind
+import com.example.hyperreader.core.Wenku8BookSource
 import com.example.hyperreader.core.Wenku8SessionStore
 import com.example.hyperreader.core.Wenku8Exception
 import com.example.hyperreader.core.Wenku8HttpClient
@@ -47,10 +48,21 @@ import java.text.Normalizer
 import java.time.Instant
 import java.util.UUID
 
-class ExportJobManager(private val context: Context, sessionStore: Wenku8SessionStore? = null) {
+class ExportJobManager(
+    private val context: Context,
+    sessionStore: Wenku8SessionStore? = null,
+    private val http: Wenku8HttpClient = Wenku8HttpClient(
+        File(context.cacheDir, "wenku8"),
+        sessionStore?.cookieJar(),
+    ),
+    /**
+     * 全链路书源。装配后解析与章节取数都从书源出；保留旧实现作为兜底，
+     * 让纯 JVM 测试可以不构造 Android 依赖。
+     */
+    private val sourceProvider: (() -> Wenku8BookSource)? = null,
+) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val repository = JobRepository(context.filesDir)
-    private val http = Wenku8HttpClient(File(context.cacheDir, "wenku8"), sessionStore?.cookieJar())
     private val fileStore = EpubFileStore(context)
     /** 导出引擎注册表：新增引擎只在这里补一项，任务流程不再关心具体实现。 */
     private val packagers: Map<EpubEngine, EpubPackager> = mapOf(
@@ -88,6 +100,11 @@ class ExportJobManager(private val context: Context, sessionStore: Wenku8Session
     }
 
     suspend fun parseBook(input: String): Book {
+        sourceProvider?.invoke()?.let { return it.parseBook(input) }
+        return parseBookLegacy(input)
+    }
+
+    private suspend fun parseBookLegacy(input: String): Book {
         val requested = Wenku8Url.normalizeSource(input)
         val ids = Wenku8Url.sourceIds(requested)
         val url = if (ids.kind == SourceKind.index) "https://www.wenku8.net/book/${ids.bookId}.htm" else requested.toString()
@@ -96,7 +113,12 @@ class ExportJobManager(private val context: Context, sessionStore: Wenku8Session
     }
 
     suspend fun parseSource(input: String): Pair<Book, BookIndex> {
-        val book = parseBook(input)
+        sourceProvider?.invoke()?.let { source ->
+            val book = source.parseBook(input)
+            val directory = book.directoryUrl ?: input
+            return book to source.parseIndex(directory)
+        }
+        val book = parseBookLegacy(input)
         val directory = book.directoryUrl ?: input
         val ids = Wenku8Url.sourceIds(Wenku8Url.assertAllowed(directory))
         val page = http.fetchText(directory, "parse-${UUID.randomUUID()}")
@@ -104,10 +126,15 @@ class ExportJobManager(private val context: Context, sessionStore: Wenku8Session
     }
 
     suspend fun parseIndex(input: String): BookIndex {
+        sourceProvider?.invoke()?.let { return it.parseIndex(input) }
+        return parseIndexLegacy(input)
+    }
+
+    private suspend fun parseIndexLegacy(input: String): BookIndex {
         var url = Wenku8Url.normalizeSource(input)
         var ids = Wenku8Url.sourceIds(url)
         if (ids.kind != SourceKind.index) {
-            val book = parseBook(input)
+            val book = parseBookLegacy(input)
             url = Wenku8Url.assertAllowed(book.directoryUrl ?: throw Wenku8Exception("书籍页没有目录链接。", "INDEX_URL_REQUIRED"))
             ids = Wenku8Url.sourceIds(url)
         }
@@ -206,14 +233,18 @@ class ExportJobManager(private val context: Context, sessionStore: Wenku8Session
                 job = job.copy(progress = job.progress.copy(phase = JobPhase.fetching, percent = (baseline * 94).toInt(), completed = completed, currentTitle = chapter.title, message = "正在下载：${chapter.title}", cacheHits = cacheHits))
                 update(job)
                 try {
+                    val source = sourceProvider?.invoke()
                     // 缓存命中直接解析缓存原文；未命中走网络，成功后存**原始 HTML**
                     //（存 raw 而非解析结果：解析逻辑升级后缓存依然有效）。
                     val parsedChapter = cache.page(chapter.url)?.let { cachedHtml ->
                         cacheHits++
-                        Wenku8Parser.parseChapter(cachedHtml, chapter, chapter.url, preserveInlineFormat = true)
+                        source?.parseChapterForExport(cachedHtml, chapter, chapter.url)
+                            ?: Wenku8Parser.parseChapter(cachedHtml, chapter, chapter.url, preserveInlineFormat = true)
                     } ?: run {
-                        val page = http.fetchText(chapter.url, job.id)
-                        val fresh = Wenku8Parser.parseChapter(page.html, chapter, page.finalUrl, preserveInlineFormat = true)
+                        val page = source?.fetchChapterPage(chapter, job.id)
+                            ?: http.fetchText(chapter.url, job.id)
+                        val fresh = source?.parseChapterForExport(page.html, chapter, page.finalUrl)
+                            ?: Wenku8Parser.parseChapter(page.html, chapter, page.finalUrl, preserveInlineFormat = true)
                         cache.putPage(chapter.url, page.html)
                         fresh
                     }

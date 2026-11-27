@@ -28,12 +28,19 @@ data class CatalogState(
  * 免登录书目仓库：协调抓取、持久化与内存索引。
  * 使用独立的无**会话** Cookie 客户端（只可能携带 cf_clearance 人机验证凭证）。
  */
-class CatalogRepository(private val context: Context) {
-    private val crawler = CatalogCrawler(context)
-    private val http = Wenku8HttpClient(
-        File(context.cacheDir, "wenku8-catalog"),
-        (context.applicationContext as com.example.hyperreader.Wenku8Application).sessionStore.clearanceCookieJar(),
-    )
+class CatalogRepository(
+    private val context: Context,
+    /** 全链路书源；装配后所有公开页取数都从书源出，避免再建客户端。 */
+    private val sourceProvider: () -> Wenku8BookSource? = { null },
+) {
+    private val crawler = CatalogCrawler(context, sourceProvider)
+    /** 仅当未装配书源时使用的兜底客户端；正常路径不会创建它。 */
+    private val http by lazy {
+        Wenku8HttpClient(
+            File(context.cacheDir, "wenku8-catalog"),
+            (context.applicationContext as com.example.hyperreader.Wenku8Application).sessionStore.clearanceCookieJar(),
+        )
+    }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val lock = Mutex()
 
@@ -123,7 +130,9 @@ class CatalogRepository(private val context: Context) {
             }
             val entry = try {
                 withContext(Dispatchers.IO) {
-                    val page = http.fetchText(Wenku8Urls.articleInfo(id), "catalog-one", Wenku8Urls.BASE)
+                    val url = Wenku8Urls.articleInfo(id)
+                    val page = sourceProvider()?.fetchPublicPage(url, "catalog-one")
+                        ?: http.fetchText(url, "catalog-one", Wenku8Urls.BASE)
                     Wenku8Parser.parseCatalogEntry(page.html, page.finalUrl)
                 }
             } catch (cancelled: CancellationException) {
@@ -161,7 +170,9 @@ class CatalogRepository(private val context: Context) {
         val id = bookId.filter(Char::isDigit)
         require(id.isNotBlank()) { "书籍 ID 无效。" }
 
-        val info = http.fetchTextInteractive(Wenku8Urls.articleInfo(id), "catalog-author", Wenku8Urls.BASE)
+        val infoUrl = Wenku8Urls.articleInfo(id)
+        val info = sourceProvider()?.fetchPublicPageInteractive(infoUrl, "catalog-author")
+            ?: http.fetchTextInteractive(infoUrl, "catalog-author", Wenku8Urls.BASE)
         val self = Wenku8Parser.parseCatalogEntry(info.html, info.finalUrl)
         val author = self.author.trim().takeIf { it.isNotBlank() && it != "未知作者" }
             ?: throw Wenku8Exception("未能识别该书的作者。", "AUTHOR_NOT_FOUND")
@@ -174,11 +185,9 @@ class CatalogRepository(private val context: Context) {
         val links = LinkedHashMap<String, BookLink>()
         var pageNo = 1
         while (pageNo <= MAX_AUTHOR_PAGES) {
-            val page = http.fetchTextInteractive(
-                withPage(authorPage, pageNo),
-                "catalog-author",
-                Wenku8Urls.BASE,
-            )
+            val target = withPage(authorPage, pageNo)
+            val page = sourceProvider()?.fetchPublicPageInteractive(target, "catalog-author")
+                ?: http.fetchTextInteractive(target, "catalog-author", Wenku8Urls.BASE)
             val pageLinks = Wenku8Parser.parseBookLinks(page.html, page.finalUrl)
             // 保留当前书：作者页是「这位作者的全部作品」的浏览视图，
             // 源站只收录一本时也能看到结果，而不是一屏空态。
@@ -201,7 +210,9 @@ class CatalogRepository(private val context: Context) {
                 continue
             }
             val fetched = try {
-                val detail = http.fetchTextInteractive(Wenku8Urls.articleInfo(link.id), "catalog-author", Wenku8Urls.BASE)
+                val detailUrl = Wenku8Urls.articleInfo(link.id)
+                val detail = sourceProvider()?.fetchPublicPageInteractive(detailUrl, "catalog-author")
+                    ?: http.fetchTextInteractive(detailUrl, "catalog-author", Wenku8Urls.BASE)
                 Wenku8Parser.parseCatalogEntry(detail.html, detail.finalUrl)
             } catch (cancelled: CancellationException) {
                 throw cancelled

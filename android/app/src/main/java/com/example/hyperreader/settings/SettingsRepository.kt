@@ -217,7 +217,7 @@ class SettingsRepository(private val context: Context) {
 
         /** 首选直连入口（`DirectEntry.name`）；缺省或非法值视为 `.net`。 */
         val DIRECT_ENTRY = stringPreferencesKey("direct_entry")
-        /** 在线阅读数据源（`OnlineSource.name`）；缺省或非法值视为内置解析。 */
+        /** 在线阅读数据源（`OnlineSource.name`）；缺省或非法值视为 LNR 书源。 */
         val ONLINE_SOURCE = stringPreferencesKey("online_source")
         /** 屏幕刷新率策略（`RefreshRate.name`）；缺省或非法值视为自适应。 */
         val REFRESH_RATE = stringPreferencesKey("refresh_rate")

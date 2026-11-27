@@ -134,12 +134,12 @@ enum class DirectEntry(val label: String, val base: String) {
  */
 @Serializable
 enum class OnlineSource(val label: String, val summary: String) {
-    BUILTIN("内置解析", "目录与正文由本工程解析，默认"),
-    LNR("LNR 书源", "走 LightNovelReader 书源契约取目录与正文"),
+    BUILTIN("内置解析", "目录与正文由本工程解析"),
+    LNR("LNR 书源", "走 LightNovelReader 书源契约取目录与正文，默认"),
     ;
 
     companion object {
-        fun fromName(raw: String?): OnlineSource = entries.firstOrNull { it.name == raw } ?: BUILTIN
+        fun fromName(raw: String?): OnlineSource = entries.firstOrNull { it.name == raw } ?: LNR
     }
 }
 

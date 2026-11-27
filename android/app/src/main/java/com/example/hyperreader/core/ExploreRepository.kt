@@ -54,6 +54,17 @@ class Wenku8DataSource(
  * 公开榜也不会把 `jieqiUserInfo` / `PHPSESSID` 发到匿名页面。
  */
 class ExplorePublicSource(private val http: Wenku8HttpClient) {
+    /**
+     * 公开页传输入口：书目缓存、作者扩展等只需要「无会话取页面」的调用方
+     * 统一走这里，避免再各自新建 HTTP 客户端。
+     */
+    suspend fun fetchText(url: String, jobId: String): Wenku8HttpClient.TextResource =
+        http.fetchText(url, jobId, Wenku8Urls.BASE)
+
+    /** 交互档公开页（书籍详情、作者页翻页）。 */
+    suspend fun fetchTextInteractive(url: String, jobId: String): Wenku8HttpClient.TextResource =
+        http.fetchTextInteractive(url, jobId, Wenku8Urls.BASE)
+
     suspend fun load(page: ExplorePage): List<String> {
         require(!page.requiresAuth) { "公开榜单不接受登录墙内页面。" }
         val result = http.fetchText(page.url, "explore-public:${page.id}", Wenku8Urls.BASE)
@@ -95,25 +106,27 @@ class ExplorePublicSource(private val http: Wenku8HttpClient) {
     }
 }
 
-class ExploreRepository(
-    private val dataSource: NovelDataSource,
-    private val publicSource: ExplorePublicSource? = null,
-) {
-    val sourceId = dataSource.id
-    val sourceName = dataSource.displayName
-    suspend fun load(page: ExplorePage) = dataSource.explore(page)
+/**
+ * 探索页数据入口：现在只是 [Wenku8BookSource] 的薄封装。
+ *
+ * 书源是唯一的数据访问层——会话榜、公开榜、详情、搜索、导出、书目缓存都从
+ * [Wenku8BookSource] 取数，本类不再持有任何 HTTP 客户端或解析器。
+ */
+class ExploreRepository(private val source: Wenku8BookSource) {
+    val sourceId = "wenku8"
+    val sourceName = "Wenku8 轻小说文库"
+
+    suspend fun load(page: ExplorePage): List<SearchBook> = source.explore(page)
 
     /** 匿名公开榜：只返回书籍 ID，卡片由本地索引与逐本补全提供。 */
-    suspend fun loadPublic(page: ExplorePage): List<String> =
-        requireNotNull(publicSource) { "公开榜单数据源未装配。" }.load(page)
+    suspend fun loadPublic(page: ExplorePage): List<String> = source.explorePublic(page)
 
     /** 匿名公开榜缺失卡片的补全：只走无会话客户端，绝不回落到带用户 Cookie 的书源。 */
-    suspend fun loadPublicBook(bookId: String): SearchBook =
-        requireNotNull(publicSource) { "公开榜单数据源未装配。" }.loadBook(bookId)
+    suspend fun loadPublicBook(bookId: String): SearchBook = source.loadPublicBook(bookId)
 
     /** 官方标签列表；匿名源返回空列表，由本地索引兜底。 */
-    suspend fun officialTags(): List<String> = dataSource.officialTags()
+    suspend fun officialTags(): List<String> = source.officialTags()
 
     /** 官方标签下的书；登录过期由数据源抛 AUTH_REQUIRED，调用方回落本地结果。 */
-    suspend fun tagBooks(tag: String): List<SearchBook> = dataSource.tagBooks(tag)
+    suspend fun tagBooks(tag: String): List<SearchBook> = source.tagBooks(tag)
 }

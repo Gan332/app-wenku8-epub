@@ -844,7 +844,7 @@ private fun ReaderSection(state: StudioUiState, viewModel: StudioViewModel, onIm
         },
         { SectionTitle("在线阅读") },
         {
-            val onlineSource by viewModel.onlineSource.collectAsStateWithLifecycle(initialValue = OnlineSource.BUILTIN)
+            val onlineSource by viewModel.onlineSource.collectAsStateWithLifecycle(initialValue = OnlineSource.LNR)
             PreferencePanel {
                 OnlineSource.entries.forEach { source ->
                     RadioButtonPreference(
