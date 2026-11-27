@@ -6,33 +6,29 @@ import java.time.YearMonth
 /**
  * 探索页的榜单定义与取数。
  *
- * 两类入口（AGENTS §4.5）：
- * - **登录墙内**：`toplist.php` 的四个排序榜，走用户自己的会话；
- * - **匿名公开**：年度精选与月度新书（`/zt/`），走**无会话**客户端。
+ * 唯一入口（AGENTS §4.5）：**匿名公开**的年度精选（`/zt/sugoi/`），走**无会话**客户端。
+ * `toplist.php` / `tags.php` 由源站登录墙控制，探索页不挂载，也不做任何登录规避。
  *
  * 这里只负责“榜单 → 卡片 ID / 卡片”的取数，不含 UI 状态；[com.example.hyperreader.ui.StudioViewModel]
  * 负责把结果合并进页面状态。公开页解析与 [Wenku8DataSource] 保持同一出口，避免两套解析规则。
  */
 object ExploreFeed {
-    /** 按当前日期生成榜单：登录墙内的四个排序榜在前，公开的年度/月度榜在后。 */
+    /** 公开年度精选榜的年份跨度：当前年份往前共 10 年。 */
+    private const val PUBLIC_SUGOI_YEARS = 10
+
+    /**
+     * 探索页榜单：**全部来自书源的匿名公开页**（年度精选 `/zt/sugoi/`）。
+     *
+     * `toplist.php` / `tags.php` 由源站登录墙控制，匿名访问会被 302 到登录页，
+     * 因此不再出现在探索页；这里只保留无需登录即可浏览的年度榜单。
+     * `/zt/booklist/` 只有 2015–2016 的历史存档，作为书目缓存种子更合适，
+     * 不再占探索页 tab。
+     */
     fun pages(today: YearMonth = YearMonth.now()): List<ExplorePage> = buildList {
-        listOf(
-            "lastupdate" to "今日更新",
-            "allvisit" to "热门轻小说",
-            "postdate" to "新书一览",
-            "anime" to "动画化作品",
-        ).forEach { (sort, title) ->
-            add(ExplorePage("toplist-$sort", title, Wenku8Urls.toplist(sort), requiresAuth = true))
-        }
         val year = today.year
-        (0 until 5).forEach { offset ->
+        (0 until PUBLIC_SUGOI_YEARS).forEach { offset ->
             val value = year - offset
             add(ExplorePage("sugoi-$value", "$value 年度精选", Wenku8Urls.sugoi(value), requiresAuth = false))
-        }
-        (0 until 3).forEach { offset ->
-            val value = today.minusMonths(offset.toLong())
-            val stamp = "${value.year}${value.monthValue.toString().padStart(2, '0')}"
-            add(ExplorePage("booklist-$stamp", "${value.monthValue} 月新书", Wenku8Urls.booklist(stamp), requiresAuth = false))
         }
     }
 
@@ -61,9 +57,8 @@ object ExploreFeed {
     /**
      * 当前登录态下可展示的榜单。
      *
-     * 未登录时**直接隐藏**登录墙榜单（`toplist.php`），只保留书源的公开榜
-     * （年度精选 / 月度新书）。这样匿名用户不会看到点了就提示登录的 tab，
-     * 探索页在无会话时依然完整可用。
+     * 当前探索页只挂匿名公开榜（年度精选），因此登录与未登录看到的是同一组 tab；
+     * 保留过滤逻辑，便于将来加入需要会话的榜单时不把登录墙暴露给匿名用户。
      */
     fun visiblePages(pages: List<ExplorePage>, loggedIn: Boolean): List<ExplorePage> =
         if (loggedIn) pages else pages.filter { !it.requiresAuth }

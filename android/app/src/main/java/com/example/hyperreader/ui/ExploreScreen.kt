@@ -75,8 +75,9 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
  * 视觉结构：主视觉搜索入口 → 本地索引状态 → 榜单标签 → 带序号的封面轨道。
  * 封面尺寸与间距按 UiDimens 的探索令牌，不复制 LNR 的 Material 卡片参数。
  *
- * 数据来源与合规边界不变：年度/月度榜单走匿名公开页；登录墙内的排行榜只对已登录用户展示，
- * 匿名用户看不到「点了就要求登录」的 tab（AGENTS §4.2 / §4.5.2）。
+ * 数据来源与合规边界不变：榜单全部走书源的匿名公开页（年度精选 `/zt/sugoi/`）；
+ * 登录墙内的 `toplist.php` / `tags.php` 不再进入探索页，匿名与登录看到同一组榜单
+ * （AGENTS §4.2 / §4.5.2）。
  */
 @Composable
 fun ExploreScreen(
@@ -92,7 +93,7 @@ fun ExploreScreen(
 ) {
     // 进入探索页即自动抓取公开榜（AGENTS §4.5）；只触发一次，切回 tab 不重复请求。
     LaunchedEffect(Unit) { viewModel.ensureExploreLoaded() }
-    // 未登录时隐藏登录墙榜单，只展示书源的公开榜。
+    // 当前榜单全部公开；保留过滤以便将来加入登录墙榜单时不暴露给匿名用户。
     val visiblePages = remember(viewModel.explorePages, state.loggedIn) {
         ExploreFeed.visiblePages(viewModel.explorePages, state.loggedIn)
     }
@@ -129,7 +130,7 @@ fun ExploreScreen(
                 item(key = "page-switcher") {
                     val pages = visiblePages
                     val selectedPageId = state.activeExplorePage?.id
-                        ?: pages.firstOrNull { state.loggedIn || !it.requiresAuth }?.id
+                        ?: pages.firstOrNull()?.id
                     val selectedIndex = pages.indexOfFirst { it.id == selectedPageId }.coerceAtLeast(0)
                     // MiuiX TabRow 的项宽是固定值（默认 76dp），装不下「今日更新」「2026 年度精选」
                     // 这样的标签就会省略成「今日更…」。按最长标题实测后把 min/max 一起放宽，
@@ -260,7 +261,7 @@ private fun ExploreTitleRow(onOpenSearch: () -> Unit) {
                 fontWeight = FontWeight.Bold,
             )
             Text(
-                "公开榜单无需登录，搜索使用你自己的会话。",
+                "公开榜单无需登录，搜索优先使用本地书目。",
                 fontSize = UiDimens.captionSmall,
                 color = secondaryTextColor(),
             )

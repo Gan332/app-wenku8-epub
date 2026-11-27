@@ -414,9 +414,9 @@ class Wenku8BookSource(
 /**
  * 探索页：只挂**匿名可访问**的公开榜单（AGENTS §4.2 白名单内的 `/zt/` 页）。
  *
- * 上游的探索页用 `articlelist.php` / `toplist.php` / `tags.php`；本提供者不碰它们
- * （`articlelist.php` 全工程不用；`toplist.php` / `tags.php` 由用户登录后在
- * `ExploreRepository` 的会话链路里抓，见 AGENTS §4.5.3）。
+ * 上游的探索页用 `articlelist.php` / `toplist.php` / `tags.php`；本提供者不碰它们。
+ * 这些接口由源站登录墙控制，匿名访问会被 302 到登录页；探索页只保留
+ * `/zt/sugoi/` 这类匿名公开榜单（AGENTS §4.2 / §4.5）。
  */
 private class Wenku8ExplorePageProvider(
     private val http: Wenku8HttpClient,
@@ -429,25 +429,15 @@ private class Wenku8ExplorePageProvider(
             Wenku8ListTapPage(
                 http = http,
                 tapTitle = "年度精选",
-                urls = (year downTo year - 4).map { Wenku8Urls.sugoi(it) },
+                urls = (0 until PUBLIC_SUGOI_YEARS).map { offset -> Wenku8Urls.sugoi(year - offset) },
                 jobPrefix = "explore:sugoi",
-            ),
-        )
-        registerTapPage(
-            "booklist",
-            Wenku8ListTapPage(
-                http = http,
-                tapTitle = "月度新书",
-                urls = (0 until 3).map { offset ->
-                    Wenku8Urls.booklist(LocalDate.now().minusMonths(offset.toLong()).format(MONTH_FORMATTER))
-                },
-                jobPrefix = "explore:booklist",
             ),
         )
     }
 
     private companion object {
-        val MONTH_FORMATTER: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyyMM")
+        /** 与 [ExploreFeed] 保持一致：当前年份往前 10 年，全部是匿名公开页。 */
+        const val PUBLIC_SUGOI_YEARS = 10
     }
 }
 

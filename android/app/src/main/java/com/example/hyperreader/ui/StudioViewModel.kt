@@ -601,12 +601,10 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     /**
-     * 探索榜单两类入口：
-     * - **登录墙内**（`requiresAuth = true`）：`toplist.php` 的四个排序榜，
-     *   走用户**自己的**会话 Cookie（AGENTS §4.5.3：本人登录后按账号权限访问不算规避）；
-     * - **匿名可访问**：年度精选榜与月度新书榜（`/zt/` 公开页）。
+     * 探索榜单：只挂书源的**匿名公开页**（年度精选 `/zt/sugoi/`）。
      *
-     * 未登录点登录墙榜单只会得到登录提示，不做任何规避；`articlelist.php` 仍不使用。
+     * `toplist.php` / `tags.php` 由源站登录墙控制，匿名访问会被 302 到登录页，
+     * 因此不再出现在探索页；`articlelist.php` 全工程不使用。
      */
     val explorePages: List<ExplorePage> = ExploreFeed.pages()
 
@@ -614,8 +612,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     fun ensureExploreLoaded() {
         val current = state.value
         if (current.exploreLoadedOnce) return
-        // 首屏只在“还没有当前榜单”时选默认榜；若当前榜单仍在上一个登录态的墙上，
-        // 必须按新的登录态重选，否则匿名用户会落到「今日更新」并只看到一条登录提示。
+        // 首屏只在“还没有当前榜单”时选默认榜；当前榜单不可加载时按登录态重选。
         val loggedIn = app.sessionStore.hasSession()
         val page = current.activeExplorePage
             ?.takeIf { ExploreFeed.canLoad(it, loggedIn) }
@@ -623,10 +620,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         loadExplore(page)
     }
 
-    /**
-     * 未登录时的首屏榜单：公开榜（年度精选）不需要会话；登录后再从「今日更新」开始。
-     * 不能把首个登录墙榜单当默认值，否则冷启动首屏只会出现一条登录提示。
-     */
+    /** 首屏榜单：公开年度精选不需要会话，登录与未登录都从第一个年度榜开始。 */
     private fun defaultExplorePage(): ExplorePage = defaultExplorePage(explorePages, app.sessionStore.hasSession())
 
     /**
@@ -687,7 +681,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
                 "书籍详情" to Wenku8Urls.articleInfo("2365"),
                 "章节目录" to Wenku8Urls.index("2365"),
                 "年度榜单" to Wenku8Urls.sugoi(java.time.Year.now().value),
-                "月度新书" to Wenku8Urls.booklist(java.time.Year.now().toString().replace("-", "")),
+                "往期书单" to Wenku8Urls.booklist("201601"),
                 "同作者作品" to Wenku8Urls.authorArticle("伏濑"),
             )
             mutable.update { it.copy(endpointProbes = emptyList(), message = "正在诊断公开端点…") }

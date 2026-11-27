@@ -34,29 +34,16 @@ class ExploreFeedTest {
     )
 
     @Test
-    fun pagesCoverAuthAndPublicFeedsInDisplayOrder() {
+    fun pagesAreAllPublicBookSourceRankings() {
         val pages = ExploreFeed.pages(YearMonth.of(2026, 11))
 
-        assertEquals(12, pages.size)
-        assertEquals(
-            listOf("toplist-lastupdate", "toplist-allvisit", "toplist-postdate", "toplist-anime"),
-            pages.take(4).map { it.id },
+        assertEquals(10, pages.size)
+        assertEquals((2026 downTo 2017).map { "sugoi-$it" }, pages.map { it.id })
+        assertTrue("探索页榜单全部免登录", pages.none { it.requiresAuth })
+        assertTrue(
+            "榜单全部走公开年度精选",
+            pages.all { it.url.startsWith("https://www.wenku8.net/zt/sugoi/") },
         )
-        assertTrue("前四个排行榜需要登录", pages.take(4).all { it.requiresAuth })
-
-        assertEquals(
-            listOf("sugoi-2026", "sugoi-2025", "sugoi-2024", "sugoi-2023", "sugoi-2022"),
-            pages.subList(4, 9).map { it.id },
-        )
-        assertTrue("年度精选是公开页", pages.subList(4, 9).none { it.requiresAuth })
-
-        assertEquals(
-            listOf("booklist-202611", "booklist-202610", "booklist-202609"),
-            pages.drop(9).map { it.id },
-        )
-        assertEquals("11 月新书", pages[9].title)
-        assertTrue(pages[9].url.endsWith("202611.php"))
-        assertTrue("月度新书是公开页", pages.drop(9).none { it.requiresAuth })
     }
 
     @Test
@@ -67,14 +54,14 @@ class ExploreFeedTest {
     }
 
     @Test
-    fun anonymousUsersOnlySeePublicFeeds() {
+    fun anonymousAndSignedInSeeSamePublicRankings() {
         val pages = ExploreFeed.pages(YearMonth.of(2026, 11))
         val anonymous = ExploreFeed.visiblePages(pages, loggedIn = false)
         val signedIn = ExploreFeed.visiblePages(pages, loggedIn = true)
 
-        assertTrue("未登录不应看到登录墙榜单", anonymous.none { it.requiresAuth })
-        assertEquals(8, anonymous.size)
-        assertEquals(12, signedIn.size)
+        assertTrue("探索页不应出现登录墙榜单", anonymous.none { it.requiresAuth })
+        assertEquals(pages, anonymous)
+        assertEquals(pages, signedIn)
     }
 
     @Test
@@ -83,8 +70,9 @@ class ExploreFeedTest {
         val anonymous = StudioViewModel.defaultExplorePage(pages, loggedIn = false)
         val signedIn = StudioViewModel.defaultExplorePage(pages, loggedIn = true)
 
-        assertFalse("匿名首屏不能落到登录墙榜单", anonymous.requiresAuth)
-        assertTrue("登录后首屏优先排行榜", signedIn.requiresAuth)
+        assertEquals("sugoi-2026", anonymous.id)
+        assertEquals("登录与未登录使用同一个公开首屏", anonymous.id, signedIn.id)
+        assertFalse("首屏不能落到登录墙榜单", anonymous.requiresAuth)
         assertTrue(ExploreFeed.canLoad(anonymous, loggedIn = false))
         assertTrue(ExploreFeed.canLoad(signedIn, loggedIn = true))
     }
