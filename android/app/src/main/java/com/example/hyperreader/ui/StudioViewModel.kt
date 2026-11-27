@@ -1,10 +1,12 @@
 package com.example.hyperreader.ui
 
 import android.app.Application
+import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.hyperreader.Wenku8Application
 import com.example.hyperreader.core.CatalogEntry
+import com.example.hyperreader.core.AppUpdateInstaller
 import com.example.hyperreader.core.BookshelfUpdateChecker
 import com.example.hyperreader.core.UpdateCheckOutcome
 import com.example.hyperreader.core.CatalogSearchField
@@ -284,6 +286,14 @@ data class StudioUiState(
     val catalogUpdatedAt: Long = 0L,
     /** 书目缓存操作的独立提示（不再混进探索页消息）。 */
     val catalogMessage: String? = null,
+    /** 应用更新检查/下载状态（仅「设置 → 关于」使用，与书架更新检查无关）。 */
+    val appUpdateChecking: Boolean = false,
+    val appUpdateDownloading: Boolean = false,
+    val appUpdateProgress: Int = 0,
+    val appUpdateAvailable: com.example.hyperreader.core.AppRelease? = null,
+    /** 已下载并通过校验的 APK 路径；非空时 UI 显示「安装更新」。 */
+    val appUpdateFile: String? = null,
+    val appUpdateMessage: String? = null,
     val coverCacheBytes: Long = 0L,
     val localResults: List<CatalogEntry> = emptyList(),
     val settingsSection: SettingsSection = SettingsSection.OVERVIEW,
@@ -1088,6 +1098,107 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
                     outcomes.isEmpty() -> "没有可检查的远程书籍"
                     updated > 0 -> "检查完成：$updated 本有新章节"
                     else -> "检查完成：暂无更新"
+                },
+            )
+        }
+    }
+
+    /**
+     * 检查应用自身更新（GitHub Release）。
+     *
+     * 与书架章节更新完全分开：不经过 [Wenku8HttpClient]，也不受书架设置影响。
+     */
+    fun checkAppUpdate() {
+        val current = state.value
+        if (current.appUpdateChecking || current.appUpdateDownloading) return
+        if (current.offlineMode) {
+            mutable.update { it.copy(appUpdateMessage = "离线模式下不会检查应用更新，请先关闭离线模式。") }
+            return
+        }
+        mutable.update {
+            it.copy(
+                appUpdateChecking = true,
+                appUpdateProgress = 0,
+                appUpdateAvailable = null,
+                appUpdateFile = null,
+                appUpdateMessage = null,
+            )
+        }
+        viewModelScope.launch {
+            catching { app.appUpdateRepository.check(BuildConfig.VERSION_NAME) }
+                .onSuccess { release ->
+                    mutable.update {
+                        it.copy(
+                            appUpdateChecking = false,
+                            appUpdateAvailable = release,
+                            appUpdateMessage = if (release == null) "已是最新版本。" else null,
+                        )
+                    }
+                }
+                .onFailure { error ->
+                    mutable.update {
+                        it.copy(
+                            appUpdateChecking = false,
+                            appUpdateMessage = error.message ?: "检查应用更新失败。",
+                        )
+                    }
+                }
+        }
+    }
+
+    /** 下载当前发现的新版本；进度只写 [StudioUiState.appUpdateProgress]。 */
+    fun downloadAppUpdate() {
+        val release = state.value.appUpdateAvailable ?: return
+        if (state.value.appUpdateDownloading) return
+        mutable.update {
+            it.copy(
+                appUpdateDownloading = true,
+                appUpdateProgress = 0,
+                appUpdateFile = null,
+                appUpdateMessage = null,
+            )
+        }
+        viewModelScope.launch {
+            catching {
+                app.appUpdateRepository.download(release) { percent ->
+                    mutable.update { it.copy(appUpdateProgress = percent) }
+                }
+            }.onSuccess { file ->
+                mutable.update {
+                    it.copy(
+                        appUpdateDownloading = false,
+                        appUpdateProgress = 100,
+                        appUpdateFile = file.absolutePath,
+                        appUpdateMessage = "下载完成，可安装更新。",
+                    )
+                }
+            }.onFailure { error ->
+                mutable.update {
+                    it.copy(
+                        appUpdateDownloading = false,
+                        appUpdateProgress = 0,
+                        appUpdateMessage = error.message ?: "下载应用更新失败。",
+                    )
+                }
+            }
+        }
+    }
+
+    /** 把已下载的 APK 交给系统安装器；需要「安装未知应用」权限时跳系统设置。 */
+    fun installAppUpdate(context: Context) {
+        val path = state.value.appUpdateFile ?: return
+        val file = File(path)
+        if (!file.isFile) {
+            mutable.update { it.copy(appUpdateFile = null, appUpdateMessage = "安装包已失效，请重新下载。") }
+            return
+        }
+        val result = AppUpdateInstaller.install(context, file)
+        mutable.update {
+            it.copy(
+                appUpdateMessage = when (result) {
+                    AppUpdateInstaller.Result.STARTED -> "已打开系统安装器。"
+                    AppUpdateInstaller.Result.NEEDS_PERMISSION -> "请允许本应用安装未知应用，然后返回再次点击安装。"
+                    AppUpdateInstaller.Result.FAILED -> "无法启动安装器，请检查系统权限。"
                 },
             )
         }

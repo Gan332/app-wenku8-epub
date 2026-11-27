@@ -20,6 +20,7 @@ import com.example.hyperreader.data.BookshelfRepository
 import com.example.hyperreader.data.ReadingStatsRepository
 import com.example.hyperreader.core.ExploreRepository
 import com.example.hyperreader.core.ExplorePublicSource
+import com.example.hyperreader.core.AppUpdateRepository
 import com.example.hyperreader.core.Wenku8DataSource
 import com.example.hyperreader.core.Wenku8HttpClient
 import com.example.hyperreader.settings.SettingsRepository
@@ -68,6 +69,10 @@ class Wenku8Application : Application() {
         com.example.hyperreader.reader.BookmarkCenterRepository(this)
     }
     val readingStatsRepository: ReadingStatsRepository by lazy { ReadingStatsRepository(this) }
+    /**
+     * 应用自身更新：只访问 GitHub Release，使用独立客户端，不参与 wenku8 限流与会话。
+     */
+    val appUpdateRepository: AppUpdateRepository by lazy { AppUpdateRepository(this) }
     /**
      * 探索页的公开榜使用独立的**无会话**客户端：只带 `cf_clearance`，不沿用会话 Cookie。
      * 登录墙内的 `toplist.php` 仍走 [Wenku8DataSource] 与用户自己的会话。

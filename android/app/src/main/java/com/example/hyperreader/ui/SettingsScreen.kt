@@ -32,6 +32,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.hyperreader.core.Wenku8Endpoint
@@ -48,6 +49,7 @@ import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.ColorPicker
 import top.yukonga.miuix.kmp.basic.DropdownItem
 import top.yukonga.miuix.kmp.basic.HorizontalDivider
+import top.yukonga.miuix.kmp.basic.LinearProgressIndicator
 import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
@@ -148,7 +150,7 @@ fun SettingsScreen(
                     onExportBackupRequest = onExportBackup,
                     onImportBackupRequest = onImportBackup,
                 )
-                SettingsSection.ABOUT -> AboutSection(viewModel)
+                SettingsSection.ABOUT -> AboutSection(state = state, viewModel = viewModel)
                 SettingsSection.OVERVIEW -> Unit
             }
         }
@@ -1015,7 +1017,14 @@ private fun formatCacheSize(bytes: Long): String {
 }
 
 @Composable
-private fun AboutSection(viewModel: StudioViewModel) {
+private fun AboutSection(state: StudioUiState, viewModel: StudioViewModel) {
+    val context = LocalContext.current
+    // 进入关于页自动查一次；已有结果/提示时不重复打 GitHub。
+    LaunchedEffect(Unit) {
+        if (state.appUpdateAvailable == null && !state.appUpdateChecking && state.appUpdateMessage == null) {
+            viewModel.checkAppUpdate()
+        }
+    }
     SettingsScaffold("关于", viewModel::backSettings, listOf(
         {
             StudioHero(
@@ -1023,6 +1032,81 @@ private fun AboutSection(viewModel: StudioViewModel) {
                 title = "文库 EPUB 工坊",
                 description = "Kotlin + Jetpack Compose + MiuiX · v${BuildConfig.VERSION_NAME}",
             )
+        },
+        { SectionTitle("应用更新") },
+        {
+            StudioPanel("应用更新") {
+                Text(
+                    "当前版本 v${BuildConfig.VERSION_NAME}",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = UiDimens.body,
+                )
+                val release = state.appUpdateAvailable
+                val downloaded = state.appUpdateFile
+                when {
+                    state.appUpdateDownloading -> {
+                        LinearProgressIndicator(
+                            progress = state.appUpdateProgress / 100f,
+                            modifier = Modifier.fillMaxWidth().height(UiDimens.progressThickness),
+                        )
+                        Text(
+                            "正在下载 ${state.appUpdateProgress}%",
+                            fontSize = UiDimens.captionSmall,
+                            color = secondaryTextColor(),
+                        )
+                    }
+                    downloaded != null -> {
+                        Text("新版本已下载，点击安装。", fontSize = UiDimens.caption, color = secondaryTextColor())
+                        TextButton(
+                            text = "安装更新",
+                            onClick = { viewModel.installAppUpdate(context) },
+                            modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
+                        )
+                    }
+                    release != null -> {
+                        Text(
+                            "发现新版本 v${release.versionName}",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = UiDimens.body,
+                        )
+                        if (release.notes.isNotBlank()) {
+                            Text(
+                                release.notes.take(600),
+                                fontSize = UiDimens.captionSmall,
+                                color = secondaryTextColor(),
+                            )
+                        }
+                        if (release.sizeBytes > 0) {
+                            Text(
+                                "安装包 ${formatCacheSize(release.sizeBytes)}",
+                                fontSize = UiDimens.captionSmall,
+                                color = tertiaryTextColor(),
+                            )
+                        }
+                        TextButton(
+                            text = "下载更新",
+                            onClick = viewModel::downloadAppUpdate,
+                            modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
+                        )
+                    }
+                    else -> {
+                        TextButton(
+                            text = if (state.appUpdateChecking) "检查中…" else "检查应用更新",
+                            onClick = viewModel::checkAppUpdate,
+                            enabled = !state.appUpdateChecking,
+                            modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
+                        )
+                    }
+                }
+                state.appUpdateMessage?.let { message ->
+                    Text(message, fontSize = UiDimens.captionSmall, color = secondaryTextColor())
+                }
+                Text(
+                    "更新只从项目 GitHub Release 获取，下载后由系统安装器完成安装；不会携带 wenku8 会话。",
+                    fontSize = UiDimens.captionSmall,
+                    color = tertiaryTextColor(),
+                )
+            }
         },
         { SectionTitle("使用边界") },
         {
