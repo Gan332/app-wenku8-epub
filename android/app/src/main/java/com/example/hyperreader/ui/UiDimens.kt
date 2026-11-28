@@ -50,6 +50,12 @@ object UiDimens {
     /** 强调色取色器高度（Miuix ColorPicker 需要显式高度）。 */
     val colorPickerHeight: Dp = 180.dp
 
+    /** 主题预设卡宽度（横向选择器单项）。 */
+    val themePresetWidth: Dp = 172.dp
+
+    /** 主题预设卡的配色预览区高度。 */
+    val themePreviewHeight: Dp = 76.dp
+
     /** 导出警告列表最大高度（OverlayDialog 内必须限高）。 */
     val warningListMaxHeight: Dp = 260.dp
 

@@ -31,23 +31,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.hyperreader.core.Wenku8Endpoint
 import com.example.hyperreader.BuildConfig
 import com.example.hyperreader.MessageCard
-import com.example.hyperreader.settings.AppThemeMode
-import com.example.hyperreader.settings.AppThemeSettings
 import com.example.hyperreader.settings.DirectEntry
+import com.example.hyperreader.ui.theme.AppearanceSection
 import com.example.hyperreader.settings.OnlineSource
 import com.example.hyperreader.settings.ReaderBackground
 import com.example.hyperreader.settings.ReaderPageTurnMode
-import com.example.hyperreader.settings.ThemePresets
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.ColorPicker
 import top.yukonga.miuix.kmp.basic.DropdownItem
 import top.yukonga.miuix.kmp.basic.HorizontalDivider
 import top.yukonga.miuix.kmp.basic.LinearProgressIndicator
@@ -74,7 +70,7 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 private enum class SettingsCategory(val title: String, val summary: String, val section: SettingsSection) {
     ACCOUNT("账号", "登录状态、会话与退出", SettingsSection.ACCOUNT),
     READING("阅读", "背景、字体、字号、行距与翻页", SettingsSection.READER),
-    APPEARANCE("外观", "配色模式、动态色与强调色", SettingsSection.APPEARANCE),
+    APPEARANCE("外观", "主题预设、明暗模式与取色", SettingsSection.APPEARANCE),
     NETWORK("网络", "第三方中继与公开端点连通性", SettingsSection.NETWORK),
     DATA("数据", "书目缓存、阅读统计与配置备份", SettingsSection.CATALOG),
     ABOUT("关于", "版本、数据来源与使用边界", SettingsSection.ABOUT),
@@ -666,74 +662,6 @@ private fun RelaySettings(viewModel: StudioViewModel) {
 }
 
 @Composable
-private fun AppearanceSection(viewModel: StudioViewModel) {
-    val theme by viewModel.appTheme.collectAsStateWithLifecycle(initialValue = AppThemeSettings())
-    SettingsScaffold("主题与外观", viewModel::backSettings, listOf(
-        { SectionTitle("快捷主题") },
-        {
-            PreferencePanel {
-                RadioButtonPreference(
-                    title = "HyperOS 经典蓝白",
-                    summary = "浅色底 + HyperOS 蓝强调色，不跟随系统动态色",
-                    selected = theme == ThemePresets.HYPEROS_BLUE_WHITE,
-                    onClick = { viewModel.applyThemePreset(ThemePresets.HYPEROS_BLUE_WHITE) },
-                    insideMargin = PreferenceRowMargin,
-                )
-            }
-        },
-        { SectionTitle("配色模式") },
-        {
-            PreferencePanel {
-                AppThemeMode.entries.forEach { mode ->
-                    RadioButtonPreference(
-                        title = mode.label(),
-                        selected = theme.mode == mode,
-                        onClick = { viewModel.setThemeMode(mode) },
-                        insideMargin = PreferenceRowMargin,
-                    )
-                }
-            }
-        },
-        {
-            PreferencePanel {
-                SwitchPreference(
-                    title = "使用系统动态色",
-                    summary = "关闭后使用固定 MiuiX 配色",
-                    checked = theme.useDynamicColor,
-                    onCheckedChange = viewModel::setDynamicColor,
-                    insideMargin = PreferenceRowMargin,
-                )
-            }
-        },
-        { SectionTitle("强调色") },
-        {
-            Row(horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceM)) {
-                listOf(0xFFA34B2F.toInt(), 0xFF2D6A4F.toInt(), ThemePresets.HYPEROS_BLUE, 0xFF7C3AED.toInt(), 0xFF111827.toInt()).forEach { color ->
-                    ColorSwatch(
-                        color = color,
-                        selected = theme.accentColor == color,
-                        onClick = { viewModel.setAccentColor(color) },
-                    )
-                }
-            }
-        },
-        {
-            Card(
-                Modifier.fillMaxWidth(),
-                cornerRadius = UiDimens.panelCorner,
-                insideMargin = PaddingValues(UiDimens.spaceS),
-            ) {
-                ColorPicker(
-                    color = Color(theme.accentColor),
-                    onColorChanged = { viewModel.setAccentColor(it.toArgb()) },
-                    modifier = Modifier.fillMaxWidth().height(UiDimens.colorPickerHeight),
-                )
-            }
-        },
-    ))
-}
-
-@Composable
 private fun ReaderSection(state: StudioUiState, viewModel: StudioViewModel, onImportFont: () -> Unit) {
     val settings = state.readerSettings
     val stripGaps by viewModel.stripCjkGaps.collectAsStateWithLifecycle(initialValue = true)
@@ -1176,14 +1104,14 @@ internal fun SettingsScaffold(@Suppress("UNUSED_PARAMETER") title: String, @Supp
 }
 
 /** 设置分组的行内边距：与组卡的 4dp 相加后回到 MiuiX 标准的 16dp。 */
-private val PreferenceRowMargin = PaddingValues(
+internal val PreferenceRowMargin = PaddingValues(
     horizontal = UiDimens.spaceS,
     vertical = UiDimens.spaceXS,
 )
 
 /** MiuiX preference 组：一张 4dp 内边距的卡，行内自带 12dp，合计标准 16dp。 */
 @Composable
-private fun PreferencePanel(content: @Composable ColumnScope.() -> Unit) {
+internal fun PreferencePanel(content: @Composable ColumnScope.() -> Unit) {
     Card(
         Modifier.fillMaxWidth(),
         cornerRadius = UiDimens.panelCorner,
@@ -1202,13 +1130,6 @@ internal fun SectionTitle(text: String) = SmallTitle(
         vertical = UiDimens.spaceXXS,
     ),
 )
-
-private fun AppThemeMode.label(): String = when (this) {
-    AppThemeMode.SYSTEM -> "系统"
-    AppThemeMode.LIGHT -> "浅色"
-    AppThemeMode.DARK -> "深色"
-    AppThemeMode.MONET -> "动态色"
-}
 
 private fun ReaderBackground.label(): String = when (this) {
     ReaderBackground.PAPER -> "米黄"

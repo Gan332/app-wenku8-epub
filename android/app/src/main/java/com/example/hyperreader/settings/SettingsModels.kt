@@ -2,7 +2,33 @@ package com.example.hyperreader.settings
 
 import kotlinx.serialization.Serializable
 
-enum class AppThemeMode { SYSTEM, LIGHT, DARK, MONET }
+enum class AppThemeMode {
+    SYSTEM,
+    LIGHT,
+    DARK,
+
+    /**
+     * 旧版「动态色」模式（0.19.0 之前）。
+     *
+     * 动态取色现在由 [AppThemeSettings.useDynamicColor] 独立表达，模式本身只决定
+     * 系统/浅色/深色。保留该枚举值只为读取旧 DataStore 与旧配置备份；写入前统一
+     * 归一到 [SYSTEM]，界面上也不再提供该选项。
+     */
+    MONET,
+    ;
+
+    companion object {
+        /** 界面上可选的三档明暗模式；[MONET] 仅用于兼容旧数据。 */
+        val selectable: List<AppThemeMode> = entries.filterNot { it == MONET }
+
+        fun fromName(raw: String?): AppThemeMode = when (raw?.trim()?.uppercase()) {
+            "LIGHT" -> LIGHT
+            "DARK" -> DARK
+            "SYSTEM", "MONET", null -> SYSTEM
+            else -> SYSTEM
+        }
+    }
+}
 
 enum class ReaderBackground { PAPER, LIGHT, GREEN, DARK, OLED, CUSTOM }
 
@@ -10,26 +36,10 @@ enum class ReaderPageTurnMode { HORIZONTAL, VERTICAL }
 
 @Serializable
 data class AppThemeSettings(
-    val mode: AppThemeMode = AppThemeMode.MONET,
+    val mode: AppThemeMode = AppThemeMode.SYSTEM,
     val useDynamicColor: Boolean = true,
     val accentColor: Int = 0xFFA34B2F.toInt(),
 )
-
-/** 内置主题预设（设置 → 主题与外观）。 */
-object ThemePresets {
-    /** HyperOS 官方蓝强调色。 */
-    val HYPEROS_BLUE = 0xFF3482FF.toInt()
-
-    /**
-     * HyperOS 经典蓝白：浅色底 + 固定 HyperOS 蓝，不跟随系统动态色。
-     * 白底蓝点，贴近 HyperOS 默认观感。
-     */
-    val HYPEROS_BLUE_WHITE = AppThemeSettings(
-        mode = AppThemeMode.LIGHT,
-        useDynamicColor = false,
-        accentColor = HYPEROS_BLUE,
-    )
-}
 
 @Serializable
 data class ReaderSettings(

@@ -16,6 +16,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.example.hyperreader.ui.theme.appThemeTokens
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
@@ -66,13 +67,10 @@ internal fun SectionHeader(
  * 这里收成两档语义：`secondary` 用于「读得到的说明」，`tertiary` 用于「弱化的元信息」
  * （关联的读法见 AGENTS §4.4：颜色一律取 `MiuixTheme.colorScheme`，不写死色值）。
  *
- * 档位按现状取值，不改变既有观感：0.72 ≈ 六种里用得最多的一种，0.6 对应最弱一档。
+ * 档位由 [com.example.hyperreader.ui.theme.AppThemeTokens] 统一给出，页面不再各写 alpha。
  */
-private const val SECONDARY_TEXT_ALPHA = 0.72f
-private const val TERTIARY_TEXT_ALPHA = 0.6f
+@Composable
+internal fun secondaryTextColor(): Color = appThemeTokens().secondaryText
 
 @Composable
-internal fun secondaryTextColor(): Color = MiuixTheme.colorScheme.onSurface.copy(alpha = SECONDARY_TEXT_ALPHA)
-
-@Composable
-internal fun tertiaryTextColor(): Color = MiuixTheme.colorScheme.onSurface.copy(alpha = TERTIARY_TEXT_ALPHA)
+internal fun tertiaryTextColor(): Color = appThemeTokens().tertiaryText
