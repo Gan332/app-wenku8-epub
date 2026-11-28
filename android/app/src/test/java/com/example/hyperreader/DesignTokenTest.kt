@@ -33,6 +33,7 @@ class DesignTokenTest {
         assertEquals("pagePadding 漂移", UiDimens.pagePadding, ReaderDimens.pagePadding)
         assertEquals("touchMin 漂移", UiDimens.touchMin, ReaderDimens.touchMin)
         assertEquals("swatch 漂移", UiDimens.swatch, ReaderDimens.swatch)
+        assertEquals("panelCorner 漂移", UiDimens.panelCorner, ReaderDimens.panelCorner)
     }
 
     @Test

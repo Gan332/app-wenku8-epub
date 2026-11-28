@@ -42,8 +42,8 @@ internal fun SectionHeader(
     ) {
         Box(
             Modifier
-                .width(3.dp)
-                .height(UiDimens.spaceL)
+                .width(4.dp)
+                .height(18.dp)
                 .clip(RoundedCornerShape(2.dp))
                 .background(MiuixTheme.colorScheme.primary),
         )
@@ -51,8 +51,9 @@ internal fun SectionHeader(
         Text(
             title,
             modifier = Modifier.weight(1f),
-            fontSize = UiDimens.section,
+            style = MiuixTheme.textStyles.headline2,
             fontWeight = FontWeight.SemiBold,
+            color = MiuixTheme.colorScheme.onBackground,
         )
         trailing?.invoke()
     }
@@ -66,13 +67,13 @@ internal fun SectionHeader(
  * 这里收成两档语义：`secondary` 用于「读得到的说明」，`tertiary` 用于「弱化的元信息」
  * （关联的读法见 AGENTS §4.4：颜色一律取 `MiuixTheme.colorScheme`，不写死色值）。
  *
- * 档位按现状取值，不改变既有观感：0.72 ≈ 六种里用得最多的一种，0.6 对应最弱一档。
+ * 0.19.0 起改用 Miuix 的语义色，不再对 `onSurface` 做 alpha 叠乘：
+ * `onSurfaceSecondary`（约 80%）承担「读得到的说明」，
+ * `onSurfaceVariantSummary`（约 60%）承担「弱化的元信息」。
+ * 动态色/暗色下由主题统一换算，页面不再各自写透明度。
  */
-private const val SECONDARY_TEXT_ALPHA = 0.72f
-private const val TERTIARY_TEXT_ALPHA = 0.6f
+@Composable
+internal fun secondaryTextColor(): Color = MiuixTheme.colorScheme.onSurfaceSecondary
 
 @Composable
-internal fun secondaryTextColor(): Color = MiuixTheme.colorScheme.onSurface.copy(alpha = SECONDARY_TEXT_ALPHA)
-
-@Composable
-internal fun tertiaryTextColor(): Color = MiuixTheme.colorScheme.onSurface.copy(alpha = TERTIARY_TEXT_ALPHA)
+internal fun tertiaryTextColor(): Color = MiuixTheme.colorScheme.onSurfaceVariantSummary

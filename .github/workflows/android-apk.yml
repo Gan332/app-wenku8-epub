@@ -83,11 +83,10 @@ jobs:
             exit 1
           fi
           yes | "$SDKMANAGER" --licenses >/dev/null || true
-          # MiuiX 0.9.4 要求 compileSdk 37。注意 SDK 37 引入小版本号，
-          # 公共仓库里没有 platforms;android-37，基础包是 platforms;android-37.0
-          # （其 source.properties 为 ApiLevel=37.0 / IsBaseSdk=true）。
+          # MiuiX 0.9.5-rc02 要求 compileSdk 37 且 minCompileMinorSdk=2，
+          # 必须安装 platforms;android-37.2（基础包 android-37.0 不够）。
           # NDK：cargo-ndk 交叉编译 rust/epub-core（libepub_core.so）需要。
-          "$SDKMANAGER" 'platform-tools' 'platforms;android-37.0' 'build-tools;37.0.0' 'ndk;27.2.12479018'
+          "$SDKMANAGER" 'platform-tools' 'platforms;android-37.2' 'build-tools;37.0.0' 'ndk;27.2.12479018'
 
       - name: Set up Rust
         # 必须是 @stable：这个 action 的 ref 就是工具链通道，`v1` 会被解析成
@@ -136,7 +135,7 @@ jobs:
         with:
           # 必须与 android/gradle/wrapper/gradle-wrapper.properties 的 distributionUrl 一致：
           # AGP 的版本检查会把两处不匹配直接判为构建失败（AGENTS §2 踩坑记录第 4 条）。
-          gradle-version: '9.8.1'
+          gradle-version: '9.9.2'
 
       - name: Run Android unit tests
         working-directory: android

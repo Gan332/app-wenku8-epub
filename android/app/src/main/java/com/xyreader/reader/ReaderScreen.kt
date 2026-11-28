@@ -1254,19 +1254,18 @@ private fun ReaderPagerArea(
         }
 
         // —— 阅读设置快捷面板（底部弹层）——
-        if (showSettings) {
-            ReaderSettingsSheet(
-                prefs = prefs,
-                onUpdate = viewModel::updatePrefs,
-                onDismiss = { showSettings = false },
-                onOpenReaderConfig = onOpenReaderConfig?.let { open ->
-                    {
-                        showSettings = false
-                        open()
-                    }
-                },
-            )
-        }
+        ReaderSettingsSheet(
+            show = showSettings,
+            prefs = prefs,
+            onUpdate = viewModel::updatePrefs,
+            onDismiss = { showSettings = false },
+            onOpenReaderConfig = onOpenReaderConfig?.let { open ->
+                {
+                    showSettings = false
+                    open()
+                }
+            },
+        )
 
         // —— 复制文字弹层（仅文字小说，从底部工具栏「复制文字」进入）——
         if (showCopyDialog) {
@@ -1278,19 +1277,18 @@ private fun ReaderPagerArea(
         }
 
         // —— 页内搜索弹层（仅文字小说；关闭即取消扫描）——
-        if (showSearchSheet) {
-            ReaderSearchSheet(
-                viewModel = viewModel,
-                onJumpToPage = { target ->
-                    turnTo(target)
-                    showSearchSheet = false
-                },
-                onDismiss = {
-                    showSearchSheet = false
-                    viewModel.cancelSearch()
-                },
-            )
-        }
+        ReaderSearchSheet(
+            show = showSearchSheet,
+            viewModel = viewModel,
+            onJumpToPage = { target ->
+                turnTo(target)
+                showSearchSheet = false
+            },
+            onDismiss = {
+                showSearchSheet = false
+                viewModel.cancelSearch()
+            },
+        )
     }
 }
 
@@ -1307,6 +1305,7 @@ private fun ReaderPagerArea(
  */
 @Composable
 private fun ReaderSearchSheet(
+    show: Boolean,
     viewModel: ReaderViewModel,
     onJumpToPage: (Int) -> Unit,
     onDismiss: () -> Unit,
@@ -1318,7 +1317,7 @@ private fun ReaderSearchSheet(
     // 全书搜索的命中按章定位，页内搜索按页；两者结果区共用一个列表但语义不同。
     val chapterResults = state.chapterHits.isNotEmpty()
 
-    OverlayBottomSheet(show = true, onDismissRequest = onDismiss) {
+    OverlayBottomSheet(show = show, onDismissRequest = onDismiss) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1624,17 +1623,18 @@ private fun PageTextCopyDialog(viewModel: ReaderViewModel, page: Int, onDismiss:
  * 改动经 [onUpdate] 落库即时生效。
  *
  * 上游用 material3 `ModalBottomSheet` + `rememberModalBottomSheetState`；MiuiX 的
- * `OverlayBottomSheet` 由调用方条件渲染控制显隐（`show = true`），没有独立的 sheet state，
- * 因此这里不再需要 `rememberModalBottomSheetState`。
+ * `OverlayBottomSheet` 由 `show` 控制显隐（0.19.0 起保持常驻组合，退出动画才会播），
+ * 没有独立的 sheet state，因此这里不再需要 `rememberModalBottomSheetState`。
  */
 @Composable
 private fun ReaderSettingsSheet(
+    show: Boolean,
     prefs: ReaderPrefs,
     onUpdate: ((ReaderPrefs) -> ReaderPrefs) -> Unit,
     onDismiss: () -> Unit,
     onOpenReaderConfig: (() -> Unit)? = null,
 ) {
-    OverlayBottomSheet(show = true, onDismissRequest = onDismiss) {
+    OverlayBottomSheet(show = show, onDismissRequest = onDismiss) {
         ReaderSettingsSheetContent(
             prefs = prefs,
             onUpdate = onUpdate,

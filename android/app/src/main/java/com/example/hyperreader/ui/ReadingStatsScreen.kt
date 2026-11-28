@@ -219,20 +219,18 @@ fun ReadingStatsScreen(
             colors = ButtonDefaults.textButtonColors(textColor = MiuixTheme.colorScheme.error),
         )
     }
-    if (confirmClear) {
-        OverlayDialog(
-            show = true,
-            title = "清空阅读统计",
-            summary = "会删除本机记录的总时长、连续天数与热力图数据，操作不可撤销。",
-            onDismissRequest = { confirmClear = false },
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
-                Button(
-                    onClick = { confirmClear = false; onClear() },
-                    modifier = Modifier.fillMaxWidth(),
-                ) { Text("确认清空") }
-                TextButton(text = "取消", onClick = { confirmClear = false }, modifier = Modifier.fillMaxWidth())
-            }
+    OverlayDialog(
+        show = confirmClear,
+        title = "清空阅读统计",
+        summary = "会删除本机记录的总时长、连续天数与热力图数据，操作不可撤销。",
+        onDismissRequest = { confirmClear = false },
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
+            Button(
+                onClick = { confirmClear = false; onClear() },
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text("确认清空") }
+            TextButton(text = "取消", onClick = { confirmClear = false }, modifier = Modifier.fillMaxWidth())
         }
     }
 }

@@ -324,17 +324,15 @@ private fun SettingsOverview(state: StudioUiState, viewModel: StudioViewModel) {
                 AppScrollBar(overviewListState)
             }
         }
-        if (!wide && railOpen) {
-            OverlayBottomSheet(show = true, onDismissRequest = { railOpen = false }) {
-                SettingsRail(
-                    current = null,
-                    onSelect = { category ->
-                        viewModel.openSettingsSection(category.section)
-                        railOpen = false
-                    },
-                    modifier = Modifier.padding(UiDimens.spaceL),
-                )
-            }
+        OverlayBottomSheet(show = !wide && railOpen, onDismissRequest = { railOpen = false }) {
+            SettingsRail(
+                current = null,
+                onSelect = { category ->
+                    viewModel.openSettingsSection(category.section)
+                    railOpen = false
+                },
+                modifier = Modifier.padding(UiDimens.spaceL),
+            )
         }
     }
 }
@@ -449,20 +447,18 @@ private fun AccountSection(state: StudioUiState, viewModel: StudioViewModel, onL
             }
         },
     ))
-    if (confirmLogout) {
-        OverlayDialog(
-            show = true,
-            title = "退出登录",
-            summary = "将清除本机保存的会话 Cookie（不影响服务器账号）。",
-            onDismissRequest = { confirmLogout = false },
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
-                Button(
-                    onClick = { confirmLogout = false; viewModel.logout() },
-                    modifier = Modifier.fillMaxWidth(),
-                ) { Text("确认退出") }
-                TextButton(text = "取消", onClick = { confirmLogout = false }, modifier = Modifier.fillMaxWidth())
-            }
+    OverlayDialog(
+        show = confirmLogout,
+        title = "退出登录",
+        summary = "将清除本机保存的会话 Cookie（不影响服务器账号）。",
+        onDismissRequest = { confirmLogout = false },
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
+            Button(
+                onClick = { confirmLogout = false; viewModel.logout() },
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text("确认退出") }
+            TextButton(text = "取消", onClick = { confirmLogout = false }, modifier = Modifier.fillMaxWidth())
         }
     }
 }

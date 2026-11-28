@@ -32,8 +32,8 @@ object ReaderDimens {
     /** 弹层/全屏页的内容内边距（目录行、设置分组、复制文字面板共用）。 */
     val pagePadding: Dp = 16.dp
 
-    /** 浮层圆角：工具栏胶囊与弹层面板共用一个值，避免两处各写 20dp。 */
-    val panelCorner: Dp = 20.dp
+    /** 浮层圆角：工具栏胶囊与弹层面板共用一个值（与宿主 `UiDimens.panelCorner` 一致）。 */
+    val panelCorner: Dp = 16.dp
 
     // —— 装饰与结构常量（与令牌刻度无关，单独命名以便成组调整）——
     /** 发丝描边宽度（未选中的胶囊、背景色块）。 */

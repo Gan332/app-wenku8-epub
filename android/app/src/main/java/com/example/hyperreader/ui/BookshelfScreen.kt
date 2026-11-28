@@ -22,6 +22,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -113,6 +114,11 @@ fun BookshelfScreen(
     // 菜单目标从列表状态反查：sheet 挂在页面层，条目被滚出视口或书架变化时不会悬空。
     val menuEntry = state.bookshelf.firstOrNull { it.id == menuEntryId }
     val tagEditorEntry = state.bookshelf.firstOrNull { it.id == tagEditorEntryId }
+    // Sheet 的退出动画需要内容在 show=false 期间继续存在，故保留最后一次非空条目。
+    var shownMenuEntry by remember { mutableStateOf<BookshelfEntry?>(null) }
+    var shownTagEntry by remember { mutableStateOf<BookshelfEntry?>(null) }
+    LaunchedEffect(menuEntry) { if (menuEntry != null) shownMenuEntry = menuEntry }
+    LaunchedEffect(tagEditorEntry) { if (tagEditorEntry != null) shownTagEntry = tagEditorEntry }
     // 标签索引按书架内容重算；筛选只影响列表呈现，不影响索引。
     val tagIndex = remember(state.bookshelf) { buildShelfTagIndex(state.bookshelf) }
     val activeTag = remember(tagIndex, tagFilterName) {
@@ -362,215 +368,211 @@ fun BookshelfScreen(
         }
     }
     AppScrollBar(listState)
-    // 排序选择：与设置页「EPUB 导出引擎」同一套轻量 Sheet 范式（AGENTS §4.12）
-    if (sortSheet) {
-        OverlayBottomSheet(show = true, onDismissRequest = { sortSheet = false }) {
-            Column(
-                modifier = Modifier.padding(UiDimens.spaceL),
-                verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS),
-            ) {
-                Text("书架排序", fontSize = UiDimens.section, fontWeight = FontWeight.Bold)
-                Text(
-                    "置顶的书始终排在最前，排序只影响各分组内部。",
-                    fontSize = UiDimens.captionSmall,
-                    color = secondaryTextColor(),
-                )
-                BookshelfSort.entries.forEach { option ->
-                    TextButton(
-                        text = if (option == state.bookshelfSort) "✓ ${option.label}" else option.label,
-                        onClick = { viewModel.setBookshelfSort(option) },
-                        modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
-                    )
-                }
-                Text(
-                    state.bookshelfSort.summary,
-                    fontSize = UiDimens.captionSmall,
-                    color = MiuixTheme.colorScheme.primary,
+    // 排序选择：与设置页「EPUB 导出引擎」同一套轻量 Sheet 范式（AGENTS §4.12）。
+    // 保持常驻组合、用 show 控制显隐：MiuiX 在 show=false 时会先播退出动画再卸载内容。
+    OverlayBottomSheet(show = sortSheet, onDismissRequest = { sortSheet = false }) {
+        Column(
+            modifier = Modifier.padding(UiDimens.spaceL),
+            verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS),
+        ) {
+            Text("书架排序", fontSize = UiDimens.section, fontWeight = FontWeight.Bold)
+            Text(
+                "置顶的书始终排在最前，排序只影响各分组内部。",
+                fontSize = UiDimens.captionSmall,
+                color = secondaryTextColor(),
+            )
+            BookshelfSort.entries.forEach { option ->
+                TextButton(
+                    text = if (option == state.bookshelfSort) "✓ ${option.label}" else option.label,
+                    onClick = { viewModel.setBookshelfSort(option) },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
                 )
             }
+            Text(
+                state.bookshelfSort.summary,
+                fontSize = UiDimens.captionSmall,
+                color = MiuixTheme.colorScheme.primary,
+            )
         }
     }
     // 批量操作：与排序 Sheet 同一套轻量 Sheet 范式。
-    if (batchSheet) {
-        OverlayBottomSheet(
-            show = true,
-            title = "批量操作",
-            onDismissRequest = { if (!state.batchExportBusy) batchSheet = false },
+    OverlayBottomSheet(
+        show = batchSheet,
+        title = "批量操作",
+        onDismissRequest = { if (!state.batchExportBusy) batchSheet = false },
+    ) {
+        Column(
+            modifier = Modifier.padding(vertical = UiDimens.spaceL),
+            verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS),
         ) {
-            Column(
-                modifier = Modifier.padding(vertical = UiDimens.spaceL),
-                verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS),
-            ) {
-                Text(
-                    "可批量置顶、加标签、导出或移出书架。导出只处理 Wenku8 书，按当前全局引擎逐本加入队列。",
-                    fontSize = UiDimens.captionSmall,
-                    color = secondaryTextColor(),
+            Text(
+                "可批量置顶、加标签、导出或移出书架。导出只处理 Wenku8 书，按当前全局引擎逐本加入队列。",
+                fontSize = UiDimens.captionSmall,
+                color = secondaryTextColor(),
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceXS)) {
+                TextButton(
+                    text = "全选",
+                    enabled = !state.batchExportBusy,
+                    onClick = { batchSelection = state.bookshelf.map { it.id }.toSet() },
+                    modifier = Modifier.heightIn(min = UiDimens.touchMin),
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceXS)) {
-                    TextButton(
-                        text = "全选",
-                        enabled = !state.batchExportBusy,
-                        onClick = { batchSelection = state.bookshelf.map { it.id }.toSet() },
-                        modifier = Modifier.heightIn(min = UiDimens.touchMin),
-                    )
-                    TextButton(
-                        text = "清空",
-                        enabled = !state.batchExportBusy && batchSelection.isNotEmpty(),
-                        onClick = { batchSelection = emptySet() },
-                        modifier = Modifier.heightIn(min = UiDimens.touchMin),
-                    )
-                }
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = UiDimens.spaceXL * 14)
-                        .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXS),
-                ) {
-                    state.bookshelf.forEach { entry ->
-                        val checked = entry.id in batchSelection
-                        Card(
+                TextButton(
+                    text = "清空",
+                    enabled = !state.batchExportBusy && batchSelection.isNotEmpty(),
+                    onClick = { batchSelection = emptySet() },
+                    modifier = Modifier.heightIn(min = UiDimens.touchMin),
+                )
+            }
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = UiDimens.spaceXL * 14)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXS),
+            ) {
+                state.bookshelf.forEach { entry ->
+                    val checked = entry.id in batchSelection
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        insideMargin = PaddingValues(horizontal = UiDimens.spaceS, vertical = UiDimens.spaceXXS),
+                        onClick = {
+                            if (!state.batchExportBusy) {
+                                batchSelection = if (checked) batchSelection - entry.id else batchSelection + entry.id
+                            }
+                        },
+                    ) {
+                        Row(
                             modifier = Modifier.fillMaxWidth(),
-                            insideMargin = PaddingValues(horizontal = UiDimens.spaceS, vertical = UiDimens.spaceXXS),
-                            onClick = {
-                                if (!state.batchExportBusy) {
-                                    batchSelection = if (checked) batchSelection - entry.id else batchSelection + entry.id
-                                }
-                            },
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Checkbox(
-                                    state = if (checked) ToggleableState.On else ToggleableState.Off,
-                                    onClick = {
-                                        if (!state.batchExportBusy) {
-                                            batchSelection = if (checked) batchSelection - entry.id else batchSelection + entry.id
-                                        }
-                                    },
+                            Checkbox(
+                                state = if (checked) ToggleableState.On else ToggleableState.Off,
+                                onClick = {
+                                    if (!state.batchExportBusy) {
+                                        batchSelection = if (checked) batchSelection - entry.id else batchSelection + entry.id
+                                    }
+                                },
+                            )
+                            Column(Modifier.weight(1f).padding(vertical = UiDimens.spaceXS)) {
+                                Text(entry.title, fontSize = UiDimens.bodyStrong, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(
+                                    if (entry.isRemoteSource) entry.author else "本地 EPUB",
+                                    fontSize = UiDimens.captionSmall,
+                                    color = secondaryTextColor(),
+                                    maxLines = 1,
                                 )
-                                Column(Modifier.weight(1f).padding(vertical = UiDimens.spaceXS)) {
-                                    Text(entry.title, fontSize = UiDimens.bodyStrong, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                    Text(
-                                        if (entry.isRemoteSource) entry.author else "本地 EPUB",
-                                        fontSize = UiDimens.captionSmall,
-                                        color = secondaryTextColor(),
-                                        maxLines = 1,
-                                    )
-                                }
                             }
                         }
                     }
                 }
-                Row(
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                TextField(
+                    value = batchTagInput,
+                    onValueChange = { batchTagInput = it },
+                    label = "批量加标签",
+                    useLabelAsPlaceholder = true,
+                    modifier = Modifier.weight(1f),
+                    singleLine = true,
+                )
+                TextButton(
+                    text = "加标签",
+                    enabled = selectedBatchBooks.isNotEmpty() && normalizeShelfTag(batchTagInput) != null,
+                    onClick = {
+                        viewModel.addShelfTagBatch(selectedBatchBooks, batchTagInput)
+                        batchTagInput = ""
+                        batchSheet = false
+                    },
+                    modifier = Modifier.heightIn(min = UiDimens.touchMin),
+                )
+            }
+            if (state.batchExportBusy) {
+                Text(
+                    "正在准备 ${state.batchExportDone}/${state.batchExportTotal}…",
+                    fontSize = UiDimens.caption,
+                    color = MiuixTheme.colorScheme.primary,
+                )
+            } else {
+                Button(
+                    onClick = {
+                        viewModel.startBatchExport(selectedRemoteBooks)
+                        batchSheet = false
+                    },
+                    enabled = selectedRemoteBooks.isNotEmpty(),
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS),
-                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    TextField(
-                        value = batchTagInput,
-                        onValueChange = { batchTagInput = it },
-                        label = "批量加标签",
-                        useLabelAsPlaceholder = true,
-                        modifier = Modifier.weight(1f),
-                        singleLine = true,
-                    )
-                    TextButton(
-                        text = "加标签",
-                        enabled = selectedBatchBooks.isNotEmpty() && normalizeShelfTag(batchTagInput) != null,
-                        onClick = {
-                            viewModel.addShelfTagBatch(selectedBatchBooks, batchTagInput)
-                            batchTagInput = ""
-                            batchSheet = false
-                        },
-                        modifier = Modifier.heightIn(min = UiDimens.touchMin),
+                    Text(
+                        if (selectedRemoteBooks.isEmpty()) "所选里没有可导出的 Wenku8 书"
+                        else "导出 ${selectedRemoteBooks.size} 本 EPUB",
                     )
                 }
-                if (state.batchExportBusy) {
-                    Text(
-                        "正在准备 ${state.batchExportDone}/${state.batchExportTotal}…",
-                        fontSize = UiDimens.caption,
-                        color = MiuixTheme.colorScheme.primary,
-                    )
-                } else {
-                    Button(
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceXS),
+                ) {
+                    TextButton(
+                        text = "置顶",
+                        enabled = selectedBatchBooks.isNotEmpty(),
                         onClick = {
-                            viewModel.startBatchExport(selectedRemoteBooks)
+                            viewModel.setPinnedBatch(selectedBatchBooks, true)
                             batchSheet = false
                         },
-                        enabled = selectedRemoteBooks.isNotEmpty(),
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text(
-                            if (selectedRemoteBooks.isEmpty()) "所选里没有可导出的 Wenku8 书"
-                            else "导出 ${selectedRemoteBooks.size} 本 EPUB",
-                        )
-                    }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceXS),
-                    ) {
-                        TextButton(
-                            text = "置顶",
-                            enabled = selectedBatchBooks.isNotEmpty(),
-                            onClick = {
-                                viewModel.setPinnedBatch(selectedBatchBooks, true)
-                                batchSheet = false
-                            },
-                            modifier = Modifier.weight(1f).heightIn(min = UiDimens.touchMin),
-                        )
-                        TextButton(
-                            text = "取消置顶",
-                            enabled = selectedBatchBooks.isNotEmpty(),
-                            onClick = {
-                                viewModel.setPinnedBatch(selectedBatchBooks, false)
-                                batchSheet = false
-                            },
-                            modifier = Modifier.weight(1f).heightIn(min = UiDimens.touchMin),
-                        )
-                        TextButton(
-                            text = "删除",
-                            enabled = selectedBatchBooks.isNotEmpty(),
-                            onClick = { confirmBatchDelete = true },
-                            colors = ButtonDefaults.textButtonColors(textColor = MiuixTheme.colorScheme.error),
-                            modifier = Modifier.weight(1f).heightIn(min = UiDimens.touchMin),
-                        )
-                    }
+                        modifier = Modifier.weight(1f).heightIn(min = UiDimens.touchMin),
+                    )
+                    TextButton(
+                        text = "取消置顶",
+                        enabled = selectedBatchBooks.isNotEmpty(),
+                        onClick = {
+                            viewModel.setPinnedBatch(selectedBatchBooks, false)
+                            batchSheet = false
+                        },
+                        modifier = Modifier.weight(1f).heightIn(min = UiDimens.touchMin),
+                    )
+                    TextButton(
+                        text = "删除",
+                        enabled = selectedBatchBooks.isNotEmpty(),
+                        onClick = { confirmBatchDelete = true },
+                        colors = ButtonDefaults.textButtonColors(textColor = MiuixTheme.colorScheme.error),
+                        modifier = Modifier.weight(1f).heightIn(min = UiDimens.touchMin),
+                    )
                 }
             }
         }
     }
-    if (confirmBatchDelete) {
-        OverlayDialog(
-            show = true,
-            title = "移出书架",
-            summary = "将把选中的 ${selectedBatchBooks.size} 本书从书架移除，不会删除本地 EPUB 文件或已导出的 EPUB。",
-            onDismissRequest = { confirmBatchDelete = false },
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
-                Button(
-                    onClick = {
-                        confirmBatchDelete = false
-                        viewModel.removeBatch(selectedBatchBooks)
-                        batchSheet = false
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                ) { Text("确认移除") }
-                TextButton(
-                    text = "取消",
-                    onClick = { confirmBatchDelete = false },
-                    modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
-                )
-            }
+    OverlayDialog(
+        show = confirmBatchDelete,
+        title = "移出书架",
+        summary = "将把选中的 ${selectedBatchBooks.size} 本书从书架移除，不会删除本地 EPUB 文件或已导出的 EPUB。",
+        onDismissRequest = { confirmBatchDelete = false },
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
+            Button(
+                onClick = {
+                    confirmBatchDelete = false
+                    viewModel.removeBatch(selectedBatchBooks)
+                    batchSheet = false
+                },
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text("确认移除") }
+            TextButton(
+                text = "取消",
+                onClick = { confirmBatchDelete = false },
+                modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
+            )
         }
     }
     // 书籍操作：与排序 Sheet 同一套轻量 Sheet 范式（AGENTS §4.12）。
     // 此前是锚在卡片行尾的 `Popup`，偏移写死 120dp——换字号/换机型后菜单会错位，
     // 而且它随列表项一起进出组合，滚动时会被卡片裁掉。
-    menuEntry?.let { entry ->
+    shownMenuEntry?.let { entry ->
         BookEntryMenu(
             entry = entry,
+            show = menuEntry != null,
             viewModel = viewModel,
             onOpenLocal = { onOpenLocal(it); menuEntryId = null },
             onOpenRemote = { onOpenRemote(it); menuEntryId = null },
@@ -579,9 +581,10 @@ fun BookshelfScreen(
             onDismiss = { menuEntryId = null },
         )
     }
-    tagEditorEntry?.let { entry ->
+    shownTagEntry?.let { entry ->
         ShelfTagEditorSheet(
             entry = entry,
+            show = tagEditorEntry != null,
             allTags = tagIndex.map { it.name },
             onAddTag = { viewModel.addShelfTag(entry.id, it) },
             onRemoveTag = { viewModel.removeShelfTag(entry.id, it) },
@@ -814,6 +817,7 @@ private fun BookshelfSource.displayLabel(): String = when (this) {
 @Composable
 private fun BookEntryMenu(
     entry: BookshelfEntry,
+    show: Boolean,
     viewModel: StudioViewModel,
     onOpenLocal: (BookshelfEntry) -> Unit,
     onOpenRemote: (BookshelfEntry) -> Unit,
@@ -827,7 +831,7 @@ private fun BookEntryMenu(
         onDismiss()
     }
     // 标题交给 Sheet 自己的 title 槽位（有对齐与内边距），正文不再重复一遍书名。
-    OverlayBottomSheet(show = true, title = entry.title, onDismissRequest = onDismiss) {
+    OverlayBottomSheet(show = show, title = entry.title, onDismissRequest = onDismiss) {
         Column(
             // 上下再留一点：Sheet 的 `insideMargin` 只给左右（24dp）与底部，
             // 顶部贴着手柄会太挤。水平方向不再补，否则左右各 40dp。
@@ -930,6 +934,7 @@ private fun BookEntryMenu(
 @Composable
 private fun ShelfTagEditorSheet(
     entry: BookshelfEntry,
+    show: Boolean,
     allTags: List<String>,
     onAddTag: (String) -> Unit,
     onRemoveTag: (String) -> Unit,
@@ -940,7 +945,7 @@ private fun ShelfTagEditorSheet(
     val orderedTags = remember(entry.tags, allTags) {
         (entry.tags + allTags).distinctBy { it.lowercase() }
     }
-    OverlayBottomSheet(show = true, title = "标签 · ${entry.title}", onDismissRequest = onDismiss) {
+    OverlayBottomSheet(show = show, title = "标签 · ${entry.title}", onDismissRequest = onDismiss) {
         Column(
             modifier = Modifier.padding(vertical = UiDimens.spaceL),
             verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS),

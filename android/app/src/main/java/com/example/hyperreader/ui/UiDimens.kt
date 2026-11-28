@@ -58,7 +58,7 @@ object UiDimens {
     val searchCoverHeight: Dp = 76.dp
 
     /** Card 内边距（MiuiX `insideMargin`）。 */
-    val cardInset: Dp = 16.dp
+    val cardInset: Dp = 14.dp
 
     /** 列表项之间的间距。 */
     val listGap: Dp = spaceS
@@ -93,16 +93,16 @@ object UiDimens {
     // —— 跨页复用的装饰值 ——
     // 封面圆角此前在书架、探索列表、探索大图三处各写一遍 8dp；
     // 加载指示器此前有 16 / 22 / 24dp 三种尺寸，同一屏里粗细不一。
-    val cardCorner: Dp = 8.dp
+    val cardCorner: Dp = 10.dp
 
     /** 主视觉 / 空态面板圆角。 */
-    val heroCorner: Dp = 24.dp
+    val heroCorner: Dp = 28.dp
 
-    /** 一般浮层面板圆角。 */
-    val panelCorner: Dp = 18.dp
+    /** 一般浮层面板圆角（对齐 Miuix Card 默认 16dp 的 squircle 观感）。 */
+    val panelCorner: Dp = 16.dp
 
     /** 浮动底部导航栏圆角。 */
-    val navCorner: Dp = 26.dp
+    val navCorner: Dp = 28.dp
 
     /** 底部导航选中项圆角。 */
     val navItemCorner: Dp = 18.dp

@@ -17,10 +17,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
@@ -30,14 +31,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.CardDefaults
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 /**
- * 全局纸张背景。
+ * 全局纸张背景（0.19.0 视觉刷新）。
  *
- * 只使用主题色和低透明度渐变，不引入位图或固定色值：亮色下像带暖调的纸，
- * 暗色下仍有层次；强调色变化时两个光斑会一起换色。
+ * 与旧版的差别：去掉「surface → background → surfaceVariant」三段式与两团高饱和光斑，
+ * 改为**接近平面的浅渐变 + 单侧极淡主色光晕**。这样卡片与浮层成为画面里唯一的高光，
+ * 暗色与动态色下也不会出现大面积染色。
  */
 @Composable
 fun StudioBackdrop(
@@ -50,32 +53,28 @@ fun StudioBackdrop(
             .fillMaxSize()
             .background(
                 Brush.verticalGradient(
-                    listOf(
-                        colors.surface,
-                        colors.background,
-                        colors.surfaceVariant.copy(alpha = 0.72f),
-                    ),
+                    listOf(colors.surface, colors.background),
                 ),
             ),
     ) {
         Canvas(Modifier.fillMaxSize()) {
             drawCircle(
                 brush = Brush.radialGradient(
-                    colors = listOf(colors.primary.copy(alpha = 0.11f), Color.Transparent),
-                    center = Offset(size.width * 0.92f, size.height * 0.04f),
-                    radius = size.width * 0.78f,
-                ),
-                radius = size.width * 0.78f,
-                center = Offset(size.width * 0.92f, size.height * 0.04f),
-            )
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colors = listOf(colors.secondaryContainer.copy(alpha = 0.12f), Color.Transparent),
-                    center = Offset(size.width * 0.04f, size.height * 0.72f),
+                    colors = listOf(colors.primary.copy(alpha = 0.07f), Color.Transparent),
+                    center = Offset(size.width * 0.86f, size.height * 0.02f),
                     radius = size.width * 0.72f,
                 ),
                 radius = size.width * 0.72f,
-                center = Offset(size.width * 0.04f, size.height * 0.72f),
+                center = Offset(size.width * 0.86f, size.height * 0.02f),
+            )
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(colors.secondaryContainer.copy(alpha = 0.06f), Color.Transparent),
+                    center = Offset(size.width * 0.06f, size.height * 0.78f),
+                    radius = size.width * 0.66f,
+                ),
+                radius = size.width * 0.66f,
+                center = Offset(size.width * 0.06f, size.height * 0.78f),
             )
         }
         content()
@@ -85,8 +84,8 @@ fun StudioBackdrop(
 /**
  * 编辑式主视觉面板：小标签、醒目标题、说明与操作区。
  *
- * 与普通 Card 的差别是它承担「这一屏现在该做什么」的叙事，而不是承载一条设置或一本书。
- * 渐变、光斑与边框都来自主题色，暗色和动态色下自动收敛。
+ * 0.19.0 刷新：圆角放大到 [UiDimens.heroCorner]（squircle 观感），kicker 收成胶囊 chip，
+ * 标题走 Miuix `title2`，说明走 `body2`。渐变与光晕仍只取主题色。
  */
 @Composable
 fun StudioHero(
@@ -105,21 +104,21 @@ fun StudioHero(
             .background(
                 Brush.linearGradient(
                     listOf(
-                        colors.primaryContainer.copy(alpha = 0.92f),
+                        colors.primaryContainer.copy(alpha = 0.90f),
                         colors.surfaceContainerHigh.copy(alpha = 0.96f),
                     ),
                 ),
             )
-            .border(BorderStroke(UiDimens.hairline, colors.outline.copy(alpha = 0.18f)), shape)
+            .border(BorderStroke(UiDimens.hairline, colors.outline.copy(alpha = 0.14f)), shape)
             .drawBehind {
                 drawCircle(
                     brush = Brush.radialGradient(
-                        colors = listOf(colors.primary.copy(alpha = 0.18f), Color.Transparent),
-                        center = Offset(size.width * 0.88f, size.height * 0.12f),
-                        radius = size.width * 0.55f,
+                        colors = listOf(colors.primary.copy(alpha = 0.16f), Color.Transparent),
+                        center = Offset(size.width * 0.88f, size.height * 0.10f),
+                        radius = size.width * 0.52f,
                     ),
-                    radius = size.width * 0.55f,
-                    center = Offset(size.width * 0.88f, size.height * 0.12f),
+                    radius = size.width * 0.52f,
+                    center = Offset(size.width * 0.88f, size.height * 0.10f),
                 )
             },
     ) {
@@ -127,14 +126,30 @@ fun StudioHero(
             modifier = Modifier.padding(UiDimens.spaceL),
             verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS),
         ) {
+            Box(
+                modifier = Modifier
+                    .clip(CircleShape)
+                    .background(colors.primary.copy(alpha = 0.14f))
+                    .padding(horizontal = UiDimens.spaceS, vertical = UiDimens.spaceXXS),
+            ) {
+                Text(
+                    kicker,
+                    color = colors.primary,
+                    style = MiuixTheme.textStyles.footnote2,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
             Text(
-                kicker,
-                color = colors.primary,
-                fontSize = UiDimens.captionSmall,
+                title,
+                style = MiuixTheme.textStyles.title2,
                 fontWeight = FontWeight.Bold,
+                color = colors.onSurface,
             )
-            Text(title, fontSize = UiDimens.title, fontWeight = FontWeight.Bold)
-            Text(description, color = secondaryTextColor(), fontSize = UiDimens.caption)
+            Text(
+                description,
+                style = MiuixTheme.textStyles.body2,
+                color = secondaryTextColor(),
+            )
             actions?.let {
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceS),
@@ -149,7 +164,8 @@ fun StudioHero(
  * 统一的信息分组：标题 + 连续内容行。
  *
  * 设置二级页和详情页不再为每个字段套一张 Card；同一组信息共用一块浮层，
- * 行与行之间只靠间距和细分割线区分。
+ * 行与行之间只靠间距和细分割线区分。0.19.0 起圆角与 Miuix Card 默认对齐（[UiDimens.panelCorner]），
+ * 底色显式取 `surfaceContainer`，与页面 `surface` 背景形成稳定层级。
  */
 @Composable
 fun StudioPanel(
@@ -161,13 +177,17 @@ fun StudioPanel(
         modifier = modifier.fillMaxWidth(),
         cornerRadius = UiDimens.panelCorner,
         insideMargin = PaddingValues(UiDimens.spaceM),
+        colors = CardDefaults.defaultColors(
+            color = MiuixTheme.colorScheme.surfaceContainer,
+            contentColor = MiuixTheme.colorScheme.onSurfaceContainer,
+        ),
     ) {
         if (!title.isNullOrBlank()) {
             Text(
                 title,
-                fontSize = UiDimens.captionSmall,
+                style = MiuixTheme.textStyles.footnote1,
                 fontWeight = FontWeight.Bold,
-                color = secondaryTextColor(),
+                color = tertiaryTextColor(),
             )
             Spacer(Modifier.size(UiDimens.spaceXXS))
         }
@@ -192,13 +212,13 @@ fun StudioFactRow(
         Text(
             label,
             modifier = Modifier.weight(1f),
-            fontSize = UiDimens.captionSmall,
+            style = MiuixTheme.textStyles.footnote1,
             color = tertiaryTextColor(),
         )
         Text(
             value,
             modifier = Modifier.weight(1.4f),
-            fontSize = UiDimens.body,
+            style = MiuixTheme.textStyles.body2,
             fontWeight = FontWeight.Medium,
             textAlign = TextAlign.End,
             maxLines = 2,

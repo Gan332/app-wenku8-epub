@@ -25,14 +25,14 @@
 
 - Kotlin
 - Jetpack Compose
-- MiuiX `v0.9.4`（依赖坐标 `top.yukonga.miuix.kmp:miuix-ui` + `miuix-core` + `miuix-icons`）
+- MiuiX `v0.9.5-rc02`（依赖坐标 `top.yukonga.miuix.kmp:miuix-ui` + `miuix-core` + `miuix-icons` + `miuix-preference`）
 - ~~Material3~~（0.9.3 起全量移除，界面统一 MiuiX，material 依赖已从构建中断开）
 - OkHttp
 - Jsoup
 - DataStore Preferences
 - AndroidX Security Crypto（Keystore 加密 Cookie）
-- AGP 9.4.1 / Kotlin 2.4.20 / Gradle 9.6.0 / Compose Multiplatform 1.12.0
-- Compile SDK 37 / Target SDK 36 / Min SDK 26
+- AGP 9.5.2 / Kotlin 2.4.21 / Gradle 9.9.2 / Compose Multiplatform 1.13.0-rc01
+- Compile SDK 37.2（minor 2，MiuiX 0.9.5 要求）/ Target SDK 36 / Min SDK 26
 - JDK 21
 
 ### 0.9.x 升级踩过的坑（务必先读）
@@ -42,8 +42,10 @@
 2. **`platforms;android-37` 这个包不存在**。SDK 37 起平台包强制带小版本号，基础包是
    `platforms;android-37.0`（`source.properties` 里 `ApiLevel=37.0`、`IsBaseSdk=true`，
    安装目录 `android-37.0/`）。`build-tools` 对应 `build-tools;37.0.0`。
-3. **MiuiX 0.9.4 的 AAR 强制 `compileSdk >= 37`**，`targetSdk` 可以保持 36。
-4. **AGP 9.4.1 强制 Gradle >= 9.6.0**。`gradle-wrapper.properties` 和 workflow 里的
+   MiuiX 0.9.5-rc02 起 AAR 要求 **`minCompileMinorSdk=2`**，必须装 `platforms;android-37.2`，
+   `compileSdk` 用新 DSL `compileSdk { version = release(37) { minorApiLevel = 2 } }`。
+3. **MiuiX 0.9.5-rc02 的 AAR 强制 `compileSdk >= 37`（minor 2）**，`targetSdk` 可以保持 36。
+4. **AGP 9.5.2 强制 Gradle >= 9.9.x**。`gradle-wrapper.properties` 和 workflow 里的
    `gradle/actions/setup-gradle` 的 `gradle-version` **两处必须一致**，只改一处会在
    `com.android.internal.version-check` 挂掉。
 5. **`kmp.extra` 包已整体删除**，`SuperDialog` → `top.yukonga.miuix.kmp.overlay.OverlayDialog`。

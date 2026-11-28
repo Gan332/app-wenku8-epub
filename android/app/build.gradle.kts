@@ -12,8 +12,13 @@ plugins {
 
 android {
     namespace = "com.example.hyperreader"
-    // MiuiX 0.9.4 的 AAR 要求 compileSdk 37+；targetSdk 保持 36，不引入运行时行为变更
-    compileSdk = 37
+    // MiuiX 0.9.5-rc02 的 AAR 要求 compileSdk 37 且 minCompileMinorSdk=2，
+    // 即 android-37.2（不是 37.0）；targetSdk 保持 36，不引入运行时行为变更。
+    compileSdk {
+        version = release(37) {
+            minorApiLevel = 2
+        }
+    }
 
     defaultConfig {
         applicationId = "com.example.hyperreader"

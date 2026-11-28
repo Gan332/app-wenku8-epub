@@ -817,14 +817,12 @@ private fun ProgressContent(job: ExportJob, viewModel: StudioViewModel) {
             JobStatus.canceled -> MessageCard("任务已取消。")
         }
     }
-    if (showWarnings) {
-        OverlayDialog(show = true, title = "导出警告", summary = "以下项目被跳过，但 EPUB 仍会继续生成。", onDismissRequest = { showWarnings = false }) {
-            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
-                LazyColumn(Modifier.height(UiDimens.warningListMaxHeight), verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
-                    items(job.warnings) { warning -> Text("• $warning", fontSize = UiDimens.body) }
-                }
-                Button(onClick = { showWarnings = false }, modifier = Modifier.fillMaxWidth()) { Text("知道了") }
+    OverlayDialog(show = showWarnings, title = "导出警告", summary = "以下项目被跳过，但 EPUB 仍会继续生成。", onDismissRequest = { showWarnings = false }) {
+        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
+            LazyColumn(Modifier.height(UiDimens.warningListMaxHeight), verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
+                items(job.warnings) { warning -> Text("• $warning", fontSize = UiDimens.body) }
             }
+            Button(onClick = { showWarnings = false }, modifier = Modifier.fillMaxWidth()) { Text("知道了") }
         }
     }
 }

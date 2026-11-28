@@ -15,13 +15,16 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.text.style.TextAlign
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
+import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 /**
  * 共用状态呈现：加载中 / 空态 / 出错。
@@ -67,6 +70,7 @@ fun EmptyState(
     title: String,
     description: String? = null,
     modifier: Modifier = Modifier,
+    icon: ImageVector? = null,
     actionLabel: String? = null,
     onAction: (() -> Unit)? = null,
 ) {
@@ -84,16 +88,24 @@ fun EmptyState(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS),
         ) {
+            if (icon != null) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    modifier = Modifier.padding(bottom = UiDimens.spaceXXS),
+                    tint = tertiaryTextColor(),
+                )
+            }
             Text(
                 title,
-                fontSize = UiDimens.bodyStrong,
+                style = MiuixTheme.textStyles.headline2,
                 fontWeight = FontWeight.Medium,
                 textAlign = TextAlign.Center,
             )
             if (!description.isNullOrBlank()) {
                 Text(
                     description,
-                    fontSize = UiDimens.caption,
+                    style = MiuixTheme.textStyles.body2,
                     color = tertiaryTextColor(),
                     textAlign = TextAlign.Center,
                 )
