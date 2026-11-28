@@ -152,7 +152,7 @@ fun BookshelfScreen(
     LazyColumn(
         state = listState,
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(top = UiDimens.spaceL, bottom = UiDimens.spaceL),
+        contentPadding = PaddingValues(top = UiDimens.spaceL, bottom = UiDimens.spaceL + LocalFloatingBarInset),
         verticalArrangement = Arrangement.spacedBy(UiDimens.spaceM),
     ) {
         item(key = "page-actions") {

@@ -47,6 +47,15 @@ object UiDimens {
     /** 设置页宽屏左侧分类 rail 宽度。 */
     val railWidth: Dp = 112.dp
 
+    /** 悬浮胶囊底栏高度（KernelSU 风格，对齐参考实现 56dp）。 */
+    val navHeight: Dp = 56.dp
+
+    /** 悬浮胶囊最大宽度；四项目在手机上约占屏宽 80%。 */
+    val floatingNavMaxWidth: Dp = 320.dp
+
+    /** 悬浮胶囊底栏与屏幕底边（含系统导航条）的最小间距。 */
+    val floatingNavBottomGap: Dp = 12.dp
+
     /** 强调色取色器高度（Miuix ColorPicker 需要显式高度）。 */
     val colorPickerHeight: Dp = 180.dp
 

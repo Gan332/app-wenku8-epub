@@ -1620,6 +1620,8 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
 
     fun isOnShelf(bookId: String): Boolean = state.value.bookshelf.any { it.bookId == bookId }
     fun setThemeMode(mode: com.example.hyperreader.settings.AppThemeMode) { viewModelScope.launch { settingsRepository.setThemeMode(mode) } }
+    fun setFloatingBottomBar(enabled: Boolean) { viewModelScope.launch { settingsRepository.setFloatingBottomBar(enabled) } }
+    fun setGlassBlur(enabled: Boolean) { viewModelScope.launch { settingsRepository.setGlassBlur(enabled) } }
     fun setDynamicColor(enabled: Boolean) { viewModelScope.launch { settingsRepository.setDynamicColor(enabled) } }
     fun setAccentColor(color: Int) { viewModelScope.launch { settingsRepository.setAccentColor(color) } }
 

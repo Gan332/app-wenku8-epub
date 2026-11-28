@@ -13,6 +13,10 @@ data class AppThemeSettings(
     val mode: AppThemeMode = AppThemeMode.MONET,
     val useDynamicColor: Boolean = true,
     val accentColor: Int = 0xFFA34B2F.toInt(),
+    /** 悬浮胶囊底栏（对齐 KernelSU 风格）；关闭时回退整条 NavigationBar。 */
+    val floatingBottomBar: Boolean = true,
+    /** 悬浮底栏的毛玻璃模糊；系统不支持 RenderEffect 时组件自动回退不透明。 */
+    val glassBlur: Boolean = true,
 )
 
 @Serializable

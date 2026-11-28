@@ -91,6 +91,8 @@ object ConfigTransfer {
         val mode: String? = null,
         val useDynamicColor: Boolean? = null,
         val accentColor: Int? = null,
+        val floatingBottomBar: Boolean? = null,
+        val glassBlur: Boolean? = null,
     )
 
     /**
@@ -171,6 +173,8 @@ object ConfigTransfer {
             mode = theme.mode.name,
             useDynamicColor = theme.useDynamicColor,
             accentColor = theme.accentColor,
+            floatingBottomBar = theme.floatingBottomBar,
+            glassBlur = theme.glassBlur,
         ),
         reader = ConfigReader(
             fontSizeSp = reader.fontSizeSp,
@@ -273,6 +277,18 @@ object ConfigTransfer {
             }
             planColor("强调色", theme.accentColor, changes, skipped) { color ->
                 ConfigChange.SetAccentColor(color)
+            }
+            val floatingBar = theme.floatingBottomBar
+            if (floatingBar == null) {
+                skipped += "悬浮底栏（缺失）"
+            } else {
+                changes += ConfigChange.SetFloatingBottomBar(floatingBar)
+            }
+            val glassBlur = theme.glassBlur
+            if (glassBlur == null) {
+                skipped += "毛玻璃（缺失）"
+            } else {
+                changes += ConfigChange.SetGlassBlur(glassBlur)
             }
         }
 
@@ -461,6 +477,8 @@ sealed class ConfigChange(val label: String) {
     class SetThemeMode(val value: AppThemeMode) : ConfigChange("主题模式")
     class SetDynamicColor(val value: Boolean) : ConfigChange("使用动态色")
     class SetAccentColor(val value: Int) : ConfigChange("强调色")
+    class SetFloatingBottomBar(val value: Boolean) : ConfigChange("悬浮底栏")
+    class SetGlassBlur(val value: Boolean) : ConfigChange("毛玻璃")
 
     class SetReaderFontSize(val value: Float) : ConfigChange("字号")
     class SetReaderFontWeight(val value: Int) : ConfigChange("字重")
@@ -483,6 +501,8 @@ sealed class ConfigChange(val label: String) {
             is SetThemeMode -> repository.setThemeMode(value)
             is SetDynamicColor -> repository.setDynamicColor(value)
             is SetAccentColor -> repository.setAccentColor(value)
+            is SetFloatingBottomBar -> repository.setFloatingBottomBar(value)
+            is SetGlassBlur -> repository.setGlassBlur(value)
             is SetReaderFontSize -> repository.setReaderFontSize(value)
             is SetReaderFontWeight -> repository.setReaderFontWeight(value)
             is SetReaderLineHeight -> repository.setReaderLineHeight(value)

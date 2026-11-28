@@ -38,6 +38,7 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -85,12 +86,19 @@ import top.yukonga.miuix.kmp.icon.extended.Search
 import top.yukonga.miuix.kmp.icon.extended.Settings
 import top.yukonga.miuix.kmp.icon.extended.Share
 import top.yukonga.miuix.kmp.basic.TopAppBar
+import top.yukonga.miuix.kmp.blur.layerBackdrop
+import top.yukonga.miuix.kmp.glass.GlassNavigationBar
+import top.yukonga.miuix.kmp.glass.GlassNavigationItem
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import com.example.hyperreader.R
 import com.example.hyperreader.auth.LoginActivity
 import com.example.hyperreader.reader.XyReaderActivity
 import com.example.hyperreader.reader.onlineReaderIntent
 import com.example.hyperreader.ui.AppMiuixTheme
+import com.example.hyperreader.settings.AppThemeSettings
+import com.example.hyperreader.ui.rememberFloatingBarInset
+import com.example.hyperreader.ui.LocalFloatingBarInset
+import com.example.hyperreader.ui.rememberChromeBackdrop
 import com.example.hyperreader.ui.BookmarkCenterScreen
 import com.example.hyperreader.ui.BookshelfScreen
 import com.example.hyperreader.ui.EmptyState
@@ -240,6 +248,12 @@ private fun StudioApp(
     LaunchedEffect(refreshRate) {
         com.example.hyperreader.settings.RefreshRateController.apply(context, refreshRate)
     }
+    // 外观层：悬浮底栏与毛玻璃都是用户可关的偏好，
+    // 关闭时回退到原来的整条 NavigationBar / 不透明表面。
+    val appTheme by viewModel.appTheme.collectAsStateWithLifecycle(initialValue = AppThemeSettings())
+    val floatingBar = appTheme.floatingBottomBar
+    val chromeBackdrop = rememberChromeBackdrop(floatingBar && appTheme.glassBlur)
+    val floatingInset = rememberFloatingBarInset()
     // 标题与返回动作都从 PageChrome 的两个纯函数读（0.19.0-alpha05）：
     // 顶栏标题、顶栏返回按钮、系统返回键三处共用同一份决策，不会各写一遍 `when`。
     val chromeTitle = state.chromeTitle()
@@ -275,7 +289,12 @@ private fun StudioApp(
     LaunchedEffect(chromeTitle) {
         scrollBehavior.state.heightOffset = 0f
     }
+    val showTabs = state.shellPage() == ShellPage.TABS
+    CompositionLocalProvider(
+        LocalFloatingBarInset provides (if (floatingBar && showTabs) floatingInset else 0.dp),
+    ) {
     Scaffold(
+        containerColor = Color.Transparent,
         topBar = {
             // 宽屏：顶栏文字与正文同宽居中，背景仍铺满整屏（避免两侧露底）。
             Box(
@@ -325,7 +344,8 @@ private fun StudioApp(
         bottomBar = {
             // 全屏覆盖页（详情 / 导出记录 / 榜单展开 / 搜索 / 书签中心 / 导出向导）不显示底部导航。
             // 判据与页面层级共用 `shellPage()`，避免又多一处手写条件而漂移。
-            if (state.shellPage() == ShellPage.TABS) {
+            // 悬浮胶囊开启时不再占用 Scaffold 底栏槽位，改由内容区上方的玻璃胶囊承担。
+            if (!floatingBar && state.shellPage() == ShellPage.TABS) {
                 Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.BottomCenter) {
                 Surface(
                     modifier = Modifier
@@ -370,6 +390,7 @@ private fun StudioApp(
                     .fillMaxWidth()
                     .padding(padding)
                     .nestedScroll(scrollBehavior.nestedScrollConnection)
+                    .then(if (chromeBackdrop != null) Modifier.layerBackdrop(chromeBackdrop) else Modifier)
                     .padding(horizontal = UiDimens.pagePadding),
             ) {
                 // 全屏覆盖页统一转场（0.18.0）：探索详情 / 导出记录 / 榜单展开 / 搜索 / 导出向导 / tab 内容
@@ -577,14 +598,35 @@ private fun StudioApp(
                     onImportBackup = onImportBackup,
                     onOpenChallenge = onOpenChallenge,
                 )
-                            }
-                        }
-                    }
                     }
                 }
             }
+            }
+            }
+            }
+            if (floatingBar) {
+                GlassNavigationBar(
+                    items = listOf(
+                        GlassNavigationItem(icon = ImageVector.vectorResource(R.drawable.outline_book_24px), label = "阅读"),
+                        GlassNavigationItem(icon = MiuixIcons.Recent, label = "书架"),
+                        GlassNavigationItem(icon = ImageVector.vectorResource(R.drawable.outline_explore_24px), label = "探索"),
+                        GlassNavigationItem(icon = MiuixIcons.Settings, label = "设置"),
+                    ),
+                    selectedIndex = state.tab.ordinal,
+                    onSelect = { viewModel.setTab(StudioTab.entries[it]) },
+                    backdrop = if (appTheme.glassBlur) chromeBackdrop else null,
+                    visible = showTabs,
+                    height = UiDimens.navHeight,
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(horizontal = UiDimens.pagePadding)
+                        .fillMaxWidth()
+                        .widthIn(max = UiDimens.floatingNavMaxWidth),
+                )
+            }
         }
     }
+}
 }
 
 /**

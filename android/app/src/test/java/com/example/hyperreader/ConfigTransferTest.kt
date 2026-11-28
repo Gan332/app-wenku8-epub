@@ -112,7 +112,7 @@ class ConfigTransferTest {
     fun nestedKeysAreExactlyTheDocumentedSets() {
         val root = Json.parseToJsonElement(export()).jsonObject
         assertEquals(
-            setOf("mode", "useDynamicColor", "accentColor"),
+            setOf("mode", "useDynamicColor", "accentColor", "floatingBottomBar", "glassBlur"),
             root.getValue("theme").jsonObject.keys,
         )
         assertEquals(
@@ -195,8 +195,8 @@ class ConfigTransferTest {
     fun everyWritableChangeTargetsASingleSettingsField() {
         // 导入计划的每一条都只能改一个具体设置项，无法整体替换设置对象
         val plan = ConfigTransfer.plan(ConfigTransfer.documentOf(theme, reader, "0.8.0", 0L))
-        // 14 项 theme+reader + 2 项 shelf（导出引擎、书架排序）
-        assertEquals(16, plan.appliedCount)
+        // 16 项 theme+reader + 2 项 shelf（导出引擎、书架排序）
+        assertEquals(18, plan.appliedCount)
         assertTrue(plan.changes.all { it.label.isNotBlank() })
         assertEquals(plan.changes.size, plan.changes.map { it.label }.toSet().size)
     }
@@ -236,7 +236,7 @@ class ConfigTransferTest {
     fun outOfRangeNumbersAreClampedInsteadOfCrashing() {
         val document = ConfigTransfer.ConfigDocument(
             schemaVersion = 1,
-            theme = ConfigTransfer.ConfigTheme(mode = "LIGHT", useDynamicColor = true, accentColor = 0xFF102030.toInt()),
+            theme = ConfigTransfer.ConfigTheme(mode = "LIGHT", useDynamicColor = true, accentColor = 0xFF102030.toInt(), floatingBottomBar = true, glassBlur = true),
             reader = ConfigTransfer.ConfigReader(
                 fontSizeSp = -5f,
                 fontWeight = 5_000,
@@ -254,9 +254,9 @@ class ConfigTransferTest {
         val result = ConfigTransfer.decode(ConfigTransfer.encodeDocument(document))
         assertTrue(result is ConfigTransfer.DecodeResult.Success)
         val plan = ConfigTransfer.plan((result as ConfigTransfer.DecodeResult.Success).document)
-        // 0.19.0-alpha04：这份手构文档没有 shelf 节点 → 缺失计一条（skipped），theme+reader 共 14 项
+        // 0.19.0-alpha04：这份手构文档没有 shelf 节点 → 缺失计一条（skipped），theme+reader 共 16 项
         assertEquals(1, plan.skippedCount)
-        assertEquals(14, plan.appliedCount)
+        assertEquals(16, plan.appliedCount)
 
         fun change(label: String) = plan.changes.first { it.label == label }
         assertEquals(12f, (change("字号") as ConfigChange.SetReaderFontSize).value, 0.001f)
@@ -270,7 +270,7 @@ class ConfigTransferTest {
     fun nonFiniteAndInvalidValuesAreSkippedNotFatal() {
         val document = ConfigTransfer.ConfigDocument(
             schemaVersion = 1,
-            theme = ConfigTransfer.ConfigTheme(mode = "SEPIA", useDynamicColor = true, accentColor = 123),
+            theme = ConfigTransfer.ConfigTheme(mode = "SEPIA", useDynamicColor = true, accentColor = 123, floatingBottomBar = true, glassBlur = true),
             reader = ConfigTransfer.ConfigReader(
                 fontSizeSp = Float.NaN,
                 lineHeight = Float.POSITIVE_INFINITY,
@@ -282,9 +282,9 @@ class ConfigTransferTest {
         val plan = ConfigTransfer.plan(document)
         // 合法项照常导入
         assertTrue(plan.changes.any { it is ConfigChange.SetDynamicColor })
-        // 非法项只跳过自身：主题 2 项 + 阅读器 11 项全部不可用，其余不受影响
+        // 非法项只跳过自身：主题 2 项 + 阅读器 11 项 + 缺失的 shelf 1 项
         assertEquals(14, plan.skippedCount)
-        assertEquals(1, plan.appliedCount)
+        assertEquals(3, plan.appliedCount)
         assertTrue(plan.skipped.any { it.contains("SEPIA") })
         assertTrue(plan.skipped.any { it.contains("NEON") })
         assertTrue(plan.skipped.any { it.contains("DIAGONAL") })
@@ -305,9 +305,9 @@ class ConfigTransferTest {
         val plan = ConfigTransfer.plan((decoded as ConfigTransfer.DecodeResult.Success).document)
         assertEquals(3, plan.appliedCount)
         // schema v1 文件没有 shelf 节点 → 按「缺失」计一条（与 theme/reader 的缺失一致）
-        assertEquals(12, plan.skippedCount)
+        assertEquals(14, plan.skippedCount)
         assertTrue(plan.summary().contains("导入成功 3 项"))
-        assertTrue(plan.summary().contains("跳过 12 项"))
+        assertTrue(plan.summary().contains("跳过 14 项"))
         assertTrue(plan.details().isNotBlank())
     }
 
@@ -350,7 +350,7 @@ class ConfigTransferTest {
         assertEquals("skipped:\n${plan.details()}", 0, plan.skippedCount)
         assertEquals(
             setOf(
-                "主题模式", "使用动态色", "强调色",
+                "主题模式", "使用动态色", "强调色", "悬浮底栏", "毛玻璃",
                 "字号", "字重", "行高", "段距", "左右边距",
                 "阅读背景", "自定义背景色", "文字颜色", "翻页方式",
                 "保持屏幕常亮", "沉浸模式",

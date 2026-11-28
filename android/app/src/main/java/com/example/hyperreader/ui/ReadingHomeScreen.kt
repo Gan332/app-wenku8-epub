@@ -94,7 +94,7 @@ fun ReadingHomeScreen(
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(top = UiDimens.spaceS, bottom = UiDimens.spaceXL),
+            contentPadding = PaddingValues(top = UiDimens.spaceS, bottom = UiDimens.spaceXL + LocalFloatingBarInset),
             verticalArrangement = Arrangement.spacedBy(UiDimens.spaceL),
         ) {
             if (!bookshelfLoaded) {

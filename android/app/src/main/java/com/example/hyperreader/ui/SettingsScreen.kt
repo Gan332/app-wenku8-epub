@@ -211,7 +211,7 @@ private fun SettingsOverview(state: StudioUiState, viewModel: StudioViewModel) {
                 LazyColumn(
                     state = overviewListState,
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(top = UiDimens.spaceS, bottom = UiDimens.spaceXL),
+                    contentPadding = PaddingValues(top = UiDimens.spaceS, bottom = UiDimens.spaceXL + LocalFloatingBarInset),
                     verticalArrangement = Arrangement.spacedBy(UiDimens.spaceL),
                 ) {
                     item(key = "settings-hero") {
@@ -685,6 +685,25 @@ private fun AppearanceSection(viewModel: StudioViewModel) {
                 )
             }
         },
+        { SectionTitle("界面") },
+        {
+            PreferencePanel {
+                SwitchPreference(
+                    title = "悬浮胶囊底栏",
+                    summary = "底部导航收成悬浮胶囊，关闭后回退整条导航栏",
+                    checked = theme.floatingBottomBar,
+                    onCheckedChange = viewModel::setFloatingBottomBar,
+                    insideMargin = PreferenceRowMargin,
+                )
+                SwitchPreference(
+                    title = "毛玻璃模糊",
+                    summary = "底栏采样背后内容做模糊；系统不支持时自动回退不透明",
+                    checked = theme.glassBlur,
+                    onCheckedChange = viewModel::setGlassBlur,
+                    insideMargin = PreferenceRowMargin,
+                )
+            }
+        },
         { SectionTitle("强调色") },
         {
             Row(horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceM)) {
@@ -1061,7 +1080,7 @@ internal fun SettingsScaffold(@Suppress("UNUSED_PARAMETER") title: String, @Supp
                 modifier = Modifier.fillMaxSize(),
                 // 左右内边距由宿主给一次（StudioApp 的 Column 已 padding(pagePadding)）：
                 // 这里再写一遍会让列表里的卡片比页内标题多缩进 16dp。
-                contentPadding = PaddingValues(bottom = UiDimens.spaceXL),
+                contentPadding = PaddingValues(bottom = UiDimens.spaceXL + LocalFloatingBarInset),
                 verticalArrangement = Arrangement.spacedBy(UiDimens.spaceM),
             ) {
                 items(blocks.size) { index -> blocks[index]() }

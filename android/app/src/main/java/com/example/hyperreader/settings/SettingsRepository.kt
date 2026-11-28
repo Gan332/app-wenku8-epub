@@ -28,6 +28,8 @@ class SettingsRepository(private val context: Context) {
             mode = prefs[THEME_MODE]?.let { name -> runCatching { AppThemeMode.valueOf(name) }.getOrNull() } ?: AppThemeMode.MONET,
             useDynamicColor = prefs[USE_DYNAMIC_COLOR] ?: true,
             accentColor = prefs[ACCENT_COLOR] ?: 0xFFA34B2F.toInt(),
+            floatingBottomBar = prefs[FLOATING_BOTTOM_BAR] ?: true,
+            glassBlur = prefs[GLASS_BLUR] ?: true,
         )
     }
 
@@ -155,6 +157,8 @@ class SettingsRepository(private val context: Context) {
     suspend fun setOfflineMode(value: Boolean) = edit { it[OFFLINE_MODE] = value }
     suspend fun setDynamicColor(enabled: Boolean) = edit { it[USE_DYNAMIC_COLOR] = enabled }
     suspend fun setAccentColor(color: Int) = edit { it[ACCENT_COLOR] = color }
+    suspend fun setFloatingBottomBar(enabled: Boolean) = edit { it[FLOATING_BOTTOM_BAR] = enabled }
+    suspend fun setGlassBlur(enabled: Boolean) = edit { it[GLASS_BLUR] = enabled }
 
     suspend fun setReaderFontSize(value: Float) = edit { it[READER_FONT_SIZE] = value.coerceIn(ReaderSettings.MIN_FONT_SIZE, ReaderSettings.MAX_FONT_SIZE) }
     suspend fun setReaderFontWeight(value: Int) = edit { it[READER_FONT_WEIGHT] = value.coerceIn(100, 900) }
@@ -233,6 +237,10 @@ class SettingsRepository(private val context: Context) {
         val OFFLINE_MODE = booleanPreferencesKey("offline_mode")
         val USE_DYNAMIC_COLOR = booleanPreferencesKey("use_dynamic_color")
         val ACCENT_COLOR = intPreferencesKey("accent_color")
+        /** 悬浮胶囊底栏（默认开）。 */
+        val FLOATING_BOTTOM_BAR = booleanPreferencesKey("floating_bottom_bar")
+        /** 悬浮底栏毛玻璃（默认开）。 */
+        val GLASS_BLUR = booleanPreferencesKey("glass_blur")
         val READER_FONT_SIZE = floatPreferencesKey("reader_font_size")
         val READER_FONT_WEIGHT = intPreferencesKey("reader_font_weight")
         val READER_LINE_HEIGHT = floatPreferencesKey("reader_line_height")

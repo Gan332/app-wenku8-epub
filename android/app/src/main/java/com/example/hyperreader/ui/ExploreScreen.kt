@@ -106,7 +106,7 @@ fun ExploreScreen(
                 state = listState,
                 // 左右内边距由宿主给一次（StudioApp 的 Column 已 padding(pagePadding)）。
                 // 这里再写一遍的话实际左右各 32dp，与书架页的 16dp 不一致。
-                contentPadding = PaddingValues(vertical = UiDimens.spaceL),
+                contentPadding = PaddingValues(top = UiDimens.spaceL, bottom = UiDimens.spaceL + LocalFloatingBarInset),
                 verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS),
             ) {
                 item(key = "header") { ExploreTitleRow(onOpenSearch = onOpenSearch) }
