@@ -211,7 +211,7 @@ private fun SettingsOverview(state: StudioUiState, viewModel: StudioViewModel) {
                 LazyColumn(
                     state = overviewListState,
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(top = UiDimens.spaceS, bottom = UiDimens.spaceXL + LocalFloatingBarInset),
+                    contentPadding = PaddingValues(top = UiDimens.spaceS, bottom = UiDimens.spaceXL + LocalFloatingBarInset.current),
                     verticalArrangement = Arrangement.spacedBy(UiDimens.spaceL),
                 ) {
                     item(key = "settings-hero") {
@@ -1080,7 +1080,7 @@ internal fun SettingsScaffold(@Suppress("UNUSED_PARAMETER") title: String, @Supp
                 modifier = Modifier.fillMaxSize(),
                 // 左右内边距由宿主给一次（StudioApp 的 Column 已 padding(pagePadding)）：
                 // 这里再写一遍会让列表里的卡片比页内标题多缩进 16dp。
-                contentPadding = PaddingValues(bottom = UiDimens.spaceXL + LocalFloatingBarInset),
+                contentPadding = PaddingValues(bottom = UiDimens.spaceXL + LocalFloatingBarInset.current),
                 verticalArrangement = Arrangement.spacedBy(UiDimens.spaceM),
             ) {
                 items(blocks.size) { index -> blocks[index]() }

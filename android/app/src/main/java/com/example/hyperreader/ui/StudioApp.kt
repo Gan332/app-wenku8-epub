@@ -251,7 +251,7 @@ private fun StudioApp(
     // 外观层：悬浮底栏与毛玻璃都是用户可关的偏好，
     // 关闭时回退到原来的整条 NavigationBar / 不透明表面。
     val appTheme by viewModel.appTheme.collectAsStateWithLifecycle(initialValue = AppThemeSettings())
-    val floatingBar = appTheme.floatingBottomBar
+    val floatingBar = appTheme.floatingBottomBar && Build.VERSION.SDK_INT >= 33
     val chromeBackdrop = rememberChromeBackdrop(floatingBar && appTheme.glassBlur)
     val floatingInset = rememberFloatingBarInset()
     // 标题与返回动作都从 PageChrome 的两个纯函数读（0.19.0-alpha05）：
