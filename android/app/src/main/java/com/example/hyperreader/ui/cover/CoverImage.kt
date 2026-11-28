@@ -73,7 +73,7 @@ fun CoverImage(
                 text = if (failed) "无封面" else "加载中",
                 fontSize = UiDimens.captionSmall,
                 textAlign = TextAlign.Center,
-                color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.72f),
             )
         }
     }

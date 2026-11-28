@@ -30,7 +30,7 @@ object ReaderDimens {
 
     // —— 页面结构 ——
     /** 弹层/全屏页的内容内边距（目录行、设置分组、复制文字面板共用）。 */
-    val pagePadding: Dp = 16.dp
+    val pagePadding: Dp = 12.dp
 
     /** 浮层圆角：工具栏胶囊与弹层面板共用一个值（与宿主 `UiDimens.panelCorner` 一致）。 */
     val panelCorner: Dp = 16.dp

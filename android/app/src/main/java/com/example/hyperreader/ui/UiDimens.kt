@@ -35,8 +35,8 @@ object UiDimens {
     val spaceXL: Dp = 26.dp
 
     // —— 页面结构 ——
-    /** 页面左右内边距。 */
-    val pagePadding: Dp = 16.dp
+    /** 页面左右内边距（KernelSU 参考实现为 12dp）。 */
+    val pagePadding: Dp = 12.dp
 
     /** 宽屏内容最大宽度：平板/横屏下避免正文被拉成整行。 */
     val contentMaxWidth: Dp = 840.dp

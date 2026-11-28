@@ -220,10 +220,10 @@ fun heatColorsFor(): Map<HeatLevel, Color> {
 private val CellSize: Dp = 13.dp
 private val CellGap: Dp = 3.dp
 private val CellCorner: Dp = 2.dp
-/** 月份标签行高，与上游 `MonthHeader` 的字号量级一致。 */
-private val MonthLabelHeight: Dp = 14.dp
-/** 左侧周内标签宽度，够放「一/三/五/日」单字。 */
-private val SideLabelWidth: Dp = 12.dp
+/** 月份标签行高，与上游 `MonthHeader` 的字号量级一致；18dp 容得下中文月份不贴格。 */
+private val MonthLabelHeight: Dp = 18.dp
+/** 左侧周内标签宽度：中文短名是「周一/周三」两字，12dp 会裁掉半个字。 */
+private val SideLabelWidth: Dp = 30.dp
 /** 轴标签字号。 */
 private val AxisLabelSize = UiDimens.badge
 
@@ -270,8 +270,8 @@ fun heatGridStart(today: LocalDate, weeks: Long): LocalDate {
         .minusWeeks(safeWeeks - 1)
 }
 
-/** 网格区整体高度：月份标签行 + 7 行格子。 */
-private val GridHeight: Dp = MonthLabelHeight + CellSize * 7f + CellGap * 6f
+/** 网格区整体高度：月份标签行 + 7 行格子，底部留一格间距给选中描边。 */
+private val GridHeight: Dp = MonthLabelHeight + CellSize * 7f + CellGap * 7f
 
 /** 网格内容宽度：[weeks] 列按固定格子宽排布。 */
 private fun gridContentWidth(weeks: Int): Dp {
@@ -330,7 +330,7 @@ fun ReadingHeatmap(
     val colors = heatColorsFor()
     val measurer = rememberTextMeasurer()
     // 轴标签颜色在组合期取一次：DrawScope 内不是 @Composable，读不到 MiuixTheme。
-    val labelColor = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.55f)
+    val labelColor = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.72f)
     var selected by remember { mutableStateOf<LocalDate?>(null) }
     val scrollState = rememberScrollState()
 
@@ -431,10 +431,9 @@ private fun DrawScope.drawHeatmap(
             yearMonth.month.getDisplayName(JavaTextStyle.SHORT, Locale.getDefault())
         }
         val measured = measurer.measure(text, labelStyle)
-        val x = column * pitch
-        // 标签超出画布右缘就跳过，末列最容易发生。
-        if (x + measured.size.width > size.width) return@forEach
-        drawText(measured, topLeft = Offset(x, 0f))
+        // 末列标签贴右缘时右对齐，避免月份在画布外被裁掉（此前直接跳过）。
+        val x = (column * pitch).coerceAtMost(size.width - measured.size.width)
+        drawText(measured, topLeft = Offset(x.coerceAtLeast(0f), 0f))
     }
 
     grid.weeks.forEachIndexed { column, week ->
@@ -460,7 +459,7 @@ private fun DrawScope.drawHeatmap(
 @Composable
 private fun HeatLegend(thresholds: HeatThresholds, colors: Map<HeatLevel, Color>) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Text("少", fontSize = UiDimens.captionSmall, color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+        Text("少", fontSize = UiDimens.captionSmall, color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.72f))
         Spacer(Modifier.size(UiDimens.spaceXS))
         HeatLevel.entries.forEach { level ->
             Canvas(Modifier.size(CellSize).padding(end = UiDimens.spaceXXS)) {
@@ -475,7 +474,7 @@ private fun HeatLegend(thresholds: HeatThresholds, colors: Map<HeatLevel, Color>
         Text(
             text = if (thresholds.isEmpty) "暂无记录" else "多（${thresholds.top} 分钟）",
             fontSize = UiDimens.captionSmall,
-            color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+            color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.72f),
         )
     }
 }

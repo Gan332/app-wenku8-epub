@@ -356,12 +356,12 @@ private fun SettingsEntryRow(title: String, summary: String, glyph: String, onCl
                 modifier = Modifier
                     .size(UiDimens.settingGlyph)
                     .clip(RoundedCornerShape(UiDimens.cardCorner))
-                    .background(MiuixTheme.colorScheme.primaryContainer),
+                    .background(MiuixTheme.colorScheme.surfaceContainerHigh),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
                     glyph,
-                    color = MiuixTheme.colorScheme.onPrimaryContainer,
+                    color = MiuixTheme.colorScheme.primary,
                     fontSize = UiDimens.caption,
                     fontWeight = FontWeight.Bold,
                 )
@@ -384,7 +384,7 @@ private fun SettingsRail(current: SettingsCategory?, onSelect: (SettingsCategory
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(UiDimens.panelCorner))
                         .background(
-                            if (selected) MiuixTheme.colorScheme.primaryContainer
+                            if (selected) MiuixTheme.colorScheme.surfaceContainerHigh
                             else Color.Transparent,
                         )
                         .clickable { onSelect(category) }
@@ -396,15 +396,22 @@ private fun SettingsRail(current: SettingsCategory?, onSelect: (SettingsCategory
                         modifier = Modifier
                             .size(UiDimens.settingGlyph)
                             .clip(RoundedCornerShape(UiDimens.cardCorner))
-                            .background(
-                                if (selected) MiuixTheme.colorScheme.primary.copy(alpha = 0.16f)
-                                else MiuixTheme.colorScheme.surfaceContainer,
-                            ),
+                            .background(MiuixTheme.colorScheme.surfaceContainer),
                         contentAlignment = Alignment.Center,
                     ) {
-                        Text(category.glyph, fontSize = UiDimens.captionSmall, fontWeight = FontWeight.Bold)
+                        Text(
+                            category.glyph,
+                            fontSize = UiDimens.captionSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = if (selected) MiuixTheme.colorScheme.primary else MiuixTheme.colorScheme.onSurface,
+                        )
                     }
-                    Text(category.title, fontSize = UiDimens.caption, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal)
+                    Text(
+                        category.title,
+                        fontSize = UiDimens.caption,
+                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                        color = if (selected) MiuixTheme.colorScheme.primary else MiuixTheme.colorScheme.onSurface,
+                    )
                 }
             }
         }

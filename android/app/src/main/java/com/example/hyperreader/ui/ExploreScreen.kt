@@ -513,13 +513,13 @@ private fun TagSection(tags: List<String>, activeTag: String?, onSelect: (String
                         .heightIn(min = UiDimens.touchMin)
                         .clip(RoundedCornerShape(UiDimens.panelCorner))
                         .background(
-                            if (selected) MiuixTheme.colorScheme.primaryContainer
+                            if (selected) MiuixTheme.colorScheme.surfaceContainerHigh
                             else MiuixTheme.colorScheme.surfaceContainer,
                         )
                         .border(
                             BorderStroke(
                                 UiDimens.hairline,
-                                if (selected) MiuixTheme.colorScheme.primary.copy(alpha = 0.4f)
+                                if (selected) MiuixTheme.colorScheme.primary.copy(alpha = 0.55f)
                                 else MiuixTheme.colorScheme.outline.copy(alpha = 0.2f),
                             ),
                             RoundedCornerShape(UiDimens.panelCorner),
@@ -532,6 +532,7 @@ private fun TagSection(tags: List<String>, activeTag: String?, onSelect: (String
                         if (selected) "✓ $tag" else tag,
                         fontSize = UiDimens.caption,
                         fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                        color = if (selected) MiuixTheme.colorScheme.primary else MiuixTheme.colorScheme.onSurface,
                     )
                 }
             }

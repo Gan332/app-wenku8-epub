@@ -34,7 +34,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.hyperreader.core.ExploreBookDetail
@@ -286,14 +285,7 @@ private fun BookProfile(
         modifier = Modifier
             .fillMaxWidth()
             .clip(shape)
-            .background(
-                Brush.linearGradient(
-                    listOf(
-                        colors.primaryContainer.copy(alpha = 0.88f),
-                        colors.surfaceContainerHigh,
-                    ),
-                ),
-            )
+            .background(colors.surfaceContainer)
             .border(BorderStroke(UiDimens.hairline, colors.outline.copy(alpha = 0.16f)), shape)
             .padding(UiDimens.spaceL),
     ) {

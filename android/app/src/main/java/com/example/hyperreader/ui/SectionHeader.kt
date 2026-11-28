@@ -67,13 +67,12 @@ internal fun SectionHeader(
  * 这里收成两档语义：`secondary` 用于「读得到的说明」，`tertiary` 用于「弱化的元信息」
  * （关联的读法见 AGENTS §4.4：颜色一律取 `MiuixTheme.colorScheme`，不写死色值）。
  *
- * 0.19.0 起改用 Miuix 的语义色，不再对 `onSurface` 做 alpha 叠乘：
- * `onSurfaceSecondary`（约 80%）承担「读得到的说明」，
- * `onSurfaceVariantSummary`（约 60%）承担「弱化的元信息」。
- * 动态色/暗色下由主题统一换算，页面不再各自写透明度。
+ * 0.19.0 起改用 Miuix 的语义色；弱化元信息不再直接取约 60% 的
+ * `onSurfaceVariantSummary`——浅色主题下这个透明度在卡片底上偏灰。这里统一按
+ * `onSurface` 叠 0.66，既保留层级，也保证正文级可读性；亮/暗主题都由主题色换算。
  */
 @Composable
 internal fun secondaryTextColor(): Color = MiuixTheme.colorScheme.onSurfaceSecondary
 
 @Composable
-internal fun tertiaryTextColor(): Color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+internal fun tertiaryTextColor(): Color = MiuixTheme.colorScheme.onSurface.copy(alpha = 0.66f)

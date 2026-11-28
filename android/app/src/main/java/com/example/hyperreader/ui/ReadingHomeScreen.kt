@@ -27,7 +27,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import com.example.hyperreader.model.BookshelfEntry
@@ -224,14 +223,7 @@ private fun ContinueReadingCard(
         modifier = Modifier
             .fillMaxWidth()
             .clip(shape)
-            .background(
-                Brush.linearGradient(
-                    listOf(
-                        colors.primaryContainer.copy(alpha = 0.95f),
-                        colors.surfaceContainerHigh,
-                    ),
-                ),
-            )
+            .background(colors.surfaceContainer)
             .border(BorderStroke(UiDimens.hairline, colors.outline.copy(alpha = 0.16f)), shape)
             .clickable(interactionSource = interaction, indication = null, onClick = onClick)
             .pressableScale(interaction)

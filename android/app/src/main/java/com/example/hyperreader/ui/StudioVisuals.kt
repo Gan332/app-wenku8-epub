@@ -1,7 +1,6 @@
 package com.example.hyperreader.ui
 
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -23,10 +22,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -36,11 +31,10 @@ import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 /**
- * 全局纸张背景（0.19.0 视觉刷新）。
+ * 全局纸张背景（KernelSU 风格对齐）。
  *
- * 与旧版的差别：去掉「surface → background → surfaceVariant」三段式与两团高饱和光斑，
- * 改为**接近平面的浅渐变 + 单侧极淡主色光晕**。这样卡片与浮层成为画面里唯一的高光，
- * 暗色与动态色下也不会出现大面积染色。
+ * 参考实现是**纯色平面**：背景不叠渐变，也不画主题色光晕，卡片与浮层是画面里唯一的高光。
+ * 浅色下这能避免整屏泛蓝、正文与卡片边界发灰；暗色下也不会出现大块染色。
  */
 @Composable
 fun StudioBackdrop(
@@ -51,32 +45,8 @@ fun StudioBackdrop(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    listOf(colors.surface, colors.background),
-                ),
-            ),
+            .background(colors.surface),
     ) {
-        Canvas(Modifier.fillMaxSize()) {
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colors = listOf(colors.primary.copy(alpha = 0.07f), Color.Transparent),
-                    center = Offset(size.width * 0.86f, size.height * 0.02f),
-                    radius = size.width * 0.72f,
-                ),
-                radius = size.width * 0.72f,
-                center = Offset(size.width * 0.86f, size.height * 0.02f),
-            )
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colors = listOf(colors.secondaryContainer.copy(alpha = 0.06f), Color.Transparent),
-                    center = Offset(size.width * 0.06f, size.height * 0.78f),
-                    radius = size.width * 0.66f,
-                ),
-                radius = size.width * 0.66f,
-                center = Offset(size.width * 0.06f, size.height * 0.78f),
-            )
-        }
         content()
     }
 }
@@ -84,8 +54,8 @@ fun StudioBackdrop(
 /**
  * 编辑式主视觉面板：小标签、醒目标题、说明与操作区。
  *
- * 0.19.0 刷新：圆角放大到 [UiDimens.heroCorner]（squircle 观感），kicker 收成胶囊 chip，
- * 标题走 Miuix `title2`，说明走 `body2`。渐变与光晕仍只取主题色。
+ * 参考实现的卡片一律是中性底：这里用 `surfaceContainer`，不再铺主色渐变或光晕；
+ * 强调只留在 kicker 胶囊与标题字重上，浅色下正文对比度更稳定。
  */
 @Composable
 fun StudioHero(
@@ -101,26 +71,8 @@ fun StudioHero(
         modifier = modifier
             .fillMaxWidth()
             .clip(shape)
-            .background(
-                Brush.linearGradient(
-                    listOf(
-                        colors.primaryContainer.copy(alpha = 0.90f),
-                        colors.surfaceContainerHigh.copy(alpha = 0.96f),
-                    ),
-                ),
-            )
-            .border(BorderStroke(UiDimens.hairline, colors.outline.copy(alpha = 0.14f)), shape)
-            .drawBehind {
-                drawCircle(
-                    brush = Brush.radialGradient(
-                        colors = listOf(colors.primary.copy(alpha = 0.16f), Color.Transparent),
-                        center = Offset(size.width * 0.88f, size.height * 0.10f),
-                        radius = size.width * 0.52f,
-                    ),
-                    radius = size.width * 0.52f,
-                    center = Offset(size.width * 0.88f, size.height * 0.10f),
-                )
-            },
+            .background(colors.surfaceContainer)
+            .border(BorderStroke(UiDimens.hairline, colors.outline.copy(alpha = 0.16f)), shape),
     ) {
         Column(
             modifier = Modifier.padding(UiDimens.spaceL),
