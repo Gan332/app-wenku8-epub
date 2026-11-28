@@ -63,7 +63,7 @@ fun ExploreExpandedScreen(state: StudioUiState, viewModel: StudioViewModel, modi
                 fontSize = UiDimens.caption,
                 color = secondaryTextColor(),
             )
-            TextButton(text = if (state.exploreBusy) "刷新中…" else "刷新", onClick = viewModel::refreshExplore, enabled = !state.exploreBusy)
+            TextButton(text = if (state.exploreRefreshing) "刷新中…" else "刷新", onClick = viewModel::refreshExplore, enabled = !state.exploreRefreshing)
         }
         state.exploreMessage?.let { message -> MessageCard(message) }
         when {

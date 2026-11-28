@@ -3,7 +3,6 @@ package com.example.hyperreader.core
 import android.content.Context
 import java.io.File
 import java.time.Year
-import java.time.YearMonth
 import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.builtins.MapSerializer
 import kotlinx.serialization.builtins.serializer
@@ -16,13 +15,17 @@ import kotlinx.serialization.json.Json
  *  - articleinfo.php 书籍详情
  *  - authorarticle.php 同作者作品列表
  *  - /zt/sugoi/{year}.php 年度精选榜
- *  - /zt/booklist/{yyyyMM}.php 月度新书榜
+ *  - /zt/booklist/{yyyyMM}.php 往期书单存档（仅 2015–2016 的季度页）
  *
  * 明确不涉及 search.php / articlelist.php / toplist.php / tags.php，
  * 这些由站点自行控制登录，应用不去规避。使用独立的无 Cookie 客户端，
  * 即使本地存在登录态也不携带任何 Cookie。
  */
-class CatalogCrawler(context: Context) {
+class CatalogCrawler(
+    context: Context,
+    /** 全链路书源；装配后公开页取数都从书源出，避免再建客户端。 */
+    private val sourceProvider: () -> Wenku8BookSource? = { null },
+) {
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
     private val mapSerializer = MapSerializer(String.serializer(), CatalogEntry.serializer())
     private val directory = File(context.filesDir, "catalog").apply { mkdirs() }
@@ -33,10 +36,12 @@ class CatalogCrawler(context: Context) {
      * 公开页客户端：**不携带会话 Cookie**，但携带 Cloudflare 的 `cf_clearance`
      * （人机验证通过凭证，不是账号凭据）——否则用户验证完了公开页仍然 403。
      */
-    private val http = Wenku8HttpClient(
-        File(context.cacheDir, "wenku8-catalog"),
-        (context.applicationContext as com.example.hyperreader.Wenku8Application).sessionStore.clearanceCookieJar(),
-    )
+    private val http by lazy {
+        Wenku8HttpClient(
+            File(context.cacheDir, "wenku8-catalog"),
+            (context.applicationContext as com.example.hyperreader.Wenku8Application).sessionStore.clearanceCookieJar(),
+        )
+    }
     private val jobId = "catalog"
 
     fun loadEntries(): MutableMap<String, CatalogEntry> {
@@ -85,14 +90,17 @@ class CatalogCrawler(context: Context) {
         return (0 until years).map { CatalogSeed(SeedKind.SUGOI, Wenku8Urls.sugoi(thisYear - it), "${thisYear - it} 年度精选") }
     }
 
-    /** 月度新书榜种子（最近若干月）。 */
-    fun booklistSeeds(months: Int = 3): List<CatalogSeed> {
-        val now = YearMonth.now()
-        return (0 until months).map {
-            val ym = now.minusMonths(it.toLong())
-            CatalogSeed(SeedKind.BOOKLIST, Wenku8Urls.booklist("${ym.year}${ym.monthValue.toString().padStart(2, '0')}"), "${ym.year}年${ym.monthValue}月新书")
+    /**
+     * 往期书单种子。
+     *
+     * `/zt/booklist/` 只有 2015–2016 的历史存档（201501/201504/201507/201510/201601），
+     * 源站已不再按自然月发布；按「最近若干月」拼 URL 会 404。这里固定使用有效存档，
+     * 作为书目缓存的补充种子。
+     */
+    fun booklistSeeds(limit: Int = BOOKLIST_ARCHIVES.size): List<CatalogSeed> =
+        BOOKLIST_ARCHIVES.take(limit).map { (stamp, title) ->
+            CatalogSeed(SeedKind.BOOKLIST, Wenku8Urls.booklist(stamp), title)
         }
-    }
 
     /** 内置保底种子 ID。 */
     fun idSeeds(ids: List<String> = DEFAULT_SEED_IDS): List<CatalogSeed> =
@@ -177,7 +185,8 @@ class CatalogCrawler(context: Context) {
 
     /** 公开页抓取：失败可跳过，但协程取消必须继续传播。 */
     private suspend fun fetchOrNull(url: String, jobId: String): Wenku8HttpClient.TextResource? = try {
-        http.fetchText(url, jobId, Wenku8Urls.BASE)
+        sourceProvider()?.fetchPublicPage(url, jobId)
+            ?: http.fetchText(url, jobId, Wenku8Urls.BASE)
     } catch (cancelled: CancellationException) {
         throw cancelled
     } catch (_: Throwable) {
@@ -189,6 +198,13 @@ class CatalogCrawler(context: Context) {
 
     private companion object {
         val DEFAULT_SEED_IDS = listOf("2835", "2580", "2964", "3057", "3988")
+        val BOOKLIST_ARCHIVES = listOf(
+            "201601" to "2016年冬季书单",
+            "201510" to "2015年秋季书单",
+            "201507" to "2015年夏季书单",
+            "201504" to "2015年春季书单",
+            "201501" to "2015年冬季书单",
+        )
         const val AUTHOR_PAGE_SIZE = 20
         const val MAX_AUTHOR_PAGES = 3
         const val MAX_PROCESSED = 4000

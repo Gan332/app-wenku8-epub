@@ -19,7 +19,8 @@ import com.example.hyperreader.service.ExportJobManager
 import com.example.hyperreader.data.BookshelfRepository
 import com.example.hyperreader.data.ReadingStatsRepository
 import com.example.hyperreader.core.ExploreRepository
-import com.example.hyperreader.core.Wenku8DataSource
+import com.example.hyperreader.core.AppUpdateRepository
+import com.example.hyperreader.core.Wenku8HttpClient
 import com.example.hyperreader.settings.SettingsRepository
 import com.example.hyperreader.ui.toSearchBook
 import java.io.File
@@ -58,25 +59,54 @@ class Wenku8Application : Application() {
     }
     val settingsRepository: SettingsRepository by lazy { SettingsRepository(this) }
     val sessionStore: Wenku8SessionStore by lazy { Wenku8SessionStore(this) }
-    val jobManager: ExportJobManager by lazy { ExportJobManager(this, sessionStore) }
-    val searchProvider: Wenku8SearchProvider by lazy { Wenku8SearchProvider(jobManager.httpClient(), sessionStore) }
+
+    /**
+     * 会话链路共享客户端：书源、导出、在线阅读、站内搜索都复用它。
+     * 全局限流器是进程级的，多建客户端不会提高并发，只会增加连接开销。
+     */
+    private val sharedHttp: Wenku8HttpClient by lazy {
+        Wenku8HttpClient(File(cacheDir, "wenku8"), sessionStore.cookieJar())
+    }
+
+    /**
+     * 匿名公开链路客户端：只带 `cf_clearance`，绝不携带用户会话 Cookie。
+     * 探索公开榜、书目缓存、探索详情、作者扩展都从这里取数。
+     */
+    private val publicHttp: Wenku8HttpClient by lazy {
+        Wenku8HttpClient(File(cacheDir, "wenku8-public"), sessionStore.clearanceCookieJar())
+    }
+
+    val jobManager: ExportJobManager by lazy {
+        ExportJobManager(this, http = sharedHttp, sourceProvider = { bookSource })
+    }
+    val searchProvider: Wenku8SearchProvider by lazy { bookSource.searchSiteProvider }
     val bookshelfRepository: BookshelfRepository by lazy { BookshelfRepository(this) }
     /** 跨书书签中心（0.19.0）；只读两个阅读器 Bridge 共用的 `xy_reader_bookmarks` 键。 */
     val bookmarkCenterRepository: com.example.hyperreader.reader.BookmarkCenterRepository by lazy {
         com.example.hyperreader.reader.BookmarkCenterRepository(this)
     }
     val readingStatsRepository: ReadingStatsRepository by lazy { ReadingStatsRepository(this) }
-    val exploreRepository: ExploreRepository by lazy { ExploreRepository(Wenku8DataSource(jobManager.httpClient(), sessionStore)) }
+    /**
+     * 应用自身更新：只访问 GitHub Release，使用独立客户端，不参与 wenku8 限流与会话。
+     */
+    val appUpdateRepository: AppUpdateRepository by lazy { AppUpdateRepository(this) }
+    /**
+     * 探索页的公开榜使用独立的**无会话**客户端：只带 `cf_clearance`，不沿用会话 Cookie。
+     * 登录墙内的 `toplist.php` 仍走书源的会话链路与用户自己的 Cookie。
+     */
+    val exploreRepository: ExploreRepository by lazy { ExploreRepository(bookSource) }
 
     /**
      * wenku8 书源（LNR 书源体系的本工程落地）。
      *
-     * 取数走 [jobManager] 的共享限流客户端与 [sessionStore] 的会话 Cookie；
+     * 全链路唯一数据入口：探索、搜索、详情、导出、书目缓存、在线阅读都从这里取数。
+     * 会话链路走 [sharedHttp]，匿名公开链路走 [publicHttp]；
      * 搜索回调接到本地书目索引上——**不打源站的 `search.php`**（该接口由站点控制登录）。
      */
     val bookSource: Wenku8BookSource by lazy {
         Wenku8BookSource(
-            http = jobManager.httpClient(),
+            http = sharedHttp,
+            publicHttp = publicHttp,
             session = sessionStore,
             catalogSearch = { field, keyword ->
                 catalogRepository.search(
@@ -86,13 +116,15 @@ class Wenku8Application : Application() {
             },
         )
     }
-    val catalogRepository: com.example.hyperreader.core.CatalogRepository by lazy { com.example.hyperreader.core.CatalogRepository(this) }
+    val catalogRepository: com.example.hyperreader.core.CatalogRepository by lazy {
+        com.example.hyperreader.core.CatalogRepository(this) { bookSource }
+    }
 
     /**
      * 探索页书籍详情：**只走公开 API**，与创建/导出的解析管线（[jobManager]）完全分开。
      * 见 `ExploreDetailRepository` 的类注释。
      */
-    val exploreDetailRepository: com.example.hyperreader.core.ExploreDetailRepository by lazy { com.example.hyperreader.core.ExploreDetailRepository(this) }
+    val exploreDetailRepository: com.example.hyperreader.core.ExploreDetailRepository by lazy { bookSource.detailRepository }
     val coverRepository: com.example.hyperreader.ui.cover.CoverRepository by lazy { com.example.hyperreader.ui.cover.CoverRepository(this) }
 
     /**
@@ -106,7 +138,7 @@ class Wenku8Application : Application() {
     val onlineIndexStore: OnlineIndexStore by lazy { OnlineIndexStore(File(filesDir, "online-index")) }
 
     val onlineReaderSource: OnlineReaderSource by lazy {
-        OnlineReaderSource(onlineChapterCache, Wenku8TextFetcher(jobManager.httpClient()), onlineIndexStore)
+        OnlineReaderSource(onlineChapterCache, Wenku8TextFetcher(sharedHttp), onlineIndexStore)
     }
 
     /** 实际联网的在线阅读源（忽略离线模式）。缓存任务与更新检查必须用它。 */
@@ -132,7 +164,8 @@ class Wenku8Application : Application() {
 
     /** 书架更新检查：抓公开目录，受全局限流约束。 */
     val bookshelfUpdateChecker: BookshelfUpdateChecker by lazy {
-        BookshelfUpdateChecker(bookshelfRepository, { networkOnlineReadingSource() })
+        // 全链路书源：更新检查始终走 LNR 书源，不再跟随「在线阅读数据源」设置。
+        BookshelfUpdateChecker(bookshelfRepository, { lnrOnlineReaderSource })
     }
 
     /**

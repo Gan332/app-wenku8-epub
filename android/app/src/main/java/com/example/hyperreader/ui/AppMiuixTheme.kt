@@ -1,74 +1,13 @@
 package com.example.hyperreader.ui
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
-import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.example.hyperreader.R
-import com.example.hyperreader.Wenku8Application
-import com.example.hyperreader.settings.AppThemeMode
-import com.example.hyperreader.settings.AppThemeSettings
-import top.yukonga.miuix.kmp.theme.ColorSchemeMode
-import top.yukonga.miuix.kmp.theme.MiuixTheme
-import top.yukonga.miuix.kmp.theme.ThemeController
-import top.yukonga.miuix.kmp.theme.ThemeColorSpec
-import androidx.compose.ui.text.font.Font
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
+import com.example.hyperreader.ui.theme.StudioTheme
 
-private val MiSansFont = FontFamily(Font(R.font.misansvf))
-
+/**
+ * 应用主题门面。
+ *
+ * 具体实现已迁到 [StudioTheme]（主题解析 + MiuiX 色板 + 语义令牌）。保留这个入口是为了
+ * 让所有历史调用点（`AppMiuixTheme { … }`）无需改动，也避免出现两套并行的主题实现。
+ */
 @Composable
-fun AppMiuixTheme(content: @Composable () -> Unit) {
-    val context = LocalContext.current
-    val app = context.applicationContext as Wenku8Application
-    val settings by app.settingsRepository.appTheme.collectAsStateWithLifecycle(
-        initialValue = AppThemeSettings(),
-        lifecycle = LocalLifecycleOwner.current.lifecycle,
-    )
-    val baseTextStyles = MiuixTheme.textStyles
-    val textStyles = baseTextStyles.copy(
-        main = baseTextStyles.main.copy(fontFamily = MiSansFont),
-        paragraph = baseTextStyles.paragraph.copy(fontFamily = MiSansFont),
-        body1 = baseTextStyles.body1.copy(fontFamily = MiSansFont),
-        body2 = baseTextStyles.body2.copy(fontFamily = MiSansFont),
-        button = baseTextStyles.button.copy(fontFamily = MiSansFont),
-        footnote1 = baseTextStyles.footnote1.copy(fontFamily = MiSansFont),
-        footnote2 = baseTextStyles.footnote2.copy(fontFamily = MiSansFont),
-        headline2 = baseTextStyles.headline2.copy(fontFamily = MiSansFont),
-        subtitle = baseTextStyles.subtitle.copy(fontFamily = MiSansFont),
-        title1 = baseTextStyles.title1.copy(fontFamily = MiSansFont, fontWeight = FontWeight.SemiBold),
-        title2 = baseTextStyles.title2.copy(fontFamily = MiSansFont, fontWeight = FontWeight.SemiBold),
-        title3 = baseTextStyles.title3.copy(fontFamily = MiSansFont, fontWeight = FontWeight.SemiBold),
-        title4 = baseTextStyles.title4.copy(fontFamily = MiSansFont),
-        headline1 = baseTextStyles.headline1.copy(fontFamily = MiSansFont, fontWeight = FontWeight.SemiBold),
-    )
-    MiuixTheme(
-        controller = remember(settings.mode, settings.useDynamicColor, settings.accentColor) {
-            ThemeController(
-                colorSchemeMode = if (settings.useDynamicColor) {
-                    when (settings.mode) {
-                        AppThemeMode.SYSTEM -> ColorSchemeMode.MonetSystem
-                        AppThemeMode.LIGHT -> ColorSchemeMode.MonetLight
-                        AppThemeMode.DARK -> ColorSchemeMode.MonetDark
-                        AppThemeMode.MONET -> ColorSchemeMode.MonetSystem
-                    }
-                } else {
-                    when (settings.mode) {
-                        AppThemeMode.SYSTEM -> ColorSchemeMode.System
-                        AppThemeMode.LIGHT -> ColorSchemeMode.Light
-                        AppThemeMode.DARK -> ColorSchemeMode.Dark
-                        AppThemeMode.MONET -> ColorSchemeMode.System
-                    }
-                },
-                keyColor = Color(settings.accentColor),
-                colorSpec = ThemeColorSpec.Spec2025,
-            )
-        },
-        textStyles = textStyles,
-        content = content,
-    )
-}
+fun AppMiuixTheme(content: @Composable () -> Unit) = StudioTheme(content)

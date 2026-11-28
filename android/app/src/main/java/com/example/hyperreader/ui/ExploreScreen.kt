@@ -29,6 +29,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -49,6 +50,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.example.hyperreader.MessageCard
+import com.example.hyperreader.core.ExploreFeed
 import com.example.hyperreader.core.ExplorePage
 import com.example.hyperreader.model.SearchBook
 import com.example.hyperreader.ui.cover.CoverImage
@@ -73,14 +75,14 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
  * 视觉结构：主视觉搜索入口 → 本地索引状态 → 榜单标签 → 带序号的封面轨道。
  * 封面尺寸与间距按 UiDimens 的探索令牌，不复制 LNR 的 Material 卡片参数。
  *
- * 数据来源与合规边界不变：年度/月度榜单走匿名公开页，排行榜与官方标签走用户本人会话
+ * 数据来源与合规边界不变：榜单全部走书源的匿名公开页（年度精选 `/zt/sugoi/`）；
+ * 登录墙内的 `toplist.php` / `tags.php` 不再进入探索页，匿名与登录看到同一组榜单
  * （AGENTS §4.2 / §4.5.2）。
  */
 @Composable
 fun ExploreScreen(
     state: StudioUiState,
     viewModel: StudioViewModel,
-    onLogin: () -> Unit,
     onGoToCatalog: () -> Unit,
     onOpenSearch: () -> Unit,
     /**
@@ -89,13 +91,19 @@ fun ExploreScreen(
      */
     listState: LazyListState,
 ) {
+    // 进入探索页即自动抓取公开榜（AGENTS §4.5）；只触发一次，切回 tab 不重复请求。
+    LaunchedEffect(Unit) { viewModel.ensureExploreLoaded() }
+    // 当前榜单全部公开；保留过滤以便将来加入登录墙榜单时不暴露给匿名用户。
+    val visiblePages = remember(viewModel.explorePages, state.loggedIn) {
+        ExploreFeed.visiblePages(viewModel.explorePages, state.loggedIn)
+    }
     // 换页不重置滚动位置：榜单切换器就在页顶，强制回顶会把用户刚点的标签滚出视野；
     // 榜单变短时 LazyColumn 会自行夹紧滚动位置。
     // 下拉刷新：对应 LNR ExplorePage 的 PullToRefreshBox。MiuiX 0.9.4 自带 PullToRefresh，
     // 之前 ExploreExpandedScreen 注释说「没有等价组件」是误判。
     PullToRefresh(
         // 首次加载用列表内骨架，不再叠加下拉刷新指示器（避免两套加载提示）。
-        isRefreshing = state.exploreBusy && state.exploreRows.isNotEmpty(),
+        isRefreshing = state.exploreRefreshing,
         // 没有选中榜单一律回落到第一个（ViewModel 里同样兜底）：首屏尚未加载时
         // activeExplorePage 还是 null，下拉手势不该静默失效。
         onRefresh = viewModel::refreshExplore,
@@ -115,17 +123,15 @@ fun ExploreScreen(
                     CatalogSectionCard(state = state, onGoToCatalog = onGoToCatalog)
                 }
 
-                if (!state.loggedIn) {
-                    item(key = "login-hint") { LoginHintCard(onLogin = onLogin) }
-                }
-
                 // 榜单切换用 TabRow（对应 LNR 的 PrimaryTabRow）。
                 // 形状差异：LNR 的 Material TabRow 用「下划线指示器」，MiuiX TabRow 用
                 // 「选中项胶囊高亮」且没有指示器插槽，本工程界面统一 MiuiX，故不复刻下划线；
                 // 行高取触摸下限 48dp（MiuiX 默认 42dp，LNR 的 Tab 是 48dp）。
                 item(key = "page-switcher") {
-                    val pages = viewModel.explorePages
-                    val selectedIndex = pages.indexOfFirst { it.id == state.activeExplorePage?.id }.coerceAtLeast(0)
+                    val pages = visiblePages
+                    val selectedPageId = state.activeExplorePage?.id
+                        ?: pages.firstOrNull()?.id
+                    val selectedIndex = pages.indexOfFirst { it.id == selectedPageId }.coerceAtLeast(0)
                     // MiuiX TabRow 的项宽是固定值（默认 76dp），装不下「今日更新」「2026 年度精选」
                     // 这样的标签就会省略成「今日更…」。按最长标题实测后把 min/max 一起放宽，
                     // 项宽仍然统一，只是整行更宽、继续横向滚动。
@@ -133,7 +139,7 @@ fun ExploreScreen(
                     TabRow(
                         tabs = pages.map { it.title },
                         selectedTabIndex = selectedIndex,
-                        onTabSelected = { pages.getOrNull(it)?.let(viewModel::loadExplore) },
+                        onTabSelected = { index -> pages.getOrNull(index)?.let { page -> viewModel.loadExplore(page) } },
                         modifier = Modifier.fillMaxWidth(),
                         minWidth = tabWidth,
                         maxWidth = tabWidth,
@@ -145,8 +151,24 @@ fun ExploreScreen(
                     item(key = "explore-loading") { ExploreRowsSkeleton() }
                 }
 
-                items(state.exploreRows, key = { it.title }) { row ->
-                    val page = row.expandedPageId?.let { id -> viewModel.explorePages.firstOrNull { it.id == id } }
+                // 标签结果放在榜单之前：点标签后用户正在等待这组结果，
+                // 不应被整条榜单轨道推到首屏之外。
+                state.activeTag?.let { activeTag ->
+                    item(key = "tag-results") {
+                        TagResultSection(
+                            tag = activeTag,
+                            books = state.tagResults,
+                            busy = state.tagBusy,
+                            message = state.tagMessage,
+                            onOpenBook = { viewModel.openSearchBook(it) },
+                        )
+                    }
+                }
+
+                itemsIndexed(state.exploreRows, key = { index, row -> row.expandedPageId ?: "row-$index" }) { _, row ->
+                    val page = row.expandedPageId?.let { id ->
+                        visiblePages.firstOrNull { it.id == id }
+                    }
                         ?: state.activeExplorePage
                     ExploreRowSection(
                         title = row.title,
@@ -157,7 +179,9 @@ fun ExploreScreen(
                     )
                 }
 
-                if (!state.exploreBusy && state.exploreRows.isEmpty() && state.catalogSize == 0) {
+                // 有错误提示时不再叠一屏「还没有可浏览的内容」：那会把“被拦截/解析失败”
+                // 误报成“本地没有内容”。
+                if (!state.exploreBusy && state.exploreRows.isEmpty() && state.catalogSize == 0 && state.exploreMessage == null) {
                     item(key = "empty") {
                         EmptyState(
                             title = "还没有可浏览的内容",
@@ -237,7 +261,7 @@ private fun ExploreTitleRow(onOpenSearch: () -> Unit) {
                 fontWeight = FontWeight.Bold,
             )
             Text(
-                "公开榜单无需登录，搜索使用你自己的会话。",
+                "公开榜单无需登录，搜索优先使用本地书目。",
                 fontSize = UiDimens.captionSmall,
                 color = secondaryTextColor(),
             )
@@ -254,27 +278,6 @@ private fun ExploreTitleRow(onOpenSearch: () -> Unit) {
             Spacer(Modifier.size(UiDimens.spaceXS))
             Text("搜索")
         }
-    }
-}
-
-/** 未登录提示：榜单与官方标签需要会话，站内搜索同理（AGENTS §4.2）。 */
-@Composable
-private fun LoginHintCard(onLogin: () -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            "登录后可查看排行榜、站内搜索与官方标签",
-            modifier = Modifier.weight(1f),
-            fontSize = UiDimens.caption,
-            color = secondaryTextColor(),
-        )
-        TextButton(
-            text = "登录",
-            onClick = onLogin,
-            modifier = Modifier.heightIn(min = UiDimens.touchMin),
-        )
     }
 }
 
@@ -533,6 +536,111 @@ private fun TagSection(tags: List<String>, activeTag: String?, onSelect: (String
                         fontSize = UiDimens.caption,
                         fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
                     )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 标签结果区：与榜单书行同构，用纵向行承载站点结果。
+ *
+ * 这里不再起第二个网络请求；[StudioViewModel.selectTag] 已经把本地结果立即写入，
+ * 登录后再由服务端结果合并覆盖。
+ */
+@Composable
+private fun TagResultSection(
+    tag: String,
+    books: List<SearchBook>,
+    busy: Boolean,
+    message: String?,
+    onOpenBook: (SearchBook) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
+        SectionHeader("标签 · $tag")
+        when {
+            books.isNotEmpty() -> TagResultList(books = books, onOpenBook = onOpenBook)
+            busy -> LoadingBlock("正在从站点补齐…")
+            message != null -> MessageCard(message)
+            else -> EmptyState(
+                title = "这个标签下还没有本地书目",
+                description = "登录后会尝试从站点补齐；也可以先更新本地书目缓存。",
+            )
+        }
+        if (busy && books.isNotEmpty()) LoadingBlock("正在从站点补齐…")
+        if (message != null && books.isNotEmpty()) MessageCard(message)
+    }
+}
+
+/**
+ * 标签结果行：探索页外层已经是 LazyColumn，这里不再嵌一层可滚列表（无法测高）。
+ * 只展示前 [TAG_RESULT_VISIBLE_LIMIT] 条，其余在提示里说明，避免一次构建站点全量结果。
+ */
+@Composable
+private fun TagResultList(books: List<SearchBook>, onOpenBook: (SearchBook) -> Unit) {
+    val shown = books.take(TAG_RESULT_VISIBLE_LIMIT)
+    Column(verticalArrangement = Arrangement.spacedBy(UiDimens.spaceS)) {
+        // 固定 [TAG_RESULT_VISIBLE_LIMIT] 行，直接 Column 比再嵌一个 LazyColumn 更轻；高度不会失控。
+        shown.forEach { book -> TagBookRow(book = book, onClick = { onOpenBook(book) }) }
+        if (books.size > shown.size) {
+            Text(
+                "还有 ${books.size - shown.size} 本未显示",
+                fontSize = UiDimens.captionSmall,
+                color = tertiaryTextColor(),
+            )
+        }
+    }
+}
+
+/** 标签结果最多展示的行数；超出部分只给提示，避免把整个探索页拉得过长。 */
+private const val TAG_RESULT_VISIBLE_LIMIT = 8
+
+/** 标签结果行：封面 + 书名/作者 + 分类，整行可点进详情。 */
+@Composable
+private fun TagBookRow(book: SearchBook, onClick: () -> Unit) {
+    Card(
+        Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        cornerRadius = UiDimens.panelCorner,
+        insideMargin = PaddingValues(UiDimens.spaceS),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceM),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            CoverImage(
+                url = book.coverUrl,
+                contentDescription = book.title,
+                modifier = Modifier
+                    .width(UiDimens.exploreCoverWidth)
+                    .height(UiDimens.exploreCoverHeight)
+                    .clip(RoundedCornerShape(UiDimens.cardCorner)),
+                targetWidthDp = UiDimens.exploreCoverWidth.value.toInt(),
+            )
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(UiDimens.spaceXXS),
+            ) {
+                Text(
+                    book.title,
+                    fontSize = UiDimens.bodyStrong,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (book.author.isNotBlank()) {
+                    Text(
+                        book.author,
+                        fontSize = UiDimens.caption,
+                        color = secondaryTextColor(),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                if (book.category.isNotBlank()) {
+                    Text(book.category, fontSize = UiDimens.captionSmall, color = tertiaryTextColor())
                 }
             }
         }

@@ -2,7 +2,33 @@ package com.example.hyperreader.settings
 
 import kotlinx.serialization.Serializable
 
-enum class AppThemeMode { SYSTEM, LIGHT, DARK, MONET }
+enum class AppThemeMode {
+    SYSTEM,
+    LIGHT,
+    DARK,
+
+    /**
+     * 旧版「动态色」模式（0.19.0 之前）。
+     *
+     * 动态取色现在由 [AppThemeSettings.useDynamicColor] 独立表达，模式本身只决定
+     * 系统/浅色/深色。保留该枚举值只为读取旧 DataStore 与旧配置备份；写入前统一
+     * 归一到 [SYSTEM]，界面上也不再提供该选项。
+     */
+    MONET,
+    ;
+
+    companion object {
+        /** 界面上可选的三档明暗模式；[MONET] 仅用于兼容旧数据。 */
+        val selectable: List<AppThemeMode> = entries.filterNot { it == MONET }
+
+        fun fromName(raw: String?): AppThemeMode = when (raw?.trim()?.uppercase()) {
+            "LIGHT" -> LIGHT
+            "DARK" -> DARK
+            "SYSTEM", "MONET", null -> SYSTEM
+            else -> SYSTEM
+        }
+    }
+}
 
 enum class ReaderBackground { PAPER, LIGHT, GREEN, DARK, OLED, CUSTOM }
 
@@ -10,7 +36,7 @@ enum class ReaderPageTurnMode { HORIZONTAL, VERTICAL }
 
 @Serializable
 data class AppThemeSettings(
-    val mode: AppThemeMode = AppThemeMode.MONET,
+    val mode: AppThemeMode = AppThemeMode.SYSTEM,
     val useDynamicColor: Boolean = true,
     val accentColor: Int = 0xFFA34B2F.toInt(),
 )
@@ -134,12 +160,12 @@ enum class DirectEntry(val label: String, val base: String) {
  */
 @Serializable
 enum class OnlineSource(val label: String, val summary: String) {
-    BUILTIN("内置解析", "目录与正文由本工程解析，默认"),
-    LNR("LNR 书源", "走 LightNovelReader 书源契约取目录与正文"),
+    BUILTIN("内置解析", "目录与正文由本工程解析"),
+    LNR("LNR 书源", "走 LightNovelReader 书源契约取目录与正文，默认"),
     ;
 
     companion object {
-        fun fromName(raw: String?): OnlineSource = entries.firstOrNull { it.name == raw } ?: BUILTIN
+        fun fromName(raw: String?): OnlineSource = entries.firstOrNull { it.name == raw } ?: LNR
     }
 }
 

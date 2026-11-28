@@ -1,15 +1,19 @@
 package com.example.hyperreader.ui
 
 import android.app.Application
+import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.hyperreader.Wenku8Application
 import com.example.hyperreader.core.CatalogEntry
+import com.example.hyperreader.core.AppUpdateInstaller
 import com.example.hyperreader.core.BookshelfUpdateChecker
 import com.example.hyperreader.core.UpdateCheckOutcome
 import com.example.hyperreader.core.CatalogSearchField
 import com.example.hyperreader.core.ExploreBooksRow
 import com.example.hyperreader.core.ExplorePage
+import com.example.hyperreader.core.ExploreFeed
+import com.example.hyperreader.core.ExploreCardCache
 import com.example.hyperreader.core.Wenku8Endpoint
 import com.example.hyperreader.core.Wenku8Exception
 import com.example.hyperreader.core.Wenku8HttpClient
@@ -166,6 +170,8 @@ internal object ExportWizard {
         exploreDetailLoading = true,
         exploreDetailError = null,
         exploreDetailSeed = seed,
+        // 与 openSearchBook 同一套序号：上一本的迟到响应不能落到这本书上。
+        exploreDetailRequestId = state.exploreDetailRequestId + 1,
     )
 }
 
@@ -199,6 +205,8 @@ data class StudioUiState(
     val exploreExpanded: Boolean = false,
     /** 展开页对应的榜单；刷新时按它重新抓取。 */
     val activeExplorePage: ExplorePage? = null,
+    /** 探索请求序号：旧响应返回时据此丢弃，避免快速切榜时后发先至。 */
+    val exploreRequestId: Long = 0,
     /** 0.18.0：待完成的 Cloudflare 验证地址；非空时 UI 自动弹验证窗口。 */
     val clearancePresent: Boolean = false,
     /** 0.18.0：公开端点诊断矩阵（设置 → 网络 → 深度诊断）。 */
@@ -250,6 +258,8 @@ data class StudioUiState(
     val readingStats: ReadingStats = ReadingStats(),
     val exploreRows: List<ExploreBooksRow> = emptyList(),
     val exploreBusy: Boolean = false,
+    /** 下拉刷新/首次加载的指示器状态；后台逐本补全不算刷新。 */
+    val exploreRefreshing: Boolean = false,
     val exploreMessage: String? = null,
     val catalogSize: Int = 0,
     /**
@@ -261,9 +271,29 @@ data class StudioUiState(
     val activeTag: String? = null,
     /** 当前标签下的书（同样来自本地索引）。 */
     val tagResults: List<SearchBook> = emptyList(),
+    /** 标签请求的独立提示（服务端失败时保留本地结果）。 */
+    val tagMessage: String? = null,
+    /** 标签服务端补齐是否仍在进行（本地结果已有时用于区分“空”与“加载中”）。 */
+    val tagBusy: Boolean = false,
+    /**
+     * 探索页是否已经触发过自动加载。
+     *
+     * 切回 tab 时不再重复请求；下拉刷新/切换榜单仍可显式重抓。
+     */
+    val exploreLoadedOnce: Boolean = false,
     val catalogLoading: Boolean = false,
     val catalogProgress: Pair<Int, Int>? = null,
     val catalogUpdatedAt: Long = 0L,
+    /** 书目缓存操作的独立提示（不再混进探索页消息）。 */
+    val catalogMessage: String? = null,
+    /** 应用更新检查/下载状态（仅「设置 → 关于」使用，与书架更新检查无关）。 */
+    val appUpdateChecking: Boolean = false,
+    val appUpdateDownloading: Boolean = false,
+    val appUpdateProgress: Int = 0,
+    val appUpdateAvailable: com.example.hyperreader.core.AppRelease? = null,
+    /** 已下载并通过校验的 APK 路径；非空时 UI 显示「安装更新」。 */
+    val appUpdateFile: String? = null,
+    val appUpdateMessage: String? = null,
     val coverCacheBytes: Long = 0L,
     val localResults: List<CatalogEntry> = emptyList(),
     val settingsSection: SettingsSection = SettingsSection.OVERVIEW,
@@ -281,6 +311,8 @@ data class StudioUiState(
     val exploreDetailSeed: com.example.hyperreader.core.ExploreBookSeed? = null,
     val exploreDetailLoading: Boolean = false,
     val exploreDetailError: String? = null,
+    /** 详情请求序号：同一本书的重试也可能先发后至，只比较 bookId 不够。 */
+    val exploreDetailRequestId: Long = 0,
     /** 0.19.0：跨书书签中心是否打开（全屏页，不占一级导航，AGENTS §4.6.1）。 */
     val bookmarkCenterOpen: Boolean = false,
     /**
@@ -321,6 +353,17 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
      */
     @Volatile
     private var authorWorksRequestId = 0L
+    /** 标签请求序号：快速点选标签时旧响应不得覆盖新标签。 */
+    private var tagRequestId = 0L
+    /** 官方标签请求序号：登出后迟到的响应不得把官方标签又写回来。 */
+    private var officialTagsRequestId = 0L
+    /**
+     * 公开榜已补全的卡片。
+     *
+     * 每轮只补 [EXPLORE_AUTO_FETCH_LIMIT] 本，已补结果必须跨轮保留，否则刷新后
+     * 仍从同一批缺失项开始，超出上限的书永远轮不到。缓存只属于展示层，不写书目索引。
+     */
+    private val exploreCardCache = ExploreCardCache()
     private val mutable = MutableStateFlow(StudioUiState())
     val state: StateFlow<StudioUiState> = mutable.asStateFlow()
     val appTheme = settingsRepository.appTheme
@@ -516,7 +559,9 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
                         catalogUpdatedAt = stats.lastUpdatedAt,
                         catalogLoading = catalog.loading,
                         catalogProgress = catalog.progress,
-                        exploreMessage = catalog.message ?: it.exploreMessage,
+                        // 书目缓存消息只给设置页用；混进 exploreMessage 会让探索页底部
+                        // 莫名出现「书目更新失败」之类的提示。
+                        catalogMessage = catalog.message,
                     )
                 }
             }
@@ -556,45 +601,28 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     /**
-     * 探索榜单两类入口：
-     * - **登录墙内**（`requiresAuth = true`）：`toplist.php` 的四个排序榜，
-     *   走用户**自己的**会话 Cookie（AGENTS §4.5.3：本人登录后按账号权限访问不算规避）；
-     * - **匿名可访问**：年度精选榜与月度新书榜（`/zt/` 公开页）。
+     * 探索榜单：只挂书源的**匿名公开页**（年度精选 `/zt/sugoi/`）。
      *
-     * 未登录点登录墙榜单只会得到登录提示，不做任何规避；`articlelist.php` 仍不使用。
+     * `toplist.php` / `tags.php` 由源站登录墙控制，匿名访问会被 302 到登录页，
+     * 因此不再出现在探索页；`articlelist.php` 全工程不使用。
      */
-    val explorePages: List<ExplorePage> = buildList {
-        listOf(
-            "lastupdate" to "今日更新",
-            "allvisit" to "热门轻小说",
-            "postdate" to "新书一览",
-            "anime" to "动画化作品",
-        ).forEach { (sort, title) ->
-            add(ExplorePage("toplist-$sort", title, Wenku8Urls.toplist(sort), requiresAuth = true))
-        }
-        val thisYear = java.time.Year.now().value
-        (0 until 5).forEach { offset ->
-            val year = thisYear - offset
-            add(ExplorePage("sugoi-$year", "$year 年度精选", Wenku8Urls.sugoi(year), requiresAuth = false))
-        }
-        val now = java.time.YearMonth.now()
-        (0 until 3).forEach { offset ->
-            val ym = now.minusMonths(offset.toLong())
-            val stamp = "${ym.year}${ym.monthValue.toString().padStart(2, '0')}"
-            add(ExplorePage("booklist-$stamp", "${ym.monthValue} 月新书", Wenku8Urls.booklist(stamp), requiresAuth = false))
-        }
+    val explorePages: List<ExplorePage> = ExploreFeed.pages()
+
+    /** 进入探索页时调用一次；已加载过则不重复打源站。 */
+    fun ensureExploreLoaded() {
+        val current = state.value
+        if (current.exploreLoadedOnce) return
+        // 首屏只在“还没有当前榜单”时选默认榜；当前榜单不可加载时按登录态重选。
+        val loggedIn = app.sessionStore.hasSession()
+        val page = current.activeExplorePage
+            ?.takeIf { ExploreFeed.canLoad(it, loggedIn) }
+            ?: defaultExplorePage()
+        loadExplore(page)
     }
 
-    /**
-     * 加载探索页。
-     *
-     * 0.14.0 起改为**自动获取**（原 AGENTS §4.5「被动触发」已废止）：本地索引命中的书先
-     * 铺上去让界面立刻可见，随后缺失的书**自动**走书源（`articleinfo.php`）补全并逐个追加，
-     * 不再要求用户去设置页手动点「更新书目缓存」。
-     *
-     * 补全上限 [EXPLORE_AUTO_FETCH_LIMIT]：全局限流是 1 秒/请求，一次榜单全抓会让用户
-     * 干等；超过上限的部分留到用户手动刷新或进入详情时再取。
-     */
+    /** 首屏榜单：公开年度精选不需要会话，登录与未登录都从第一个年度榜开始。 */
+    private fun defaultExplorePage(): ExplorePage = defaultExplorePage(explorePages, app.sessionStore.hasSession())
+
     /**
      * 0.18.0：Cloudflare 验证完成后的重试。
      *
@@ -608,7 +636,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     fun onChallengeVerified() {
         val current = state.value
         mutable.update { it.copy(clearancePresent = app.sessionStore.hasClearance(), message = "验证完成，正在重试…") }
-        current.activeExplorePage?.let { page -> loadExplore(page) }
+        current.activeExplorePage?.let { page -> loadExplore(page, refreshing = true) }
         current.exploreDetailId?.let { id -> loadExploreDetail(id, current.exploreDetailSeed) }
     }
 
@@ -653,7 +681,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
                 "书籍详情" to Wenku8Urls.articleInfo("2365"),
                 "章节目录" to Wenku8Urls.index("2365"),
                 "年度榜单" to Wenku8Urls.sugoi(java.time.Year.now().value),
-                "月度新书" to Wenku8Urls.booklist(java.time.Year.now().toString().replace("-", "")),
+                "往期书单" to Wenku8Urls.booklist("201601"),
                 "同作者作品" to Wenku8Urls.authorArticle("伏濑"),
             )
             mutable.update { it.copy(endpointProbes = emptyList(), message = "正在诊断公开端点…") }
@@ -710,14 +738,25 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     fun closeExploreExpanded() = mutable.update { it.copy(exploreExpanded = false) }
 
     fun refreshExplore() {
-        // 没有选中榜单一律回落到第一个：首屏尚未加载时 activeExplorePage 还是 null，
-        // 下拉手势不该因此静默失效。
-        loadExplore(state.value.activeExplorePage ?: explorePages.first())
+        val loggedIn = app.sessionStore.hasSession()
+        val page = state.value.activeExplorePage
+            ?.takeIf { ExploreFeed.canLoad(it, loggedIn) }
+            ?: defaultExplorePage()
+        loadExplore(page, refreshing = true)
     }
 
-    fun loadExplore(page: ExplorePage = explorePages.first()) {
+    fun loadExplore(page: ExplorePage = defaultExplorePage(), refreshing: Boolean = false) {
+        if (!ExploreFeed.canLoad(page, app.sessionStore.hasSession())) {
+            mutable.update { ExploreState.reject(it, page, "登录后可查看该榜单。") }
+            return
+        }
+        // 序号由 ExploreState.begin 统一分配（只依赖 state，不依赖协程外计数器）。
+        // 这样登录/登出先清状态、随后立即重载时，新请求不会被自己的序号判成旧响应。
+        var requestId = 0L
+        mutable.update {
+            ExploreState.begin(it, page, refreshing).also { next -> requestId = next.exploreRequestId }
+        }
         viewModelScope.launch {
-            mutable.update { it.copy(exploreBusy = true, exploreMessage = null, activeExplorePage = page) }
             var cards: List<SearchBook> = emptyList()
             val ids = catching {
                 if (page.requiresAuth) {
@@ -726,55 +765,109 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
                     cards = exploreRepository.load(page)
                     cards.map { it.id }
                 } else {
-                    // 公开页客户端：不带会话 Cookie，但带 cf_clearance（否则验证过后依然403）
-                    val publicClient = Wenku8HttpClient(File(app.cacheDir, "wenku8-explore"), app.sessionStore.clearanceCookieJar())
-                    val resource = publicClient.fetchText(page.url, "explore-public", Wenku8Urls.BASE)
-                    Wenku8Parser.parseBookLinks(resource.html, resource.finalUrl).map { it.id }
+                    // 公开页客户端由 Application 注入：不带会话 Cookie，只带 cf_clearance
+                    exploreRepository.loadPublic(page)
                 }
             }.getOrElse { error ->
+                // 用户已切榜/登录态已变化时，这个请求的失败也不能再写页面。
+                // 例如登出后旧“今日更新”请求返回 AUTH_REQUIRED：若继续走下面的
+                // refreshSession()，会把刚重载好的公开榜再次清空。
+                if (!ExploreState.isCurrent(requestId, state.value.exploreRequestId)) return@launch
                 mutable.update {
-                    it.copy(
-                        exploreBusy = false,
-                        exploreMessage = if (isChallenge(error)) "被 Cloudflare 拦截：${challengeHint()}" else (error.message ?: "加载失败。"),
+                    ExploreState.failed(
+                        it,
+                        if (isChallenge(error)) "被 Cloudflare 拦截：${challengeHint()}" else (error.message ?: "加载失败。"),
+                        requestId,
                     )
+                }
+                // 只有**登录墙内**的当前请求失败才刷新登录态。旧请求（用户已切榜）迟到时
+                // 不应改写页面；公开榜的 AUTH_REQUIRED 来自匿名页被重定向到登录页，
+                // 不代表用户会话失效，若也 refreshSession() 会立刻重载公开榜并可能无限循环。
+                if (page.requiresAuth &&
+                    (error as? Wenku8Exception)?.code == "AUTH_REQUIRED"
+                ) {
+                    refreshSession()
                 }
                 return@launch
             }
             if (ids.isEmpty()) {
-                mutable.update {
-                    it.copy(exploreBusy = false, exploreRows = emptyList(), exploreMessage = "该榜单暂时没有内容。")
-                }
+                mutable.update { ExploreState.failed(it, "该榜单暂时没有内容。", requestId) }
                 return@launch
             }
 
             // 登录墙榜单自带完整卡片（标题/作者/封面），本地索引条目字段更全时优先本地，
-            // 其余直接用卡片，不必等逐本补全就能显示
-            val cardById = cards.associateBy { it.id }
-            val collected = ids.mapNotNull { id -> catalogRepository.get(id)?.toSearchBook() ?: cardById[id] }.toMutableList()
-            publishExploreRows(page, collected)
-            mutable.update { it.copy(exploreBusy = false) }
+            // 其余直接用卡片，不必等逐本补全就能显示。公开榜先叠上跨轮缓存，
+            // 这样上一轮补过的书不会在刷新后重新变成缺失项。
+            val fetched = exploreCardCache.snapshot().toMutableMap()
+            cards.forEach { fetched[it.id] = it }
+            val collected = ExploreFeed.mergeCards(ids, { id -> catalogRepository.get(id)?.toSearchBook() }, fetched)
+            mutable.update { ExploreState.rows(it, page, collected, requestId, busy = true) }
 
-            val missing = ids.filter { catalogRepository.get(it) == null }.take(EXPLORE_AUTO_FETCH_LIMIT)
-            if (missing.isEmpty()) return@launch
-            missing.forEachIndexed { index, id ->
-                val info = app.bookSource.getBookInformation(id).get() ?: return@forEachIndexed
-                collected += info.toSearchBook()
-                publishExploreRows(page, collected)
-                mutable.update { it.copy(exploreMessage = "正在补全 ${index + 1}/${missing.size}…") }
-            }
-            mutable.update { it.copy(exploreMessage = null) }
-        }
-    }
-
-    private fun publishExploreRows(page: ExplorePage, books: List<SearchBook>) {
-        mutable.update {
-            it.copy(
-                exploreRows = if (books.isEmpty()) {
-                    emptyList()
-                } else {
-                    listOf(ExploreBooksRow(page.title, books, page.id))
-                },
+            // 只有公开榜需要逐本补全；登录墙榜单首屏已带完整卡片。
+            val missing = ExploreFeed.missingIds(
+                page = page,
+                ids = ids,
+                catalog = { id -> catalogRepository.get(id)?.toSearchBook() },
+                remote = fetched,
+                limit = EXPLORE_AUTO_FETCH_LIMIT,
             )
+            if (missing.isEmpty()) {
+                mutable.update { ExploreState.rows(it, page, collected, requestId) }
+                mutable.update { ExploreState.completed(it, requestId) }
+                return@launch
+            }
+            var failures = 0
+            var consecutiveFailures = 0
+            var processed = 0
+            for ((index, id) in missing.withIndex()) {
+                // 切榜后立即停止抓取剩余条目，别让旧榜单继续占用全局限流。
+                if (!ExploreState.isCurrent(requestId, state.value.exploreRequestId)) return@launch
+                // 公开榜必须继续走无会话客户端：这里若回落到 app.bookSource，
+                // 已登录用户的 jieqiUserInfo / PHPSESSID 会被补全请求带出去。
+                val info = catching { exploreRepository.loadPublicBook(id) }
+                info.getOrNull()?.let { book ->
+                    fetched[book.id] = book
+                    // 立即写回跨轮缓存；不能等整轮结束，否则用户中途切榜会把已花掉的请求丢掉。
+                    exploreCardCache.put(book)
+                } ?: run {
+                    failures += 1
+                }
+                processed = index + 1
+                // 同一本连续失败达到阈值就不再尝试后续条目：公开链路被 Cloudflare 拦时，
+                // 继续逐本请求只会把整轮都拖进 1 秒/次的限流，页面却始终没有新卡片。
+                // 这里不改写失败文案，最终统一由 completionWarning 给出提示。
+                consecutiveFailures = if (info.isSuccess) 0 else consecutiveFailures + 1
+                if (shouldStopPublicFetch(consecutiveFailures)) {
+                    break
+                }
+                val merged = ExploreFeed.mergeCards(ids, { key -> catalogRepository.get(key)?.toSearchBook() }, fetched)
+                mutable.update { ExploreState.rows(it, page, merged, requestId, busy = true) }
+                mutable.update { ExploreState.progress(it, processed, missing.size, requestId, failures) }
+            }
+            if (!ExploreState.isCurrent(requestId, state.value.exploreRequestId)) return@launch
+            val merged = ExploreFeed.mergeCards(ids, { key -> catalogRepository.get(key)?.toSearchBook() }, fetched)
+            if (merged.isEmpty()) {
+                mutable.update {
+                    ExploreState.failed(
+                        it,
+                        ExploreState.emptyPublicResult(
+                            total = ids.distinct().size,
+                            attempted = processed,
+                            failures = failures,
+                        ),
+                        requestId,
+                    )
+                }
+            } else {
+                mutable.update { ExploreState.rows(it, page, merged, requestId) }
+                val completionNotice = ExploreState.completionWarning(
+                    total = ids.distinct().size,
+                    shown = merged.size,
+                    attempted = processed,
+                    failures = failures,
+                )
+                mutable.update { ExploreState.completed(it, requestId, completionNotice) }
+            }
         }
     }
 
@@ -817,43 +910,48 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
      */
     fun selectTag(tag: String) {
         val local = catalogRepository.searchTag(tag).map { it.toSearchBook() }
-        mutable.update { it.copy(activeTag = tag, tagResults = local) }
-        if (!app.sessionStore.hasSession()) return
+        tagRequestId += 1
+        val requestId = tagRequestId
+        val loggedIn = app.sessionStore.hasSession()
+        mutable.update {
+            ExploreState.selectTag(
+                state = it,
+                tag = tag,
+                local = local,
+                loggedIn = loggedIn,
+                awaitingServer = loggedIn,
+            )
+        }
+        if (!loggedIn) return
         viewModelScope.launch {
             catching { exploreRepository.tagBooks(tag) }
                 .onSuccess { server ->
-                    if (server.isEmpty()) return@onSuccess
-                    val serverIds = server.map { it.id }.toSet()
-                    mutable.update {
-                        it.copy(
-                            // 官方结果在前，本地索引里多出的书补在后面
-                            tagResults = server + local.filter { book -> book.id !in serverIds },
-                            exploreMessage = null,
-                            loggedIn = app.sessionStore.hasSession(),
-                        )
-                    }
+                    if (requestId == tagRequestId) mutable.update { ExploreState.mergeTag(it, tag, server, local) }
                 }
                 .onFailure { error ->
-                    mutable.update {
-                        it.copy(
-                            exploreMessage = error.message ?: "标签浏览失败，已显示本地结果。",
-                            loggedIn = app.sessionStore.hasSession(),
-                        )
+                    if (requestId == tagRequestId) {
+                        mutable.update {
+                            ExploreState.tagFailed(it, tag, error.message ?: "标签浏览失败，已显示本地结果。")
+                        }
                     }
                 }
         }
     }
 
     /** 退出标签浏览。 */
-    fun clearTag() = mutable.update { it.copy(activeTag = null, tagResults = emptyList()) }
+    fun clearTag() {
+        tagRequestId += 1
+        mutable.update { ExploreState.clearTag(it) }
+    }
 
     /** 官方标签在前（站点规范词表），本地索引里多出的标签跟在后面。 */
     private fun mergedTags(local: List<String>): List<String> = (officialTags + local).distinct()
 
     private fun loadOfficialTags() {
+        val requestId = ++officialTagsRequestId
         viewModelScope.launch {
             catching { exploreRepository.officialTags() }.onSuccess { tags ->
-                if (tags.isEmpty()) return@onSuccess
+                if (tags.isEmpty() || requestId != officialTagsRequestId || !app.sessionStore.hasSession()) return@onSuccess
                 officialTags = tags
                 mutable.update { it.copy(exploreTags = mergedTags(catalogRepository.tagList())) }
             }
@@ -994,6 +1092,107 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
                     outcomes.isEmpty() -> "没有可检查的远程书籍"
                     updated > 0 -> "检查完成：$updated 本有新章节"
                     else -> "检查完成：暂无更新"
+                },
+            )
+        }
+    }
+
+    /**
+     * 检查应用自身更新（GitHub Release）。
+     *
+     * 与书架章节更新完全分开：不经过 [Wenku8HttpClient]，也不受书架设置影响。
+     */
+    fun checkAppUpdate() {
+        val current = state.value
+        if (current.appUpdateChecking || current.appUpdateDownloading) return
+        if (current.offlineMode) {
+            mutable.update { it.copy(appUpdateMessage = "离线模式下不会检查应用更新，请先关闭离线模式。") }
+            return
+        }
+        mutable.update {
+            it.copy(
+                appUpdateChecking = true,
+                appUpdateProgress = 0,
+                appUpdateAvailable = null,
+                appUpdateFile = null,
+                appUpdateMessage = null,
+            )
+        }
+        viewModelScope.launch {
+            catching { app.appUpdateRepository.check(BuildConfig.VERSION_NAME) }
+                .onSuccess { release ->
+                    mutable.update {
+                        it.copy(
+                            appUpdateChecking = false,
+                            appUpdateAvailable = release,
+                            appUpdateMessage = if (release == null) "已是最新版本。" else null,
+                        )
+                    }
+                }
+                .onFailure { error ->
+                    mutable.update {
+                        it.copy(
+                            appUpdateChecking = false,
+                            appUpdateMessage = error.message ?: "检查应用更新失败。",
+                        )
+                    }
+                }
+        }
+    }
+
+    /** 下载当前发现的新版本；进度只写 [StudioUiState.appUpdateProgress]。 */
+    fun downloadAppUpdate() {
+        val release = state.value.appUpdateAvailable ?: return
+        if (state.value.appUpdateDownloading) return
+        mutable.update {
+            it.copy(
+                appUpdateDownloading = true,
+                appUpdateProgress = 0,
+                appUpdateFile = null,
+                appUpdateMessage = null,
+            )
+        }
+        viewModelScope.launch {
+            catching {
+                app.appUpdateRepository.download(release) { percent ->
+                    mutable.update { it.copy(appUpdateProgress = percent) }
+                }
+            }.onSuccess { file ->
+                mutable.update {
+                    it.copy(
+                        appUpdateDownloading = false,
+                        appUpdateProgress = 100,
+                        appUpdateFile = file.absolutePath,
+                        appUpdateMessage = "下载完成，可安装更新。",
+                    )
+                }
+            }.onFailure { error ->
+                mutable.update {
+                    it.copy(
+                        appUpdateDownloading = false,
+                        appUpdateProgress = 0,
+                        appUpdateMessage = error.message ?: "下载应用更新失败。",
+                    )
+                }
+            }
+        }
+    }
+
+    /** 把已下载的 APK 交给系统安装器；需要「安装未知应用」权限时跳系统设置。 */
+    fun installAppUpdate(context: Context) {
+        val path = state.value.appUpdateFile ?: return
+        val file = File(path)
+        if (!file.isFile) {
+            mutable.update { it.copy(appUpdateFile = null, appUpdateMessage = "安装包已失效，请重新下载。") }
+            return
+        }
+        val result = AppUpdateInstaller.install(context, file)
+        mutable.update {
+            it.copy(
+                appUpdateMessage = when (result) {
+                    AppUpdateInstaller.Result.STARTED -> "已打开系统安装器。"
+                    AppUpdateInstaller.Result.NEEDS_PERMISSION -> "请允许本应用安装未知应用，然后返回再次点击安装。"
+                    AppUpdateInstaller.Result.FAILED -> "无法启动安装器，请检查系统权限。"
                 },
             )
         }
@@ -1469,13 +1668,37 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
 
     fun refreshSession() {
         val loggedIn = app.sessionStore.hasSession()
-        mutable.update { it.copy(loggedIn = loggedIn) }
+        if (!loggedIn) {
+            officialTagsRequestId += 1
+            tagRequestId += 1
+            officialTags = emptyList()
+        }
+        // 登录/登出都作废在途的探索请求：旧请求可能带着旧会话或匿名身份返回。
+        // 序号在状态迁移里递增，且后续 loadExplore 会再开新一轮。
+        val exploreTags = if (loggedIn) mergedTags(catalogRepository.tagList()) else catalogRepository.tagList()
+        mutable.update {
+            // 只清掉上一登录态的探索内容；请求序号在这里递增，随后 loadExplore 再开新一轮。
+            // 旧请求返回时会因序号不匹配而被丢弃。
+            val requestId = it.exploreRequestId + 1
+            if (loggedIn) ExploreState.signedIn(it, exploreTags, requestId)
+            else ExploreState.signedOut(it, exploreTags, requestId)
+        }
         if (loggedIn && officialTags.isEmpty()) loadOfficialTags()
+        // 登录/登出会清空探索状态；若用户当前就停在探索页，必须立刻按新登录态
+        // 重选默认榜单，否则 ExploreScreen 的 LaunchedEffect(Unit) 不会因状态变化重跑。
+        if (state.value.tab == StudioTab.EXPLORE) {
+            loadExplore(defaultExplorePage())
+        }
     }
     fun clearSearchHistory() { viewModelScope.launch { settingsRepository.clearSearchHistory() } }
     fun searchBooks() {
         val current = state.value
         if (current.searchQuery.isBlank()) return
+        // 未登录不再被登录墙挡住：直接用书源的本地书目索引搜索。
+        if (!app.sessionStore.hasSession()) {
+            searchLocalCatalog(current)
+            return
+        }
         val requestId = ++searchRequestId
         mutable.update {
             it.copy(
@@ -1496,23 +1719,71 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
                 }
                 .onFailure { error ->
                     if (SearchPager.isCurrent(requestId, searchRequestId)) {
-                        mutable.update { state ->
-                            state.copy(
-                                searchBusy = false,
-                                searchLoadingMore = false,
-                                searchMessage = error.message ?: "搜索失败。",
-                                loggedIn = app.sessionStore.hasSession(),
-                            )
+                        if ((error as? Wenku8Exception)?.code == "AUTH_REQUIRED") {
+                            // 会话过期：退回本地书目，保证搜索仍然可用。
+                            refreshSession()
+                            searchLocalCatalog(current)
+                        } else {
+                            mutable.update { state ->
+                                state.copy(
+                                    searchBusy = false,
+                                    searchLoadingMore = false,
+                                    searchMessage = error.message ?: "搜索失败。",
+                                    loggedIn = app.sessionStore.hasSession(),
+                                )
+                            }
                         }
-                        if ((error as? Wenku8Exception)?.code == "AUTH_REQUIRED") refreshSession()
                     }
                 }
+        }
+    }
+
+    /**
+     * 免登录搜索：查询本地书目索引（由书源公开页抓取），不触碰登录墙内的 `search.php`。
+     * 本地结果一次返回，不再分页。
+     */
+    private fun searchLocalCatalog(current: StudioUiState) {
+        val query = current.searchQuery.trim()
+        if (query.isEmpty()) return
+        val requestId = ++searchRequestId
+        val field = if (current.searchField == SearchField.AUTHOR) CatalogSearchField.AUTHOR else CatalogSearchField.TITLE
+        mutable.update {
+            it.copy(
+                searchBusy = true,
+                searchLoadingMore = false,
+                searchHasNextPage = false,
+                searchPage = 0,
+                searchMessage = null,
+            )
+        }
+        viewModelScope.launch {
+            val results = withContext(Dispatchers.Default) { catalogRepository.search(query, field) }
+            if (!SearchPager.isCurrent(requestId, searchRequestId)) return@launch
+            val books = results.map { it.toSearchBook() }
+            mutable.update {
+                it.copy(
+                    searchBusy = false,
+                    searchResults = books,
+                    searchPage = 1,
+                    searchHasNextPage = false,
+                    searchLoadingMore = false,
+                    searchMessage = if (books.isEmpty() && it.catalogSize == 0) {
+                        "本地书目为空，请到「设置 → 书目缓存」更新后再搜索。"
+                    } else {
+                        null
+                    },
+                    loggedIn = app.sessionStore.hasSession(),
+                )
+            }
+            if (books.isNotEmpty()) settingsRepository.recordSearch(query)
         }
     }
 
     fun loadMoreSearchResults() {
         val current = state.value
         if (current.searchQuery.isBlank() || current.searchBusy || current.searchLoadingMore || !current.searchHasNextPage) return
+        // 本地搜索一次返回全部结果，没有“下一页”；未登录时不需要再打站内搜索。
+        if (!app.sessionStore.hasSession()) return
         val requestId = ++searchRequestId
         val nextPage = current.searchPage + 1
         mutable.update { it.copy(searchLoadingMore = true, searchMessage = null) }
@@ -1525,14 +1796,18 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
                 }
                 .onFailure { error ->
                     if (SearchPager.isCurrent(requestId, searchRequestId)) {
-                        mutable.update { state ->
-                            state.copy(
-                                searchLoadingMore = false,
-                                searchMessage = error.message ?: "加载更多失败。",
-                                loggedIn = app.sessionStore.hasSession(),
-                            )
+                        if ((error as? Wenku8Exception)?.code == "AUTH_REQUIRED") {
+                            refreshSession()
+                            searchLocalCatalog(state.value)
+                        } else {
+                            mutable.update { state ->
+                                state.copy(
+                                    searchLoadingMore = false,
+                                    searchMessage = error.message ?: "加载更多失败。",
+                                    loggedIn = app.sessionStore.hasSession(),
+                                )
+                            }
                         }
-                        if ((error as? Wenku8Exception)?.code == "AUTH_REQUIRED") refreshSession()
                     }
                 }
         }
@@ -1558,28 +1833,32 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
             sourceUrl = book.sourceUrl,
         )
         // 先进入详情页并置 loading：页面用 seed 立刻渲染出标题/作者，接口回来再补齐
-        mutable.update {
-            it.copy(
-                exploreDetailId = book.id,
-                exploreDetail = null,
-                exploreDetailLoading = true,
-                exploreDetailError = null,
-                exploreDetailSeed = seed,
-            )
-        }
+        mutable.update { ExploreState.beginDetail(it, book.id, seed) }
         loadExploreDetail(book.id, seed)
     }
 
     private fun loadExploreDetail(bookId: String, seed: com.example.hyperreader.core.ExploreBookSeed? = null) {
+        var requestId = 0L
+        mutable.update { state ->
+            val next = ExploreState.detailLoading(state, bookId)
+            if (next.exploreDetailRequestId != state.exploreDetailRequestId) {
+                requestId = next.exploreDetailRequestId
+            }
+            next
+        }
+        // 用户已经关掉详情或打开别的书：不发起请求，也不留下 loading 态。
+        if (requestId == 0L) return
         viewModelScope.launch {
-            mutable.update { it.copy(exploreDetailLoading = true, exploreDetailError = null) }
-            catching { exploreDetailRepository.load(bookId, seed) }
-                .onSuccess { detail ->
-                    mutable.update { it.copy(exploreDetailLoading = false, exploreDetail = detail, exploreDetailError = detail.indexError) }
+            val result = catching { exploreDetailRepository.load(bookId, seed) }
+            // 等待网络期间用户可能已关闭详情、打开别的书或点了重试；
+            // 只让「当前这本书的最新一次请求」写状态。
+            result.onSuccess { detail ->
+                mutable.update { ExploreState.detailLoaded(it, bookId, requestId, detail) }
+            }.onFailure { error ->
+                mutable.update {
+                    ExploreState.detailFailed(it, bookId, requestId, error.message ?: "详情加载失败。")
                 }
-                .onFailure { error ->
-                    mutable.update { it.copy(exploreDetailLoading = false, exploreDetailError = error.message ?: "详情加载失败。") }
-                }
+            }
         }
     }
 
@@ -1622,6 +1901,9 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     fun setThemeMode(mode: com.example.hyperreader.settings.AppThemeMode) { viewModelScope.launch { settingsRepository.setThemeMode(mode) } }
     fun setDynamicColor(enabled: Boolean) { viewModelScope.launch { settingsRepository.setDynamicColor(enabled) } }
     fun setAccentColor(color: Int) { viewModelScope.launch { settingsRepository.setAccentColor(color) } }
+    fun applyThemePreset(preset: com.example.hyperreader.settings.AppThemeSettings) {
+        viewModelScope.launch { settingsRepository.applyTheme(preset) }
+    }
 
     // 阅读器设置：与阅读器共用同一 DataStore，改动实时生效
     fun setReaderFontSize(value: Float) { viewModelScope.launch { settingsRepository.setReaderFontSize(value) } }
@@ -1861,6 +2143,26 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
          * 全抓会让用户干等 30 秒以上；超出的部分留给手动刷新或进入详情时再取。
          */
         const val EXPLORE_AUTO_FETCH_LIMIT = 20
+
+        /**
+         * 公开榜补全的连续失败阈值。
+         *
+         * 一次 Cloudflare 拦截通常会影响整条匿名链路；连续 [EXPLORE_PUBLIC_FAILURE_STREAK]
+         * 本失败就停止本轮剩余请求，避免 20 次请求全部撞在限流与风控上。
+         */
+        const val EXPLORE_PUBLIC_FAILURE_STREAK = 3
+
+        /** 公开榜补全是否应停止本轮：连续失败达到阈值即停，避免把整轮都撞进风控。 */
+        internal fun shouldStopPublicFetch(consecutiveFailures: Int): Boolean =
+            consecutiveFailures >= EXPLORE_PUBLIC_FAILURE_STREAK
+
+        /** 纯函数版本，便于验证匿名/登录两种情况都不会把首屏落到不可加载的榜单。 */
+        internal fun defaultExplorePage(pages: List<ExplorePage>, loggedIn: Boolean): ExplorePage =
+            if (loggedIn) {
+                pages.firstOrNull { it.requiresAuth } ?: pages.first()
+            } else {
+                pages.firstOrNull { !it.requiresAuth } ?: pages.first()
+            }
 
         /** 中继端点非法时的统一提示（要求 https 域名，禁止 IP 与 wenku8 自身域名）。 */
         private const val RELAY_BASE_INVALID = "中继端点无效：需形如 https://relay.example.com，不能用 IP 或 wenku8 自身域名。"

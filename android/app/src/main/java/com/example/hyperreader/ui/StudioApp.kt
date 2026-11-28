@@ -91,6 +91,7 @@ import com.example.hyperreader.auth.LoginActivity
 import com.example.hyperreader.reader.XyReaderActivity
 import com.example.hyperreader.reader.onlineReaderIntent
 import com.example.hyperreader.ui.AppMiuixTheme
+import com.example.hyperreader.ui.theme.appThemeTokens
 import com.example.hyperreader.ui.BookmarkCenterScreen
 import com.example.hyperreader.ui.BookshelfScreen
 import com.example.hyperreader.ui.EmptyState
@@ -277,9 +278,10 @@ private fun StudioApp(
     }
     Scaffold(
         topBar = {
+            val tokens = appThemeTokens()
             // 宽屏：顶栏文字与正文同宽居中，背景仍铺满整屏（避免两侧露底）。
             Box(
-                Modifier.fillMaxWidth().background(MiuixTheme.colorScheme.surface),
+                Modifier.fillMaxWidth().background(tokens.backdropTop),
                 contentAlignment = Alignment.TopCenter,
             ) {
             TopAppBar(
@@ -288,7 +290,7 @@ private fun StudioApp(
                 largeTitle = chromeTitle,
                 subtitle = chromeSubtitle,
                 scrollBehavior = scrollBehavior,
-                color = MiuixTheme.colorScheme.surface,
+                color = tokens.backdropTop,
                 titlePadding = UiDimens.pagePadding,
                 navigationIconPadding = UiDimens.spaceXS,
                 actionIconPadding = UiDimens.spaceXS,
@@ -326,6 +328,7 @@ private fun StudioApp(
             // 全屏覆盖页（详情 / 导出记录 / 榜单展开 / 搜索 / 书签中心 / 导出向导）不显示底部导航。
             // 判据与页面层级共用 `shellPage()`，避免又多一处手写条件而漂移。
             if (state.shellPage() == ShellPage.TABS) {
+                val tokens = appThemeTokens()
                 Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.BottomCenter) {
                 Surface(
                     modifier = Modifier
@@ -333,7 +336,7 @@ private fun StudioApp(
                         .fillMaxWidth()
                         .padding(horizontal = UiDimens.spaceS, vertical = UiDimens.spaceXS)
                         .navigationBarsPadding(),
-                    color = MiuixTheme.colorScheme.surfaceContainerHigh,
+                    color = tokens.navSurface,
                     shadowElevation = UiDimens.navElevation,
                     shape = RoundedCornerShape(UiDimens.navCorner),
                 ) {
@@ -348,7 +351,7 @@ private fun StudioApp(
                         // AGENTS §4.6.1 第 1 条仍成立：导出继续留在书籍菜单，不占一级导航。
                         val navColors = NavigationBarDefaults.navigationBarItemColors(
                             unselectedContentColor = MiuixTheme.colorScheme.onSurfaceContainer,
-                            selectedContentColor = MiuixTheme.colorScheme.primary,
+                            selectedContentColor = tokens.accent,
                         )
                         NavigationBarItem(selected = state.tab == StudioTab.READING, onClick = { viewModel.setTab(StudioTab.READING) }, icon = ImageVector.vectorResource(R.drawable.outline_book_24px), label = "阅读", colors = navColors)
                         NavigationBarItem(selected = state.tab == StudioTab.BOOKSHELF, onClick = { viewModel.setTab(StudioTab.BOOKSHELF) }, icon = MiuixIcons.Recent, label = "书架", colors = navColors)
@@ -559,7 +562,6 @@ private fun StudioApp(
                     state = state,
                     viewModel = viewModel,
                     listState = tabListState(StudioTab.EXPLORE),
-                    onLogin = onLogin,
                     onGoToCatalog = {
                         viewModel.setTab(StudioTab.SETTINGS)
                         viewModel.openSettingsSection(SettingsSection.CATALOG)

@@ -25,10 +25,10 @@ class SettingsRepository(private val context: Context) {
 
     val appTheme: Flow<AppThemeSettings> = data.safeData().map { prefs ->
         AppThemeSettings(
-            mode = prefs[THEME_MODE]?.let { name -> runCatching { AppThemeMode.valueOf(name) }.getOrNull() } ?: AppThemeMode.MONET,
+            mode = AppThemeMode.fromName(prefs[THEME_MODE]),
             useDynamicColor = prefs[USE_DYNAMIC_COLOR] ?: true,
             accentColor = prefs[ACCENT_COLOR] ?: 0xFFA34B2F.toInt(),
-        )
+        ).normalized()
     }
 
     /** EPUB 导出引擎；未设置或值非法时回退自研引擎。 */
@@ -127,7 +127,15 @@ class SettingsRepository(private val context: Context) {
         parseProgressMap(raw)
     }
 
-    suspend fun setThemeMode(mode: AppThemeMode) = edit { it[THEME_MODE] = mode.name }
+    suspend fun setThemeMode(mode: AppThemeMode) = edit { it[THEME_MODE] = mode.normalizedMode().name }
+
+    /** 一次性应用主题预设：模式、动态色与强调色同一笔写入，避免三次写入之间的中间态闪烁。 */
+    suspend fun applyTheme(preset: AppThemeSettings) = edit {
+        val normalized = preset.normalized()
+        it[THEME_MODE] = normalized.mode.name
+        it[USE_DYNAMIC_COLOR] = normalized.useDynamicColor
+        it[ACCENT_COLOR] = normalized.accentColor
+    }
 
     /** 切换 EPUB 导出引擎；只影响之后创建的导出任务。 */
     suspend fun setExportEngine(engine: EpubEngine) = edit { it[EXPORT_ENGINE] = engine.name }
@@ -217,7 +225,7 @@ class SettingsRepository(private val context: Context) {
 
         /** 首选直连入口（`DirectEntry.name`）；缺省或非法值视为 `.net`。 */
         val DIRECT_ENTRY = stringPreferencesKey("direct_entry")
-        /** 在线阅读数据源（`OnlineSource.name`）；缺省或非法值视为内置解析。 */
+        /** 在线阅读数据源（`OnlineSource.name`）；缺省或非法值视为 LNR 书源。 */
         val ONLINE_SOURCE = stringPreferencesKey("online_source")
         /** 屏幕刷新率策略（`RefreshRate.name`）；缺省或非法值视为自适应。 */
         val REFRESH_RATE = stringPreferencesKey("refresh_rate")

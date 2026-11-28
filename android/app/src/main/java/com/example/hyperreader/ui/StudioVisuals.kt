@@ -29,9 +29,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import com.example.hyperreader.ui.theme.appThemeTokens
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 /**
  * 全局纸张背景。
@@ -44,16 +44,16 @@ fun StudioBackdrop(
     modifier: Modifier = Modifier,
     content: @Composable BoxScope.() -> Unit,
 ) {
-    val colors = MiuixTheme.colorScheme
+    val tokens = appThemeTokens()
     Box(
         modifier = modifier
             .fillMaxSize()
             .background(
                 Brush.verticalGradient(
                     listOf(
-                        colors.surface,
-                        colors.background,
-                        colors.surfaceVariant.copy(alpha = 0.72f),
+                        tokens.backdropTop,
+                        tokens.backdropMiddle,
+                        tokens.backdropBottom,
                     ),
                 ),
             ),
@@ -61,7 +61,7 @@ fun StudioBackdrop(
         Canvas(Modifier.fillMaxSize()) {
             drawCircle(
                 brush = Brush.radialGradient(
-                    colors = listOf(colors.primary.copy(alpha = 0.11f), Color.Transparent),
+                    colors = listOf(tokens.backdropGlow, Color.Transparent),
                     center = Offset(size.width * 0.92f, size.height * 0.04f),
                     radius = size.width * 0.78f,
                 ),
@@ -70,7 +70,7 @@ fun StudioBackdrop(
             )
             drawCircle(
                 brush = Brush.radialGradient(
-                    colors = listOf(colors.secondaryContainer.copy(alpha = 0.12f), Color.Transparent),
+                    colors = listOf(tokens.backdropGlowSecondary, Color.Transparent),
                     center = Offset(size.width * 0.04f, size.height * 0.72f),
                     radius = size.width * 0.72f,
                 ),
@@ -96,7 +96,7 @@ fun StudioHero(
     modifier: Modifier = Modifier,
     actions: (@Composable RowScope.() -> Unit)? = null,
 ) {
-    val colors = MiuixTheme.colorScheme
+    val tokens = appThemeTokens()
     val shape = RoundedCornerShape(UiDimens.heroCorner)
     Box(
         modifier = modifier
@@ -105,16 +105,16 @@ fun StudioHero(
             .background(
                 Brush.linearGradient(
                     listOf(
-                        colors.primaryContainer.copy(alpha = 0.92f),
-                        colors.surfaceContainerHigh.copy(alpha = 0.96f),
+                        tokens.heroStart,
+                        tokens.heroEnd,
                     ),
                 ),
             )
-            .border(BorderStroke(UiDimens.hairline, colors.outline.copy(alpha = 0.18f)), shape)
+            .border(BorderStroke(UiDimens.hairline, tokens.panelBorder), shape)
             .drawBehind {
                 drawCircle(
                     brush = Brush.radialGradient(
-                        colors = listOf(colors.primary.copy(alpha = 0.18f), Color.Transparent),
+                        colors = listOf(tokens.accent.copy(alpha = 0.18f), Color.Transparent),
                         center = Offset(size.width * 0.88f, size.height * 0.12f),
                         radius = size.width * 0.55f,
                     ),
@@ -129,7 +129,7 @@ fun StudioHero(
         ) {
             Text(
                 kicker,
-                color = colors.primary,
+                color = tokens.accent,
                 fontSize = UiDimens.captionSmall,
                 fontWeight = FontWeight.Bold,
             )

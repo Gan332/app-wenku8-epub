@@ -31,22 +31,22 @@ import androidx.compose.ui.Modifier
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.hyperreader.core.Wenku8Endpoint
 import com.example.hyperreader.BuildConfig
-import com.example.hyperreader.settings.AppThemeMode
-import com.example.hyperreader.settings.AppThemeSettings
+import com.example.hyperreader.MessageCard
 import com.example.hyperreader.settings.DirectEntry
+import com.example.hyperreader.ui.theme.AppearanceSection
 import com.example.hyperreader.settings.OnlineSource
 import com.example.hyperreader.settings.ReaderBackground
 import com.example.hyperreader.settings.ReaderPageTurnMode
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.ColorPicker
 import top.yukonga.miuix.kmp.basic.DropdownItem
 import top.yukonga.miuix.kmp.basic.HorizontalDivider
+import top.yukonga.miuix.kmp.basic.LinearProgressIndicator
 import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
@@ -70,7 +70,7 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 private enum class SettingsCategory(val title: String, val summary: String, val section: SettingsSection) {
     ACCOUNT("账号", "登录状态、会话与退出", SettingsSection.ACCOUNT),
     READING("阅读", "背景、字体、字号、行距与翻页", SettingsSection.READER),
-    APPEARANCE("外观", "配色模式、动态色与强调色", SettingsSection.APPEARANCE),
+    APPEARANCE("外观", "主题预设、明暗模式与取色", SettingsSection.APPEARANCE),
     NETWORK("网络", "第三方中继与公开端点连通性", SettingsSection.NETWORK),
     DATA("数据", "书目缓存、阅读统计与配置备份", SettingsSection.CATALOG),
     ABOUT("关于", "版本、数据来源与使用边界", SettingsSection.ABOUT),
@@ -147,7 +147,7 @@ fun SettingsScreen(
                     onExportBackupRequest = onExportBackup,
                     onImportBackupRequest = onImportBackup,
                 )
-                SettingsSection.ABOUT -> AboutSection(viewModel)
+                SettingsSection.ABOUT -> AboutSection(state = state, viewModel = viewModel)
                 SettingsSection.OVERVIEW -> Unit
             }
         }
@@ -662,62 +662,6 @@ private fun RelaySettings(viewModel: StudioViewModel) {
 }
 
 @Composable
-private fun AppearanceSection(viewModel: StudioViewModel) {
-    val theme by viewModel.appTheme.collectAsStateWithLifecycle(initialValue = AppThemeSettings())
-    SettingsScaffold("主题与外观", viewModel::backSettings, listOf(
-        { SectionTitle("配色模式") },
-        {
-            PreferencePanel {
-                AppThemeMode.entries.forEach { mode ->
-                    RadioButtonPreference(
-                        title = mode.label(),
-                        selected = theme.mode == mode,
-                        onClick = { viewModel.setThemeMode(mode) },
-                        insideMargin = PreferenceRowMargin,
-                    )
-                }
-            }
-        },
-        {
-            PreferencePanel {
-                SwitchPreference(
-                    title = "使用系统动态色",
-                    summary = "关闭后使用固定 MiuiX 配色",
-                    checked = theme.useDynamicColor,
-                    onCheckedChange = viewModel::setDynamicColor,
-                    insideMargin = PreferenceRowMargin,
-                )
-            }
-        },
-        { SectionTitle("强调色") },
-        {
-            Row(horizontalArrangement = Arrangement.spacedBy(UiDimens.spaceM)) {
-                listOf(0xFFA34B2F.toInt(), 0xFF2D6A4F.toInt(), 0xFF2563EB.toInt(), 0xFF7C3AED.toInt(), 0xFF111827.toInt()).forEach { color ->
-                    ColorSwatch(
-                        color = color,
-                        selected = theme.accentColor == color,
-                        onClick = { viewModel.setAccentColor(color) },
-                    )
-                }
-            }
-        },
-        {
-            Card(
-                Modifier.fillMaxWidth(),
-                cornerRadius = UiDimens.panelCorner,
-                insideMargin = PaddingValues(UiDimens.spaceS),
-            ) {
-                ColorPicker(
-                    color = Color(theme.accentColor),
-                    onColorChanged = { viewModel.setAccentColor(it.toArgb()) },
-                    modifier = Modifier.fillMaxWidth().height(UiDimens.colorPickerHeight),
-                )
-            }
-        },
-    ))
-}
-
-@Composable
 private fun ReaderSection(state: StudioUiState, viewModel: StudioViewModel, onImportFont: () -> Unit) {
     val settings = state.readerSettings
     val stripGaps by viewModel.stripCjkGaps.collectAsStateWithLifecycle(initialValue = true)
@@ -841,7 +785,7 @@ private fun ReaderSection(state: StudioUiState, viewModel: StudioViewModel, onIm
         },
         { SectionTitle("在线阅读") },
         {
-            val onlineSource by viewModel.onlineSource.collectAsStateWithLifecycle(initialValue = OnlineSource.BUILTIN)
+            val onlineSource by viewModel.onlineSource.collectAsStateWithLifecycle(initialValue = OnlineSource.LNR)
             PreferencePanel {
                 OnlineSource.entries.forEach { source ->
                     RadioButtonPreference(
@@ -918,6 +862,7 @@ private fun CatalogSection(state: StudioUiState, viewModel: StudioViewModel, onI
         {
             TextButton(text = "清空本地书目", onClick = viewModel::clearCatalog, modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin))
         },
+        { state.catalogMessage?.let { message -> MessageCard(message) } },
         { SectionTitle("缓存") },
         {
             StudioPanel("封面与插图") {
@@ -1013,7 +958,14 @@ private fun formatCacheSize(bytes: Long): String {
 }
 
 @Composable
-private fun AboutSection(viewModel: StudioViewModel) {
+private fun AboutSection(state: StudioUiState, viewModel: StudioViewModel) {
+    val context = LocalContext.current
+    // 进入关于页自动查一次；已有结果/提示时不重复打 GitHub。
+    LaunchedEffect(Unit) {
+        if (state.appUpdateAvailable == null && !state.appUpdateChecking && state.appUpdateMessage == null) {
+            viewModel.checkAppUpdate()
+        }
+    }
     SettingsScaffold("关于", viewModel::backSettings, listOf(
         {
             StudioHero(
@@ -1021,6 +973,81 @@ private fun AboutSection(viewModel: StudioViewModel) {
                 title = "文库 EPUB 工坊",
                 description = "Kotlin + Jetpack Compose + MiuiX · v${BuildConfig.VERSION_NAME}",
             )
+        },
+        { SectionTitle("应用更新") },
+        {
+            StudioPanel("应用更新") {
+                Text(
+                    "当前版本 v${BuildConfig.VERSION_NAME}",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = UiDimens.body,
+                )
+                val release = state.appUpdateAvailable
+                val downloaded = state.appUpdateFile
+                when {
+                    state.appUpdateDownloading -> {
+                        LinearProgressIndicator(
+                            progress = state.appUpdateProgress / 100f,
+                            modifier = Modifier.fillMaxWidth().height(UiDimens.progressThickness),
+                        )
+                        Text(
+                            "正在下载 ${state.appUpdateProgress}%",
+                            fontSize = UiDimens.captionSmall,
+                            color = secondaryTextColor(),
+                        )
+                    }
+                    downloaded != null -> {
+                        Text("新版本已下载，点击安装。", fontSize = UiDimens.caption, color = secondaryTextColor())
+                        TextButton(
+                            text = "安装更新",
+                            onClick = { viewModel.installAppUpdate(context) },
+                            modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
+                        )
+                    }
+                    release != null -> {
+                        Text(
+                            "发现新版本 v${release.versionName}",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = UiDimens.body,
+                        )
+                        if (release.notes.isNotBlank()) {
+                            Text(
+                                release.notes.take(600),
+                                fontSize = UiDimens.captionSmall,
+                                color = secondaryTextColor(),
+                            )
+                        }
+                        if (release.sizeBytes > 0) {
+                            Text(
+                                "安装包 ${formatCacheSize(release.sizeBytes)}",
+                                fontSize = UiDimens.captionSmall,
+                                color = tertiaryTextColor(),
+                            )
+                        }
+                        TextButton(
+                            text = "下载更新",
+                            onClick = viewModel::downloadAppUpdate,
+                            modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
+                        )
+                    }
+                    else -> {
+                        TextButton(
+                            text = if (state.appUpdateChecking) "检查中…" else "检查应用更新",
+                            onClick = viewModel::checkAppUpdate,
+                            enabled = !state.appUpdateChecking,
+                            modifier = Modifier.fillMaxWidth().heightIn(min = UiDimens.touchMin),
+                        )
+                    }
+                }
+                state.appUpdateMessage?.let { message ->
+                    Text(message, fontSize = UiDimens.captionSmall, color = secondaryTextColor())
+                }
+                Text(
+                    "更新只从项目 GitHub Release 获取，下载后由系统安装器完成安装；不会携带 wenku8 会话。",
+                    fontSize = UiDimens.captionSmall,
+                    color = tertiaryTextColor(),
+                )
+            }
         },
         { SectionTitle("使用边界") },
         {
@@ -1077,14 +1104,14 @@ internal fun SettingsScaffold(@Suppress("UNUSED_PARAMETER") title: String, @Supp
 }
 
 /** 设置分组的行内边距：与组卡的 4dp 相加后回到 MiuiX 标准的 16dp。 */
-private val PreferenceRowMargin = PaddingValues(
+internal val PreferenceRowMargin = PaddingValues(
     horizontal = UiDimens.spaceS,
     vertical = UiDimens.spaceXS,
 )
 
 /** MiuiX preference 组：一张 4dp 内边距的卡，行内自带 12dp，合计标准 16dp。 */
 @Composable
-private fun PreferencePanel(content: @Composable ColumnScope.() -> Unit) {
+internal fun PreferencePanel(content: @Composable ColumnScope.() -> Unit) {
     Card(
         Modifier.fillMaxWidth(),
         cornerRadius = UiDimens.panelCorner,
@@ -1103,13 +1130,6 @@ internal fun SectionTitle(text: String) = SmallTitle(
         vertical = UiDimens.spaceXXS,
     ),
 )
-
-private fun AppThemeMode.label(): String = when (this) {
-    AppThemeMode.SYSTEM -> "系统"
-    AppThemeMode.LIGHT -> "浅色"
-    AppThemeMode.DARK -> "深色"
-    AppThemeMode.MONET -> "动态色"
-}
 
 private fun ReaderBackground.label(): String = when (this) {
     ReaderBackground.PAPER -> "米黄"

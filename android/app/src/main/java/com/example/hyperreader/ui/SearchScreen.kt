@@ -75,19 +75,18 @@ fun SearchScreen(
             color = secondaryTextColor(),
         )
         if (!state.loggedIn) {
-            Card(
+            Row(
                 Modifier.fillMaxWidth(),
-                cornerRadius = UiDimens.panelCorner,
-                insideMargin = PaddingValues(UiDimens.spaceM),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text("搜索需要 wenku8 登录", fontSize = UiDimens.body)
-                    TextButton(text = "登录", onClick = onLogin)
-                }
+                Text(
+                    "未登录：搜索本地书目缓存（可在「设置 → 书目缓存」更新）",
+                    modifier = Modifier.weight(1f),
+                    fontSize = UiDimens.captionSmall,
+                    color = secondaryTextColor(),
+                )
+                TextButton(text = "登录站内搜索", onClick = onLogin)
             }
         }
         // 字段切换用 TabRow：两个平铺 TextButton 没有选中态，用户看不出当前按哪个字段搜。
@@ -182,7 +181,7 @@ fun SearchScreen(
             if (state.searchPage > 0) {
                 EmptyState(title = "没有找到结果", description = "换个关键词，或去掉作者限定再试一次。")
             } else {
-                EmptyState(title = "输入关键词开始搜索", description = "支持书名与作者，按书名搜索走本地书目索引，断网也能用。")
+                EmptyState(title = "输入关键词开始搜索", description = "支持书名与作者；未登录时搜索本地书目缓存，登录后搜索站内全量。")
             }
         } else {
             val listState = rememberLazyListState()

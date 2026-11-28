@@ -15,10 +15,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.example.hyperreader.ui.theme.appThemeTokens
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
-import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 /**
  * 单选项按钮：选中态用填充按钮，未选中态用文字按钮。
@@ -63,8 +63,9 @@ internal fun ColorSwatch(
     modifier: Modifier = Modifier,
 ) {
     val swatch = Color(color)
-    val primary = MiuixTheme.colorScheme.primary
-    val outline = MiuixTheme.colorScheme.outline.copy(alpha = 0.35f)
+    val tokens = appThemeTokens()
+    val primary = tokens.accent
+    val outline = tokens.hairline.copy(alpha = 0.35f)
     Box(
         modifier = modifier
             .size(UiDimens.touchMin)
